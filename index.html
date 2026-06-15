@@ -280,6 +280,11 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .compo-fb .fixed{font-family:var(--font-en);background:var(--green-soft);border-radius:10px;padding:9px 12px;margin-top:8px;}
 .compo-fb .alts{margin-top:9px;color:var(--ink-2);font-size:.88rem;}
 .compo-fb .alts li{margin:2px 0;}
+.spinner{width:36px;height:36px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--green);animation:spin .8s linear infinite;margin:0 auto 14px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.theme-chip{display:inline-block;background:var(--surface);box-shadow:var(--shadow);border:1.5px solid transparent;border-radius:20px;padding:9px 15px;margin:0 8px 9px 0;font-size:.88rem;font-weight:600;color:var(--ink);transition:transform .1s;}
+.theme-chip:active{transform:scale(.94);border-color:var(--green);}
+.sub-label{font-size:.74rem;color:var(--ink-3);font-weight:700;letter-spacing:.05em;margin:14px 0 8px;}
 
 /* ---------- AI ---------- */
 .ai-tabs{display:flex;gap:7px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px;}
@@ -955,7 +960,7 @@ function renderStudy(){
         </div>`).join(''):`<div class="empty">${I.inbox}<div class="t">デッキがありません</div><div class="d">ノートタブで単語を追加しましょう</div></div>`}
     </div>
     <div class="section-title">べつのモード</div>
-    <button class="btn btn-ghost full" style="padding:15px;margin-bottom:10px" onclick="startCompoPick()">${I.mic} 瞬間英作文（音声入力OK）</button>
+    <button class="btn btn-ghost full" style="padding:15px;margin-bottom:10px" onclick="startCompoMenu()">${I.mic} 瞬間英作文（音声入力OK）</button>
     <button class="btn btn-ghost full" style="padding:15px" onclick="startQuizPick()">${I.trophy} 4択クイズで腕試し</button>
   `;
 }
@@ -1131,24 +1136,39 @@ function answerQuiz(btn,isCorrect){
 }
 
 /* ---------- voice input (Web Speech API) ---------- */
-let _recog=null, _recogBtn=null;
+let _recog=null, _recogBtn=null, _recogTimer=null;
 function speechSupported(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
-function toggleDictation(inputId, btn){
+function stopDictation(){ if(_recog){ try{ _recog.stop(); }catch(_){ } } }
+function toggleDictation(inputId, btn, autoSubmit){
   if(!speechSupported()){ toast('この端末は音声入力に非対応です（入力でも答えられます）'); return; }
-  if(_recog){ try{ _recog.stop(); }catch(_){ } return; }
+  if(_recog){ stopDictation(); return; } // tap again = finish now
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   const r=new SR(); _recog=r; _recogBtn=btn;
   r.lang='en-US'; r.interimResults=true; r.continuous=false; r.maxAlternatives=1;
   const inp=document.getElementById(inputId);
   const base=inp?inp.value.trim():'';
+  let got=false;
   if(btn) btn.classList.add('listening');
+  clearTimeout(_recogTimer);
+  _recogTimer=setTimeout(()=>{ stopDictation(); }, 12000); // safety: never hang
   r.onresult=(e)=>{
     let txt=''; for(let i=0;i<e.results.length;i++){ txt+=e.results[i][0].transcript; }
+    if(txt.trim()) got=true;
     if(inp){ inp.value=(base?base+' ':'')+txt; if(typeof autoGrow==='function') autoGrow(inp); }
   };
+  r.onspeechend=()=>{ stopDictation(); }; // stop as soon as the user goes quiet
   r.onerror=(e)=>{ if(e.error==='not-allowed'||e.error==='service-not-allowed') toast('マイクの使用が許可されていません'); };
-  r.onend=()=>{ if(_recogBtn) _recogBtn.classList.remove('listening'); _recog=null; _recogBtn=null; };
-  try{ r.start(); }catch(_){ toast('音声入力を開始できませんでした'); if(btn) btn.classList.remove('listening'); _recog=null; }
+  r.onend=()=>{
+    clearTimeout(_recogTimer);
+    if(_recogBtn) _recogBtn.classList.remove('listening');
+    _recog=null; _recogBtn=null;
+    // auto-grade as soon as speech finishes
+    if(autoSubmit && got && compo && !compo.answered && !compo.checking){
+      const i2=document.getElementById('compoInput');
+      if(i2 && i2.value.trim()) checkCompo();
+    }
+  };
+  try{ r.start(); }catch(_){ clearTimeout(_recogTimer); toast('音声入力を開始できませんでした'); if(btn) btn.classList.remove('listening'); _recog=null; }
 }
 
 /* ---------- 瞬間英作文 (instant composition) ---------- */
@@ -1161,12 +1181,21 @@ function compoItemsFrom(list){
   });
   return items;
 }
+function startCompoMenu(){
+  openModal(`
+    <h2>瞬間英作文</h2>
+    <p style="color:var(--ink-2);font-size:.88rem;margin:0 0 14px">日本語を見て、すぐに英語を声に出す（または入力する）トレーニングです。出題方法を選んでください。</p>
+    <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();startCompoPick()">${I.cardPlus} カードの例文から出題</button>
+    <button class="btn btn-primary full" style="padding:15px;justify-content:flex-start;gap:12px" onclick="${aiReady()?"closeModal();startCompoThemePick()":"toast('テーマ出題にはAIが必要です。設定でオンにしてください')"}">${I.sparkle} テーマを選んで出題（AI生成）</button>
+    ${!aiReady()?`<div class="compo-hint" style="margin-top:8px">※テーマ出題は、設定でAI（OpenAI/Gemini）をオンにすると使えます。</div>`:''}
+    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>
+  `);
+}
 function startCompoPick(){
   const decks=childFolders(null);
   openModal(`
-    <h2>瞬間英作文</h2>
-    <p style="color:var(--ink-2);font-size:.9rem;margin:0 0 6px">日本語を見て、すぐに英語を声に出す（または入力する）トレーニングです。</p>
-    <p style="color:var(--ink-3);font-size:.8rem;margin:0 0 14px">日本語と英語が両方入ったカードから最大10問出題します。${aiReady()?'AIが採点・添削します。':'※設定でAIをオンにすると採点・添削が出ます。'}</p>
+    <h2>カードの例文から</h2>
+    <p style="color:var(--ink-3);font-size:.82rem;margin:0 0 14px">日本語と英語が両方入ったカードから最大10問。${aiReady()?'AIが採点・添削します。':'※AIをオンにすると採点・添削が出ます。'}</p>
     <div class="deck-pick">
       <div class="deck-row" onclick="startCompo(null)"><div class="meta"><div class="nm">すべてのカード</div></div><span class="chev">${I.chev}</span></div>
       ${decks.map(f=>`<div class="deck-row" onclick="startCompo('${f.id}')"><div class="meta"><div class="nm">${esc(f.name)}</div></div><span class="chev">${I.chev}</span></div>`).join('')}
@@ -1177,14 +1206,66 @@ function startCompo(fid){
   const items=shuffle(compoItemsFrom(list)).slice(0,10);
   if(items.length===0){ toast('日本語と英語が両方入ったカードが必要です'); return; }
   closeModal();
-  compo={ items, idx:0, answered:false, checking:false, fb:null, userAns:'', results:[] };
+  compo={ items, idx:0, answered:false, checking:false, fb:null, userAns:'', results:[], source:'card' };
   renderCompo();
 }
-function exitCompo(){ if(_recog){ try{_recog.stop();}catch(_){ } } compo=null; renderStudy(); }
-function nextCompo(){ if(_recog){ try{_recog.stop();}catch(_){ } } compo.idx++; compo.answered=false; compo.fb=null; compo.userAns=''; renderCompo(); }
+
+/* theme mode (AI-generated prompts) */
+const COMPO_GRAMMAR=['be動詞','一般動詞','三単現','過去形','現在進行形','未来 (will/be going to)','助動詞 (can/should)','比較級・最上級','不定詞・動名詞','受動態','現在完了','関係代名詞','仮定法'];
+const COMPO_SCENES=['日常会話','あいさつ・自己紹介','旅行','レストランで注文','買い物','仕事・ビジネス','電話対応','道案内','体調・病院','友達との雑談'];
+function startCompoThemePick(){
+  openModal(`
+    <h2>テーマから出題</h2>
+    <div class="mfield"><label>レベル</label>
+      <select id="thLevel"><option value="初級">初級（やさしい）</option><option value="中級" selected>中級</option><option value="上級">上級</option></select></div>
+    <div class="sub-label">文法</div>
+    <div class="chip-wrap">${COMPO_GRAMMAR.map(g=>`<button class="theme-chip" onclick="genTheme('${g}')">${g}</button>`).join('')}</div>
+    <div class="sub-label">場面</div>
+    <div class="chip-wrap">${COMPO_SCENES.map(s=>`<button class="theme-chip" onclick="genTheme('${s}')">${s}</button>`).join('')}</div>
+    <div class="mfield" style="margin-top:14px"><label>自由入力（テーマ・場面）</label>
+      <div style="display:flex;gap:8px"><input id="thCustom" placeholder="例：週末の予定を話す" style="flex:1" />
+      <button class="btn btn-primary" onclick="genThemeCustom()">作成</button></div></div>
+  `);
+}
+function genThemeCustom(){
+  const t=(document.getElementById('thCustom').value||'').trim();
+  if(!t){ toast('テーマを入力してください'); return; }
+  genTheme(t);
+}
+async function genTheme(theme){
+  if(!aiReady()){ toast('テーマ出題にはAIが必要です'); return; }
+  const level=(document.getElementById('thLevel')&&document.getElementById('thLevel').value)||'中級';
+  closeModal();
+  compo={ loading:true, theme, items:[], idx:0, answered:false, checking:false, fb:null, userAns:'', results:[], source:'theme' };
+  renderCompo();
+  try{
+    const sys='You create instant-composition (瞬間英作文) practice for a Japanese learner. Output ONLY a JSON object: {"items":[{"jp":"日本語の文","en":"natural English translation"}]} with exactly 8 items. Sentences must be short, practical and natural to say aloud, and must match the given theme and level. The "jp" is Japanese, "en" is its natural English. No markdown, no code fences.';
+    const u=`テーマ: ${theme}\nレベル: ${level}`;
+    const content=await callAI([{role:'system',content:sys},{role:'user',content:u}],{json:true,temp:0.6});
+    if(!compo || !compo.loading) return; // user exited
+    let arr=[]; try{ const j=JSON.parse(content); arr=Array.isArray(j)?j:(j.items||[]); }catch(e){ arr=[]; }
+    const items=arr.filter(x=>x&&x.jp&&x.en).map(x=>({jp:String(x.jp),en:String(x.en),kind:'テーマ：'+theme}));
+    if(items.length===0){ toast('問題を生成できませんでした。もう一度お試しください'); compo=null; renderStudy(); return; }
+    compo={ items, idx:0, answered:false, checking:false, fb:null, userAns:'', results:[], source:'theme', theme };
+    renderCompo();
+  }catch(err){
+    if(!compo) return;
+    const m=err.message||'';
+    toast('生成に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー'));
+    compo=null; renderStudy();
+  }
+}
+function exitCompo(){ stopDictation(); compo=null; renderStudy(); }
+function nextCompo(){ stopDictation(); compo.idx++; compo.answered=false; compo.fb=null; compo.userAns=''; renderCompo(); }
 
 function renderCompo(){
   const v=document.getElementById('view-study');
+  if(compo.loading){
+    v.innerHTML=`
+      <div class="study-top"><button class="icon-btn" onclick="exitCompo()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:8%"></div></div><div class="study-count"></div></div>
+      <div class="empty" style="padding:64px 20px"><div class="spinner"></div><div class="t">問題を生成中…</div><div class="d">「${esc(compo.theme||'')}」の問題をAIが作成しています</div></div>`;
+    return;
+  }
   if(compo.idx>=compo.items.length){
     const good=compo.results.filter(x=>x==='○').length;
     v.innerHTML=`<div class="session-done">${I.trophy}<div class="big">${good} / ${compo.items.length}</div>
@@ -1194,7 +1275,7 @@ function renderCompo(){
   }
   const it=compo.items[compo.idx];
   const micBtn = speechSupported()
-    ? `<button class="mic-btn" id="compoMic" onclick="toggleDictation('compoInput',this)" aria-label="音声入力">${I.mic}</button>` : '';
+    ? `<button class="mic-btn" id="compoMic" onclick="toggleDictation('compoInput',this,true)" aria-label="音声入力">${I.mic}</button>` : '';
   let answerArea;
   if(!compo.answered){
     answerArea=`
@@ -1229,26 +1310,29 @@ function renderCompo(){
   if(!compo.answered){ const ta=document.getElementById('compoInput'); if(ta) autoGrow(ta); }
 }
 async function checkCompo(){
-  if(compo.checking||compo.answered) return;
+  if(!compo || compo.checking || compo.answered) return;
+  const myIdx=compo.idx;
   const it=compo.items[compo.idx];
   const inp=document.getElementById('compoInput');
   const user=(inp?inp.value:'').trim();
   if(!user){ toast('英文を入力（または音声入力）してください'); return; }
-  if(_recog){ try{ _recog.stop(); }catch(_){ } }
+  stopDictation();
   compo.userAns=user;
   if(aiReady()){
     compo.checking=true; renderCompo();
+    let fb;
     try{
       const sys='You are a supportive English teacher grading 瞬間英作文 (instant composition) by a Japanese learner. Output ONLY JSON: {"verdict":"○"|"△"|"×","comment":"short Japanese feedback (1-2 sentences)","fixed":"a natural corrected English version of the learner sentence","alts":["up to 2 alternative natural English expressions"]}. ○ = correct & natural, △ = understandable but unnatural/minor errors, × = wrong meaning. Judge by meaning vs the Japanese, not exact match with the reference. Be encouraging. comment MUST be Japanese. No markdown.';
       const u=`日本語: ${it.jp}\n参考の英語: ${it.en}\n学習者の英語: ${user}`;
       const content=await callAI([{role:'system',content:sys},{role:'user',content:u}],{json:true,temp:0.3});
       let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
-      compo.fb = (j&&j.verdict) ? j : {verdict:'△', comment:(content||'採点結果を取得できませんでした。お手本と見比べてください。'), fixed:'', alts:[]};
+      fb = (j&&j.verdict) ? j : {verdict:'△', comment:(content||'採点結果を取得できませんでした。お手本と見比べてください。'), fixed:'', alts:[]};
     }catch(err){
       const m=err.message||'';
-      compo.fb={verdict:'', comment:'採点に失敗しました（'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')+'）。お手本と見比べてください。', fixed:'', alts:[]};
+      fb={verdict:'', comment:'採点に失敗しました（'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')+'）。お手本と見比べてください。', fixed:'', alts:[]};
     }
-    compo.checking=false;
+    if(!compo || compo.idx!==myIdx || compo.answered) return; // user exited/advanced during await
+    compo.fb=fb; compo.checking=false;
   } else {
     const ok = normTxt(user)===normTxt(it.en);
     compo.fb={ verdict: ok?'○':'△',
