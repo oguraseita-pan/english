@@ -162,6 +162,11 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .row-ctrls .rc:disabled{opacity:.3;}
 .row-ctrls .rc.del{color:var(--r-again);}
 .row-ctrls .rc svg{width:17px;height:17px;}
+.reorderable{transition:transform .16s ease;}
+.reorderable.dragging{transition:none;box-shadow:0 14px 32px rgba(0,0,0,.20);z-index:40;opacity:.98;}
+.drag-handle{width:40px;height:40px;border-radius:10px;background:var(--surface-2);color:var(--ink-3);display:grid;place-items:center;flex:none;touch-action:none;cursor:grab;-webkit-user-select:none;user-select:none;}
+.drag-handle:active{cursor:grabbing;background:var(--green-soft);color:var(--green);}
+.drag-handle svg{width:20px;height:20px;pointer-events:none;}
 .chev{color:var(--ink-3);flex:none;}
 
 .card-row .term-wrap{flex:1;min-width:0;}
@@ -253,6 +258,28 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .quiz-opt.correct{border-color:var(--r-good);background:var(--green-soft);}
 .quiz-opt.wrong{border-color:var(--r-again);background:#FBE9E5;}
 html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
+
+/* 瞬間英作文 (instant composition) */
+.mic-btn{width:48px;height:48px;border-radius:50%;background:var(--green-soft);color:var(--green);display:grid;place-items:center;flex:none;transition:transform .12s;}
+.mic-btn:active{transform:scale(.9);}
+.mic-btn.listening{background:var(--r-again);color:#fff;animation:micpulse 1.1s infinite;}
+.mic-btn svg{width:22px;height:22px;}
+@keyframes micpulse{0%{box-shadow:0 0 0 0 rgba(192,80,64,.5)}70%{box-shadow:0 0 0 13px rgba(192,80,64,0)}100%{box-shadow:0 0 0 0 rgba(192,80,64,0)}}
+.compo-kind{font-size:.72rem;color:var(--ink-3);font-weight:700;letter-spacing:.06em;margin-top:8px;}
+.compo-jp{font-size:1.42rem;font-weight:600;line-height:1.55;margin:6px 0 4px;}
+.compo-hint{font-size:.78rem;color:var(--ink-3);}
+.compo-inrow{display:flex;align-items:flex-end;gap:10px;margin-top:18px;}
+.compo-inrow textarea{flex:1;background:var(--surface);box-shadow:var(--shadow);border-radius:14px;padding:13px 14px;font-family:var(--font-en);font-size:1.06rem;resize:none;min-height:48px;line-height:1.4;}
+.compo-ref{margin-top:18px;background:var(--surface-2);border-left:3px solid var(--green);border-radius:0 10px 10px 0;padding:13px 15px;}
+.compo-ref .lab{font-size:.72rem;color:var(--ink-3);font-weight:700;margin-bottom:5px;}
+.compo-ref .en{font-family:var(--font-en);font-size:1.12rem;line-height:1.4;}
+.verdict{font-size:1.7rem;font-weight:800;line-height:1;}
+.verdict.o{color:var(--r-good);} .verdict.t{color:var(--amber-d);} .verdict.x{color:var(--r-again);}
+.compo-fb{margin-top:14px;background:var(--surface);box-shadow:var(--shadow);border-radius:14px;padding:14px 15px;font-size:.95rem;line-height:1.65;}
+.compo-fb .fb-head{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+.compo-fb .fixed{font-family:var(--font-en);background:var(--green-soft);border-radius:10px;padding:9px 12px;margin-top:8px;}
+.compo-fb .alts{margin-top:9px;color:var(--ink-2);font-size:.88rem;}
+.compo-fb .alts li{margin:2px 0;}
 
 /* ---------- AI ---------- */
 .ai-tabs{display:flex;gap:7px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px;}
@@ -395,6 +422,8 @@ const I = {
   flame:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1 4-3 5-3 9a3 3 0 0 0 6 0c0-1-.5-2-1-3 2 1 4 3 4 6a6 6 0 0 1-12 0c0-4 4-6 6-12z"/></svg>',
   back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
   trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
+  grip:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
+  mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>',
 };
 
 /* ---------- state & storage ---------- */
@@ -458,8 +487,73 @@ function seed(){
 
 /* ---------- helpers ---------- */
 function esc(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function childFolders(pid){ return Object.values(state.folders).filter(f=>f.parentId===pid).sort((a,b)=>a.name.localeCompare(b.name,'ja')); }
-function folderCards(fid){ return Object.values(state.cards).filter(c=>c.folderId===fid).sort((a,b)=>b.createdAt-a.createdAt); }
+
+/* ---------- generic drag-to-reorder (pointer: touch+mouse) ---------- */
+let _drag=null;
+function bindReorder(container, onReorder){
+  if(!container) return;
+  container.querySelectorAll('.drag-handle').forEach(h=>{
+    h.addEventListener('pointerdown', e=>reorderStart(e, container, onReorder));
+  });
+}
+function reorderStart(e, container, onReorder){
+  const row=e.target.closest('.reorderable'); if(!row) return;
+  e.preventDefault(); e.stopPropagation();
+  const rows=[...container.querySelectorAll('.reorderable')];
+  const rects=rows.map(r=>r.getBoundingClientRect());
+  const fromIndex=rows.indexOf(row);
+  _drag={ container, row, rows, rects, onReorder, fromIndex, count:fromIndex,
+          startY:e.clientY, pid:e.pointerId, h:e.target,
+          gap:(rects[fromIndex]?rects[fromIndex].height:48)+9 };
+  row.classList.add('dragging');
+  try{ e.target.setPointerCapture(e.pointerId); }catch(_){}
+  e.target.addEventListener('pointermove', reorderMove);
+  e.target.addEventListener('pointerup', reorderEnd);
+  e.target.addEventListener('pointercancel', reorderEnd);
+}
+function reorderMove(e){
+  if(!_drag) return;
+  const d=_drag;
+  d.row.style.transform=`translateY(${e.clientY-d.startY}px) scale(1.03)`;
+  let count=0; const y=e.clientY;
+  d.rects.forEach(r=>{ if(y > r.top + r.height/2) count++; });
+  d.count=count;
+  const insertAt = count>d.fromIndex ? count-1 : count;
+  d.rows.forEach((r,i)=>{
+    if(r===d.row) return;
+    let shift=0;
+    if(d.fromIndex<insertAt && i>d.fromIndex && i<=insertAt) shift=-d.gap;
+    else if(d.fromIndex>insertAt && i>=insertAt && i<d.fromIndex) shift=d.gap;
+    r.style.transform = shift?`translateY(${shift}px)`:'';
+  });
+}
+function reorderEnd(){
+  if(!_drag) return;
+  const d=_drag; _drag=null;
+  d.row.classList.remove('dragging');
+  d.rows.forEach(r=>{ r.style.transform=''; });
+  try{ d.h.releasePointerCapture(d.pid); }catch(_){}
+  d.h.removeEventListener('pointermove', reorderMove);
+  d.h.removeEventListener('pointerup', reorderEnd);
+  d.h.removeEventListener('pointercancel', reorderEnd);
+  const ids=d.rows.map(r=>r.dataset.rid);
+  const item=ids.splice(d.fromIndex,1)[0];
+  let insertAt = d.count>d.fromIndex ? d.count-1 : d.count;
+  insertAt=Math.max(0, Math.min(ids.length, insertAt));
+  ids.splice(insertAt,0,item);
+  d.onReorder(ids);
+}
+function commitFolderOrder(ids){ ids.forEach((id,i)=>{ if(state.folders[id]) state.folders[id].order=i; }); save(); renderNotes(); }
+function commitCardOrder(ids){ ids.forEach((id,i)=>{ if(state.cards[id]) state.cards[id].order=i; }); save(); renderNotes(); }
+function commitThreadOrder(ids){ const map={}; state.threads.forEach(t=>map[t.id]=t); state.threads=ids.map(id=>map[id]).filter(Boolean); save(); renderAI(); }
+function childFolders(pid){ return Object.values(state.folders).filter(f=>f.parentId===pid).sort((a,b)=>{
+  if(a.order!=null&&b.order!=null) return a.order-b.order;
+  if(a.order!=null) return -1; if(b.order!=null) return 1;
+  return a.name.localeCompare(b.name,'ja'); }); }
+function folderCards(fid){ return Object.values(state.cards).filter(c=>c.folderId===fid).sort((a,b)=>{
+  if(a.order!=null&&b.order!=null) return a.order-b.order;
+  if(a.order!=null) return -1; if(b.order!=null) return 1;
+  return b.createdAt-a.createdAt; }); }
 function descendantFolderIds(fid){
   let ids=[fid]; childFolders(fid).forEach(f=>ids=ids.concat(descendantFolderIds(f.id))); return ids;
 }
@@ -499,6 +593,7 @@ function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.rando
    ==================================================================== */
 let currentTab='home';
 function setTab(name){
+  if(typeof _recog!=='undefined' && _recog){ try{ _recog.stop(); }catch(_){ } }
   currentTab=name;
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
@@ -585,17 +680,23 @@ function quickAdd(){
 let currentFolder=null;
 let noteSearch='';
 let currentCardView=null; // card id when viewing detail
+let noteEditMode=false;
 
 function renderNotes(){
   const v=document.getElementById('view-notes');
   // card detail (read) view
-  if(currentCardView && state.cards[currentCardView]){ renderCardDetail(v); return; }
+  if(currentCardView && state.cards[currentCardView]){ noteEditMode=false; renderCardDetail(v); return; }
   currentCardView=null;
 
   // breadcrumbs (display only — not tappable)
   const trail=[]; let f = currentFolder?state.folders[currentFolder]:null;
   while(f){ trail.unshift(f); f=f.parentId?state.folders[f.parentId]:null; }
   const crumbs = `<div class="crumbs"><span class="${currentFolder?'':'here'}">ノート</span>${trail.map((t,i)=>`<span class="sep">›</span><span class="${i===trail.length-1?'here':''}">${esc(t.name)}</span>`).join('')}</div>`;
+
+  const folders=childFolders(currentFolder);
+  const cards=folderCards(currentFolder);
+  const hasItems = folders.length+cards.length>0;
+  if(noteSearch) noteEditMode=false;
 
   let body;
   if(noteSearch){
@@ -604,17 +705,18 @@ function renderNotes(){
       (c.term+c.mean+c.exEn+c.exJa+(c.pos||[]).join('')+(c.other||'')).toLowerCase().includes(q));
     body = hits.length? `<div class="list">${hits.map(cardRow).join('')}</div>` :
       `<div class="empty">${I.search}<div class="t">見つかりません</div><div class="d">別のキーワードで試してください</div></div>`;
+  } else if(!hasItems){
+    body=`<div class="empty">${I.inbox}<div class="t">まだ空です</div><div class="d">右上の「追加」から<br>フォルダやカードを作成しましょう</div></div>`;
+  } else if(noteEditMode){
+    body=`
+      ${folders.length?`<div class="list" id="folderList">${folders.map(folderRowEdit).join('')}</div>`:''}
+      ${cards.length?`<div class="list" id="cardList" style="margin-top:${folders.length?'10px':'0'}">${cards.map(cardRowEdit).join('')}</div>`:''}
+      <div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:14px">右の ⠿ を長押しドラッグで並び替え・行をタップで名前変更</div>`;
   } else {
-    const folders=childFolders(currentFolder);
-    const cards=folderCards(currentFolder);
-    if(folders.length===0 && cards.length===0){
-      body=`<div class="empty">${I.inbox}<div class="t">まだ空です</div><div class="d">右上の「追加」から<br>フォルダやカードを作成しましょう</div></div>`;
-    } else {
-      body=`<div class="list">
-        ${folders.map(folderRow).join('')}
-        ${cards.map(cardRow).join('')}
-      </div>`;
-    }
+    body=`<div class="list">
+      ${folders.map(folderRow).join('')}
+      ${cards.map(cardRow).join('')}
+    </div>`;
   }
 
   const atRoot = !currentFolder;
@@ -622,13 +724,43 @@ function renderNotes(){
     <div class="topbar"><h1>ノート</h1></div>
     <div class="searchbar">${I.search}<input placeholder="単語・意味・品詞を検索" value="${esc(noteSearch)}" oninput="noteSearch=this.value;renderNotes()" />${noteSearch?`<button onclick="noteSearch='';renderNotes()" style="color:var(--ink-3)">✕</button>`:''}</div>
     ${noteSearch?'':`<div class="note-actions">
-      <button class="btn btn-ghost" onclick="goUpFolder()" ${atRoot?'disabled style="opacity:.4"':''}>${I.back} 戻る</button>
+      ${noteEditMode
+        ? `<button class="btn btn-primary" onclick="noteEditMode=false;renderNotes()">完了</button>`
+        : `<button class="btn btn-ghost" onclick="goUpFolder()" ${atRoot?'disabled style="opacity:.4"':''}>${I.back} 戻る</button>`}
       <div style="flex:1"></div>
+      ${(hasItems&&!noteEditMode)?`<button class="btn btn-ghost" onclick="noteEditMode=true;renderNotes()">編集</button>`:''}
       <button class="btn btn-primary" onclick="openAddMenu()">${I.plus} 追加</button>
     </div>`}
-    ${noteSearch?'':crumbs}
+    ${(noteSearch||noteEditMode)?'':crumbs}
     ${body}`;
   const si=v.querySelector('.searchbar input'); if(noteSearch&&si){ si.focus(); si.setSelectionRange(si.value.length,si.value.length); }
+  if(noteEditMode && !noteSearch){
+    bindReorder(document.getElementById('folderList'), commitFolderOrder);
+    bindReorder(document.getElementById('cardList'), commitCardOrder);
+  }
+}
+function folderRowEdit(f){
+  const cnt=cardsInTree(f.id).length, sub=childFolders(f.id).length;
+  return `<div class="folder-row reorderable" data-rid="${f.id}">
+    <div class="ico">${I.folder}</div>
+    <div class="meta" style="cursor:pointer" onclick="editFolder('${f.id}')"><div class="nm">${esc(f.name)}</div><div class="ct">${cnt}枚${sub?` ・ ${sub}フォルダ`:''}・タップで編集</div></div>
+    <div class="row-ctrls">
+      <button class="rc del" onclick="deleteFolder('${f.id}')" aria-label="削除">${I.trash}</button>
+      <div class="drag-handle" aria-label="並び替え">${I.grip}</div>
+    </div>
+  </div>`;
+}
+function cardRowEdit(c){
+  return `<div class="card-row reorderable" data-rid="${c.id}">
+    <div class="term-wrap" style="cursor:pointer" onclick="editCard('${c.id}')">
+      <div class="term">${esc(c.term)}</div>
+      <div class="mean">${esc(c.mean)|| '<span style=color:var(--ink-3)>意味は未入力</span>'}</div>
+    </div>
+    <div class="row-ctrls">
+      <button class="rc del" onclick="deleteCard('${c.id}')" aria-label="削除">${I.trash}</button>
+      <div class="drag-handle" aria-label="並び替え">${I.grip}</div>
+    </div>
+  </div>`;
 }
 
 function goUpFolder(){
@@ -780,7 +912,7 @@ function saveCard(id){
   if(id){ Object.assign(state.cards[id], data); }
   else { const nid=uid(); state.cards[nid]={id:nid,...data,srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now()}; }
   save(); closeModal();
-  if(currentTab==='notes'){ if(id) currentCardView=id; renderNotes(); } else renderHome();
+  if(currentTab==='notes'){ if(id && !noteEditMode) currentCardView=id; renderNotes(); } else renderHome();
   toast('保存しました');
 }
 function deleteCard(id){
@@ -792,10 +924,11 @@ function deleteCard(id){
 /* ====================================================================
    STUDY
    ==================================================================== */
-let session=null, quiz=null;
+let session=null, quiz=null, compo=null;
 function renderStudy(){
   if(session){ renderStudySession(); return; }
   if(quiz){ renderQuiz(); return; }
+  if(compo){ renderCompo(); return; }
   const v=document.getElementById('view-study');
   const all=Object.values(state.cards);
   const dueAll=all.filter(c=>c.srs.state!=='new'&&c.srs.due<=now()).length;
@@ -822,6 +955,7 @@ function renderStudy(){
         </div>`).join(''):`<div class="empty">${I.inbox}<div class="t">デッキがありません</div><div class="d">ノートタブで単語を追加しましょう</div></div>`}
     </div>
     <div class="section-title">べつのモード</div>
+    <button class="btn btn-ghost full" style="padding:15px;margin-bottom:10px" onclick="startCompoPick()">${I.mic} 瞬間英作文（音声入力OK）</button>
     <button class="btn btn-ghost full" style="padding:15px" onclick="startQuizPick()">${I.trophy} 4択クイズで腕試し</button>
   `;
 }
@@ -996,6 +1130,136 @@ function answerQuiz(btn,isCorrect){
   setTimeout(()=>{ if(quiz){ quiz.idx++; renderQuiz(); } }, 950);
 }
 
+/* ---------- voice input (Web Speech API) ---------- */
+let _recog=null, _recogBtn=null;
+function speechSupported(){ return !!(window.SpeechRecognition||window.webkitSpeechRecognition); }
+function toggleDictation(inputId, btn){
+  if(!speechSupported()){ toast('この端末は音声入力に非対応です（入力でも答えられます）'); return; }
+  if(_recog){ try{ _recog.stop(); }catch(_){ } return; }
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const r=new SR(); _recog=r; _recogBtn=btn;
+  r.lang='en-US'; r.interimResults=true; r.continuous=false; r.maxAlternatives=1;
+  const inp=document.getElementById(inputId);
+  const base=inp?inp.value.trim():'';
+  if(btn) btn.classList.add('listening');
+  r.onresult=(e)=>{
+    let txt=''; for(let i=0;i<e.results.length;i++){ txt+=e.results[i][0].transcript; }
+    if(inp){ inp.value=(base?base+' ':'')+txt; if(typeof autoGrow==='function') autoGrow(inp); }
+  };
+  r.onerror=(e)=>{ if(e.error==='not-allowed'||e.error==='service-not-allowed') toast('マイクの使用が許可されていません'); };
+  r.onend=()=>{ if(_recogBtn) _recogBtn.classList.remove('listening'); _recog=null; _recogBtn=null; };
+  try{ r.start(); }catch(_){ toast('音声入力を開始できませんでした'); if(btn) btn.classList.remove('listening'); _recog=null; }
+}
+
+/* ---------- 瞬間英作文 (instant composition) ---------- */
+function normTxt(s){ return (s||'').toLowerCase().replace(/[^a-z0-9\s]/g,'').replace(/\s+/g,' ').trim(); }
+function compoItemsFrom(list){
+  const items=[];
+  list.forEach(c=>{
+    if(c.exJa && c.exEn) items.push({jp:c.exJa, en:c.exEn, kind:'文'});
+    else if(c.mean && c.term) items.push({jp:c.mean, en:c.term, kind:'語・フレーズ'});
+  });
+  return items;
+}
+function startCompoPick(){
+  const decks=childFolders(null);
+  openModal(`
+    <h2>瞬間英作文</h2>
+    <p style="color:var(--ink-2);font-size:.9rem;margin:0 0 6px">日本語を見て、すぐに英語を声に出す（または入力する）トレーニングです。</p>
+    <p style="color:var(--ink-3);font-size:.8rem;margin:0 0 14px">日本語と英語が両方入ったカードから最大10問出題します。${aiReady()?'AIが採点・添削します。':'※設定でAIをオンにすると採点・添削が出ます。'}</p>
+    <div class="deck-pick">
+      <div class="deck-row" onclick="startCompo(null)"><div class="meta"><div class="nm">すべてのカード</div></div><span class="chev">${I.chev}</span></div>
+      ${decks.map(f=>`<div class="deck-row" onclick="startCompo('${f.id}')"><div class="meta"><div class="nm">${esc(f.name)}</div></div><span class="chev">${I.chev}</span></div>`).join('')}
+    </div>`);
+}
+function startCompo(fid){
+  const list=(fid===null?Object.values(state.cards):cardsInTree(fid));
+  const items=shuffle(compoItemsFrom(list)).slice(0,10);
+  if(items.length===0){ toast('日本語と英語が両方入ったカードが必要です'); return; }
+  closeModal();
+  compo={ items, idx:0, answered:false, checking:false, fb:null, userAns:'', results:[] };
+  renderCompo();
+}
+function exitCompo(){ if(_recog){ try{_recog.stop();}catch(_){ } } compo=null; renderStudy(); }
+function nextCompo(){ if(_recog){ try{_recog.stop();}catch(_){ } } compo.idx++; compo.answered=false; compo.fb=null; compo.userAns=''; renderCompo(); }
+
+function renderCompo(){
+  const v=document.getElementById('view-study');
+  if(compo.idx>=compo.items.length){
+    const good=compo.results.filter(x=>x==='○').length;
+    v.innerHTML=`<div class="session-done">${I.trophy}<div class="big">${good} / ${compo.items.length}</div>
+      <p style="color:var(--ink-2)">「○」と判定された数</p>
+      <button class="btn btn-primary full" style="margin-top:18px;padding:15px" onclick="compo=null;renderStudy()">学習に戻る</button></div>`;
+    compo=null; return;
+  }
+  const it=compo.items[compo.idx];
+  const micBtn = speechSupported()
+    ? `<button class="mic-btn" id="compoMic" onclick="toggleDictation('compoInput',this)" aria-label="音声入力">${I.mic}</button>` : '';
+  let answerArea;
+  if(!compo.answered){
+    answerArea=`
+      <div class="compo-inrow">
+        <textarea id="compoInput" rows="1" placeholder="英語で入力 / 🎤で音声入力" oninput="autoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();checkCompo();}">${esc(compo.userAns||'')}</textarea>
+        ${micBtn}
+      </div>
+      ${!speechSupported()?`<div class="compo-hint" style="margin-top:8px">※この端末は音声入力に非対応のため、キーボードで入力してください。</div>`:''}
+      <button class="btn btn-primary full" style="padding:14px;margin-top:14px" id="compoCheck" onclick="checkCompo()" ${compo.checking?'disabled':''}>${compo.checking?'採点中…':'答え合わせ'}</button>`;
+  } else {
+    const fb=compo.fb||{};
+    const vc = fb.verdict==='○'?'o':(fb.verdict==='×'?'x':'t');
+    answerArea=`
+      <div class="compo-ref"><div class="lab">あなたの解答</div><div class="en">${esc(compo.userAns)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:30px;height:30px" onclick="speak('${esc(compo.userAns).replace(/'/g,"\\'")}')">${I.speaker}</button></div></div>
+      <div class="compo-ref" style="border-color:var(--amber)"><div class="lab">お手本</div><div class="en">${esc(it.en)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:30px;height:30px" onclick="speak('${esc(it.en).replace(/'/g,"\\'")}')">${I.speaker}</button></div></div>
+      <div class="compo-fb">
+        <div class="fb-head">${fb.verdict?`<span class="verdict ${vc}">${esc(fb.verdict)}</span>`:''}<span>${esc(fb.comment||'')}</span></div>
+        ${fb.fixed?`<div class="fixed">${esc(fb.fixed)}</div>`:''}
+        ${(fb.alts&&fb.alts.length)?`<div class="alts">言い換え：<ul>${fb.alts.map(a=>`<li>${esc(a)}</li>`).join('')}</ul></div>`:''}
+      </div>
+      <button class="btn btn-primary full" style="padding:14px;margin-top:14px" onclick="nextCompo()">${compo.idx+1>=compo.items.length?'結果を見る':'次へ'}</button>`;
+  }
+  v.innerHTML=`
+    <div class="study-top">
+      <button class="icon-btn" onclick="exitCompo()" style="box-shadow:none;background:transparent">✕</button>
+      <div class="progress"><div style="width:${Math.round(compo.idx/compo.items.length*100)}%"></div></div>
+      <div class="study-count">${compo.idx+1}/${compo.items.length}</div>
+    </div>
+    <div class="compo-kind">日本語を英語に（${it.kind}）</div>
+    <div class="compo-jp">${esc(it.jp)}</div>
+    ${answerArea}`;
+  if(!compo.answered){ const ta=document.getElementById('compoInput'); if(ta) autoGrow(ta); }
+}
+async function checkCompo(){
+  if(compo.checking||compo.answered) return;
+  const it=compo.items[compo.idx];
+  const inp=document.getElementById('compoInput');
+  const user=(inp?inp.value:'').trim();
+  if(!user){ toast('英文を入力（または音声入力）してください'); return; }
+  if(_recog){ try{ _recog.stop(); }catch(_){ } }
+  compo.userAns=user;
+  if(aiReady()){
+    compo.checking=true; renderCompo();
+    try{
+      const sys='You are a supportive English teacher grading 瞬間英作文 (instant composition) by a Japanese learner. Output ONLY JSON: {"verdict":"○"|"△"|"×","comment":"short Japanese feedback (1-2 sentences)","fixed":"a natural corrected English version of the learner sentence","alts":["up to 2 alternative natural English expressions"]}. ○ = correct & natural, △ = understandable but unnatural/minor errors, × = wrong meaning. Judge by meaning vs the Japanese, not exact match with the reference. Be encouraging. comment MUST be Japanese. No markdown.';
+      const u=`日本語: ${it.jp}\n参考の英語: ${it.en}\n学習者の英語: ${user}`;
+      const content=await callAI([{role:'system',content:sys},{role:'user',content:u}],{json:true,temp:0.3});
+      let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
+      compo.fb = (j&&j.verdict) ? j : {verdict:'△', comment:(content||'採点結果を取得できませんでした。お手本と見比べてください。'), fixed:'', alts:[]};
+    }catch(err){
+      const m=err.message||'';
+      compo.fb={verdict:'', comment:'採点に失敗しました（'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')+'）。お手本と見比べてください。', fixed:'', alts:[]};
+    }
+    compo.checking=false;
+  } else {
+    const ok = normTxt(user)===normTxt(it.en);
+    compo.fb={ verdict: ok?'○':'△',
+      comment: ok?'お手本と一致しました！' : 'お手本と見比べて確認しましょう。設定でAIをオンにすると、添削や言い換えも表示されます。',
+      fixed:'', alts:[] };
+  }
+  compo.answered=true;
+  compo.results.push(compo.fb.verdict||'△');
+  renderCompo();
+}
+
 /* ====================================================================
    AI (ChatGPT)
    ==================================================================== */
@@ -1065,28 +1329,26 @@ function renderThreadList(){
     <button class="btn btn-primary full" style="padding:13px;margin-bottom:14px" onclick="openNewThread()">${I.plus} 新しいスレッド</button>
     ${list.length===0
       ? `<div class="empty" style="padding:36px 20px">${spkInk()}<div class="t">スレッドがありません</div><div class="d">「新しいスレッド」から用途に合わせて作成できます。<br>例：チューター／英文添削／自分専用の指示</div></div>`
-      : `<div class="list">${list.map((t,i)=>threadRow(t,i,list.length)).join('')}</div>`}
-    ${list.length&&!aiEditMode?`<div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:14px">タップで開く・「並び替え・編集」で順序変更や削除</div>`:''}
+      : `<div class="list" id="threadList">${list.map(threadRow).join('')}</div>`}
+    ${list.length?`<div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:14px">${aiEditMode?'右の ⠿ をドラッグで並び替え・行をタップで編集':'タップで開く・「並び替え・編集」で順序変更や削除'}</div>`:''}
   `;
+  if(aiEditMode) bindReorder(document.getElementById('threadList'), commitThreadOrder);
 }
-function threadRow(t,i,n){
+function threadRow(t){
   if(aiEditMode){
-    return `<div class="folder-row">
+    return `<div class="folder-row reorderable" data-rid="${t.id}">
       <div class="meta" style="cursor:pointer" onclick="renameThread('${t.id}')">
         <div class="nm">${esc(t.title)}</div>
         <div class="ct">${esc(threadBadge(t))}・タップで名前/指示を編集</div>
       </div>
       <div class="row-ctrls">
-        <button class="rc" ${i===0?'disabled':''} onclick="moveThread('${t.id}',-1)" aria-label="上へ">▲</button>
-        <button class="rc" ${i===n-1?'disabled':''} onclick="moveThread('${t.id}',1)" aria-label="下へ">▼</button>
         <button class="rc del" onclick="deleteThread('${t.id}')" aria-label="削除">${I.trash}</button>
+        <div class="drag-handle" aria-label="並び替え">${I.grip}</div>
       </div></div>`;
   }
-  const last=t.messages.length?t.messages[t.messages.length-1].content:threadFunc(t).ph;
-  const preview=esc(String(last).replace(/\s+/g,' ').slice(0,42));
   return `<div class="folder-row" onclick="activeThreadId='${t.id}';aiEditMode=false;renderAI()">
     <div class="ico" style="background:var(--green-soft);color:var(--green)">${spkInk().replace('var(--ink-3)','currentColor')}</div>
-    <div class="meta"><div class="nm">${esc(t.title)}</div><div class="ct one">${esc(threadBadge(t))}・${preview||'…'}</div></div>
+    <div class="meta"><div class="nm">${esc(t.title)}</div><div class="ct">${esc(threadBadge(t))}</div></div>
     <span class="chev">${I.chev}</span>
   </div>`;
 }
