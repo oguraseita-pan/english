@@ -89,6 +89,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:6px;margin-bottom:18px;}
+.thread-top{position:sticky;top:0;z-index:20;background:var(--paper);margin:calc(-1 * (var(--safe-t) + 8px)) -18px 12px;padding:calc(var(--safe-t) + 10px) 18px 10px;box-shadow:0 1px 0 var(--line);}
 .topbar h1{font-family:var(--font-en);font-weight:600;font-size:1.55rem;letter-spacing:-.01em;margin:0;}
 .topbar .sub{color:var(--ink-2);font-size:.82rem;margin-top:1px;}
 .icon-btn{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;background:var(--surface);box-shadow:var(--shadow);color:var(--ink-2);transition:transform .12s,background .15s;}
@@ -311,6 +312,9 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .compo-edit{width:100%;background:transparent;text-align:center;font-family:var(--font-en);font-size:1.16rem;margin-top:18px;padding:10px 12px;border-bottom:2px solid var(--line);}
 .compo-edit:focus{border-color:var(--green);}
 .compo-result-head{text-align:center;padding:12px 0 6px;}
+.speech-theme{font-size:1.25rem;font-weight:700;line-height:1.55;background:var(--surface);box-shadow:var(--shadow);border-radius:16px;padding:18px;text-align:center;margin-top:6px;}
+.speech-timer{font-family:var(--font-en);font-size:2.4rem;font-weight:600;text-align:center;margin:12px 0 2px;}
+.speech-input{width:100%;background:var(--surface);box-shadow:var(--shadow);border-radius:14px;padding:13px 14px;font-family:var(--font-en);font-size:1.02rem;resize:none;margin-top:14px;line-height:1.4;}
 .compo-result-head svg{width:48px;height:48px;color:var(--green);}
 .compo-result-head .big{font-family:var(--font-en);font-size:2rem;font-weight:600;margin-top:6px;}
 .compo-result-head .sub2{color:var(--ink-2);font-size:.85rem;}
@@ -483,6 +487,7 @@ const I = {
   book:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM19 3v18"/></svg>',
   flame:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1 4-2 5-2 8a4 4 0 0 0 8 0c0-1-.5-2-1-3 2 1 3 3.5 3 6a8 8 0 1 1-16 0c0-4 3-6 4-9 1 1 1.5 2 2 3z"/></svg>',
   doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></svg>',
+  speech:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.4 9 9 0 0 1-4-1l-4 1 1-3.5a8.38 8.38 0 0 1-1-4A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>',
 };
 
 /* ---------- state & storage ---------- */
@@ -653,6 +658,9 @@ function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.rando
 let currentTab='home';
 function setTab(name){
   if(typeof _recog!=='undefined' && _recog){ try{ _recog.stop(); }catch(_){ } }
+  if(typeof _srec!=='undefined' && _srec){ try{ _srec.stop(); }catch(_){ } _srec=null; }
+  if(typeof _stimer!=='undefined'){ clearInterval(_stimer); }
+  if(typeof speech!=='undefined' && speech) speech.recording=false;
   currentTab=name;
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
@@ -869,20 +877,23 @@ function saveText(id){
   if(id){ Object.assign(state.cards[id], {title, body, folderId, type:'text'}); }
   else { const nid=uid(); state.cards[nid]={id:nid, type:'text', title, body, folderId, createdAt:now()}; }
   save(); closeModal();
-  if(currentTab==='notes'){ if(id && !noteEditMode) currentCardView=id; renderNotes(); } else renderHome();
-  toast('保存しました');
+  if(currentTab==='notes'){ if(id && !noteEditMode) currentCardView=id; renderNotes(); } else if(currentTab==='ai'){ renderAI(); } else renderHome();
+  toast('ノートに保存しました');
 }
 
 function viewCard(id){ currentCardView=id; renderNotes(); }
 function closeCardView(){ currentCardView=null; renderNotes(); }
 
 function renderTextDetail(v,c){
+  const spk=t=>`<button class="spk" style="display:inline-grid;vertical-align:middle;width:32px;height:32px;margin-left:6px" onclick="speak('${esc(t).replace(/'/g,"\\'")}')" aria-label="読み上げ">${I.speaker}</button>`;
+  const titleEn=/[A-Za-z]/.test(c.title||'');
+  const bodyEn=/[A-Za-z]/.test(c.body||'');
   v.innerHTML=`
     <div class="topbar"><h1>ノート</h1></div>
     <button class="cd-back" onclick="closeCardView()">${I.back} 一覧へ戻る</button>
     <div class="cd-card">
-      <div class="cd-term" style="font-family:var(--font-jp);font-weight:700">${esc(c.title)||'(無題)'}</div>
-      <div class="cd-sec" style="margin-top:10px"><div class="val" style="white-space:pre-wrap;line-height:1.7">${esc(c.body)||'<span style="color:var(--ink-3)">本文がありません</span>'}</div></div>
+      <div class="cd-term" style="font-family:var(--font-jp);font-weight:700">${esc(c.title)||'(無題)'}${titleEn?spk(c.title):''}</div>
+      <div class="cd-sec" style="margin-top:10px"><div class="val" style="white-space:pre-wrap;line-height:1.7">${esc(c.body)||'<span style="color:var(--ink-3)">本文がありません</span>'}${bodyEn?spk(c.body):''}</div></div>
     </div>
     <div class="cd-actions">
       <button class="btn btn-ghost" style="flex:1;padding:14px" onclick="deleteCard('${c.id}')">削除</button>
@@ -1039,8 +1050,8 @@ function saveCard(id){
   if(id){ Object.assign(state.cards[id], data); }
   else { const nid=uid(); state.cards[nid]={id:nid,...data,srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now()}; }
   save(); closeModal();
-  if(currentTab==='notes'){ if(id && !noteEditMode) currentCardView=id; renderNotes(); } else renderHome();
-  toast('保存しました');
+  if(currentTab==='notes'){ if(id && !noteEditMode) currentCardView=id; renderNotes(); } else if(currentTab==='ai'){ renderAI(); } else renderHome();
+  toast('ノートに保存しました');
 }
 function deleteCard(id){
   if(!confirm('このカードを削除しますか？')) return;
@@ -1051,7 +1062,7 @@ function deleteCard(id){
 /* ====================================================================
    STUDY
    ==================================================================== */
-let session=null, quiz=null, compo=null;
+let session=null, quiz=null, compo=null, speech=null;
 const PRESET_DECKS=[
   {id:'daily', name:'日常会話', cards:[
     {term:'How have you been?',pron:'',mean:'最近どうしてた？',exEn:'Hey! How have you been?',exJa:'やあ！最近どう？',pos:['フレーズ']},
@@ -1078,6 +1089,7 @@ function renderStudy(){
   if(session){ renderStudySession(); return; }
   if(quiz){ renderQuiz(); return; }
   if(compo){ renderCompo(); return; }
+  if(speech){ renderSpeech(); return; }
   const v=document.getElementById('view-study');
   const all=Object.values(state.cards).filter(c=>c.type!=='text');
   const dueAll=all.filter(c=>c.srs&&c.srs.state!=='new'&&c.srs.due<=now()).length;
@@ -1103,6 +1115,11 @@ function renderStudy(){
     <div class="mode-card" onclick="startCompoMenu()">
       <div class="mc-ic" style="background:var(--green-soft);color:var(--green)">${I.mic}</div>
       <div class="mc-body"><div class="mc-t">瞬間英作文</div><div class="mc-d">日本語→英語を声で（音声入力OK）</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>
+    <div class="mode-card" onclick="startSpeechMenu()">
+      <div class="mc-ic" style="background:var(--amber-soft);color:var(--amber-d)">${I.speech}</div>
+      <div class="mc-body"><div class="mc-t">独り言英会話（1分スピーチ）</div><div class="mc-d">お題で1分話す→AIが添削＆別表現を提案</div></div>
       <span class="chev">${I.chev}</span>
     </div>`;
 }
@@ -1579,14 +1596,148 @@ async function checkCompo(){
   renderCompo();
 }
 
-/* ====================================================================
-   AI (ChatGPT)
-   ==================================================================== */
-let aiBusy=false;
+/* ---------- 独り言英会話 (1-minute speech) ---------- */
+const SPEECH_TOPICS=[
+  '今日あったことを話す','週末の予定','最近ハマっていること','好きな食べ物とその理由','理想の休日',
+  '行ってみたい国','子どもの頃の思い出','尊敬する人','最近観た映画やドラマ','好きな季節と理由',
+  '朝のルーティン','ストレス発散法','人生で一番うれしかったこと','学生時代の思い出','好きな音楽',
+  'もし宝くじが当たったら','タイムマシンがあったら行きたい時代','無人島に3つ持っていくなら','明日が休みなら何をする','10年後の自分',
+  'コーヒー派か紅茶派か','朝型か夜型か','都会暮らしと田舎暮らし','読書と映画どちらが好きか','旅行は計画派か行き当たりばったり派か',
+  'おすすめの本を紹介する','自分の住む町を紹介する','日本の好きな文化を説明する','好きなアプリを勧める','最近買ってよかったもの',
+  '英語を勉強する理由','続けている習慣','直したい癖','今年の目標','挑戦してみたいこと',
+  'AIは生活をどう変えると思うか','リモートワークの良い点・悪い点','SNSは必要だと思うか','お金と時間どちらが大切か','早起きは得か',
+  '健康のためにしていること','好きな運動','理想の朝食','料理は得意か','コンビニでよく買うもの',
+  '一番好きな場所','行きつけのお店','癒される瞬間','がんばった経験','失敗から学んだこと',
+  'ペットを飼うなら何','好きな動物','天気の良い日の過ごし方','雨の日の過ごし方','理想の家',
+  '友達とどう過ごすのが好きか','家族について','感謝している人へ一言','最近笑ったこと','明日の自分への応援メッセージ'
+];
+let _srec=null, _stimer=null;
+function fmtClock(s){ s=Math.max(0,s|0); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+function startSpeechMenu(){
+  const chips=SPEECH_TOPICS.map(t=>`<button class="theme-chip" onclick="startSpeech('${t.replace(/'/g,"\\'")}')">${esc(t)}</button>`).join('');
+  openModal(`
+    <h2>独り言英会話（1分スピーチ）</h2>
+    <p class="d" style="margin:0 0 12px;font-size:.85rem">お題を選んで、1分間できるだけ英語で話してみましょう。話した内容をAIが添削し、より自然な別表現も提案します。</p>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-primary" style="flex:1;padding:12px" onclick="startSpeech(SPEECH_TOPICS[Math.floor(Math.random()*SPEECH_TOPICS.length)])">🎲 ランダム出題</button>
+      ${aiReady()?`<button class="btn btn-ghost" style="flex:1;padding:12px" onclick="genSpeechTheme()">${I.sparkle} AIでお題</button>`:''}
+    </div>
+    <div class="mfield"><label>自由入力</label><div style="display:flex;gap:8px"><input id="spCustom" placeholder="話したいテーマを入力" style="flex:1" /><button class="btn btn-primary" onclick="startSpeechCustom()">開始</button></div></div>
+    <div class="sub-label">お題から選ぶ</div>
+    <div class="chip-wrap" style="max-height:38vh;overflow-y:auto">${chips}</div>
+    <div class="modal-actions" style="margin-top:12px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>
+  `);
+}
+function startSpeechCustom(){ const t=(document.getElementById('spCustom').value||'').trim(); if(!t){ toast('テーマを入力してください'); return; } startSpeech(t); }
+async function genSpeechTheme(){
+  if(!aiReady()){ toast('AIをオンにしてください'); return; }
+  closeModal();
+  speech={ theme:'', phase:'gen', transcript:'', seconds:60, recording:false, fb:null }; renderSpeech();
+  try{
+    const content=await callAI([{role:'system',content:'Output ONLY JSON {"theme":"a single short Japanese speech topic for a 1-minute English monologue, everyday and easy to talk about"}. No markdown.'},{role:'user',content:'お題を1つ'}],{json:true,temp:0.9});
+    let th=''; try{ th=(JSON.parse(content).theme||'').trim(); }catch(e){ th=''; }
+    if(!speech) return;
+    if(!th){ th=SPEECH_TOPICS[Math.floor(Math.random()*SPEECH_TOPICS.length)]; }
+    startSpeech(th);
+  }catch(err){ if(speech){ toast('お題生成に失敗しました'); startSpeech(SPEECH_TOPICS[Math.floor(Math.random()*SPEECH_TOPICS.length)]); } }
+}
+function startSpeech(theme){ closeModal(); speech={ theme, phase:'speak', transcript:'', seconds:60, recording:false, fb:null }; renderSpeech(); }
+function exitSpeech(){ stopSpeechRec(); clearInterval(_stimer); speech=null; renderStudy(); }
+function startSpeechRec(){
+  if(!speechSupported()){ toast('この端末は音声入力に非対応です（下のテキストに入力もできます）'); return; }
+  if(_srec){ stopSpeechRec(); return; }
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const r=new SR(); _srec=r; r.lang='en-US'; r.interimResults=true; r.continuous=true;
+  let finalText = speech.transcript||'';
+  r.onresult=(e)=>{
+    let interim='';
+    for(let i=e.resultIndex;i<e.results.length;i++){ const res=e.results[i]; if(res.isFinal) finalText=(finalText+' '+res[0].transcript).trim(); else interim+=res[0].transcript; }
+    if(speech) speech.transcript=finalText;
+    const ta=document.getElementById('speechText'); if(ta) ta.value=(finalText+(interim?' '+interim:'')).trim();
+  };
+  r.onerror=(e)=>{ if(e.error==='not-allowed'||e.error==='service-not-allowed') toast('マイクの使用が許可されていません'); };
+  r.onend=()=>{ if(speech && speech.recording && speech.seconds>0){ try{ r.start(); }catch(_){ } } else { if(speech) speech.recording=false; const b=document.getElementById('speechMic'); if(b) b.classList.remove('listening'); } };
+  speech.recording=true;
+  try{ r.start(); }catch(_){ toast('録音を開始できませんでした'); speech.recording=false; _srec=null; return; }
+  clearInterval(_stimer);
+  _stimer=setInterval(()=>{
+    if(!speech){ clearInterval(_stimer); return; }
+    speech.seconds--;
+    const el=document.getElementById('speechTimer'); if(el) el.textContent=fmtClock(speech.seconds);
+    if(speech.seconds<=0){ clearInterval(_stimer); stopSpeechRec(); }
+  },1000);
+  renderSpeech();
+}
+function stopSpeechRec(){ if(speech) speech.recording=false; clearInterval(_stimer); if(_srec){ try{ _srec.stop(); }catch(_){ } _srec=null; } if(speech&&speech.phase==='speak') renderSpeech(); }
+async function gradeSpeech(){
+  const ta=document.getElementById('speechText'); if(ta && speech) speech.transcript=ta.value.trim();
+  if(!speech.transcript){ toast('話した内容（または入力）がありません'); return; }
+  stopSpeechRec();
+  if(!aiReady()){ toast('添削にはAIが必要です。設定でオンにしてください'); return; }
+  speech.phase='grading'; renderSpeech();
+  try{
+    const sys='You are an encouraging English speaking coach for a Japanese learner who just did a ~1-minute spoken monologue (the text is speech-to-text and may be rough). Given the theme and transcript, output ONLY JSON: {"corrected":"a natural, cleaned-up English version of what they tried to say","points":["up to 4 short Japanese notes about grammar, word choice or nuance to fix"],"richer":["up to 3 more natural and richer English expressions/sentences they could have used"]}. Be supportive and concrete. The "points" MUST be in Japanese. No markdown, no code fences.';
+    const u=`Theme: ${speech.theme}\nTranscript: ${speech.transcript}`;
+    const content=await callAI([{role:'system',content:sys},{role:'user',content:u}],{json:true,temp:0.4});
+    let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
+    if(!speech) return;
+    speech.fb = (j&&(j.corrected||j.points||j.richer)) ? {corrected:j.corrected||'',points:Array.isArray(j.points)?j.points:[],richer:Array.isArray(j.richer)?j.richer:[]} : {corrected:'',points:[content||'添削結果を取得できませんでした。'],richer:[]};
+  }catch(err){
+    if(!speech) return;
+    const m=err.message||'';
+    speech.fb={corrected:'',points:['添削に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')],richer:[]};
+  }
+  speech.phase='result'; renderSpeech();
+}
+function renderSpeech(){
+  const v=document.getElementById('view-study');
+  const top=`<div class="study-top"><button class="icon-btn x-btn" onclick="exitSpeech()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:${speech.phase==='result'?100:speech.phase==='speak'?Math.round((60-speech.seconds)/60*100):60}%"></div></div><div class="study-count">1分スピーチ</div></div>`;
+  if(speech.phase==='gen'){
+    v.innerHTML=top+`<div class="empty" style="padding:64px 20px"><div class="spinner"></div><div class="t">お題を作成中…</div></div>`; return;
+  }
+  if(speech.phase==='grading'){
+    v.innerHTML=top+`<div class="empty" style="padding:64px 20px"><div class="spinner"></div><div class="t">添削中…</div><div class="d">話した内容をAIが確認しています</div></div>`; return;
+  }
+  if(speech.phase==='result'){
+    const fb=speech.fb||{};
+    v.innerHTML=top+`
+      <div class="compo-kind">お題</div>
+      <div class="compo-jp" style="font-size:1.15rem">${esc(speech.theme)}</div>
+      <div class="compo-ref"><div class="lab">あなたのスピーチ</div><div class="en" style="font-size:1rem">${esc(speech.transcript)}</div></div>
+      ${fb.corrected?`<div class="compo-ref" style="border-color:var(--amber)"><div class="lab">自然な英語に整えると</div><div class="en" style="font-size:1rem">${esc(fb.corrected)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:30px;height:30px" onclick="speak('${esc(fb.corrected).replace(/'/g,"\\'")}')">${I.speaker}</button></div></div>`:''}
+      ${(fb.points&&fb.points.length)?`<div class="compo-fb"><div class="lab" style="font-size:.72rem;color:var(--ink-3);font-weight:700;margin-bottom:6px">修正ポイント</div><ul style="margin:0;padding-left:18px;line-height:1.7">${fb.points.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`:''}
+      ${(fb.richer&&fb.richer.length)?`<div class="compo-fb" style="background:var(--green-soft)"><div class="lab" style="font-size:.72rem;color:var(--ink-3);font-weight:700;margin-bottom:6px">より自然で豊かな別表現</div>${fb.richer.map(rr=>`<div class="ex-item" style="margin-bottom:8px"><div class="ex-en">${esc(rr)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:26px;height:26px" onclick="speak('${esc(rr).replace(/'/g,"\\'")}')">${I.speaker}</button></div></div>`).join('')}</div>`:''}
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn btn-ghost" style="flex:1;padding:14px" onclick="startSpeech(speech.theme)">同じお題でもう一度</button>
+        <button class="btn btn-ghost" style="flex:1;padding:14px" onclick="startSpeechMenu()">別のお題</button>
+      </div>
+      <button class="btn btn-primary full" style="padding:14px;margin-top:10px" onclick="speech=null;renderStudy()">学習に戻る</button>`;
+    return;
+  }
+  // phase 'speak'
+  const rec=speech.recording;
+  const micBtn = speechSupported()
+    ? `<button class="mic-big ${rec?'listening':''}" id="speechMic" onclick="startSpeechRec()" aria-label="録音">${I.mic}</button><div class="mic-cap" id="speechCap">${rec?'録音中…（タップで停止）':'タップして1分間話す'}</div>`
+    : `<div class="mic-cap">この端末は音声入力に非対応です。下に英語を入力してください。</div>`;
+  v.innerHTML=top+`
+    <div class="compo-kind">お題（1分間できるだけ英語で）</div>
+    <div class="speech-theme">${esc(speech.theme)}</div>
+    <div class="speech-timer" id="speechTimer">${fmtClock(speech.seconds)}</div>
+    <div class="compo-speak" style="margin-top:6px">${micBtn}</div>
+    <textarea id="speechText" class="speech-input" rows="4" placeholder="話した内容がここに表示されます（編集できます）">${esc(speech.transcript||'')}</textarea>
+    <button class="btn btn-primary full" style="padding:15px;margin-top:14px" onclick="gradeSpeech()">話し終えたら添削する</button>
+    ${!aiReady()?`<div class="compo-hint" style="margin-top:8px">※添削にはAIが必要です（設定でオン）。AIなしでも話す練習はできます。</div>`:''}`;
+}
+
+
 let activeThreadId=null;   // null = thread list
 let aiEditMode=false;      // reorder/delete affordances in list
 let ntFunc='chat', ntTitle='', ntPrompt=''; // new-thread modal draft
 
+/* ====================================================================
+   AI (ChatGPT / Gemini)
+   ==================================================================== */
+let aiBusy=false;
 const AI_MODES={
   chat:{label:'チューター',convo:true,ph:'英語について何でも質問できます',phs:'メッセージを入力…',sys:'You are a friendly, encouraging English tutor for a Japanese learner. Reply concisely in Japanese unless asked otherwise. Use simple explanations and give example sentences.'},
   card:{label:'単語をカード化',convo:false,ph:'単語を送るとカード化できます',phs:'単語・フレーズ…',sys:'CARD'},
@@ -1744,7 +1895,7 @@ function renderThread(){
   if(!t){ activeThreadId=null; renderThreadList(); return; }
   const f=threadFunc(t);
   v.innerHTML=`
-    <div class="topbar" style="gap:6px">
+    <div class="topbar thread-top" style="gap:6px">
       <button class="icon-btn" style="box-shadow:none;background:transparent;width:38px" onclick="activeThreadId=null;renderAI()" aria-label="一覧へ戻る">${I.back}</button>
       <div style="flex:1;min-width:0">
         <h1 style="font-size:1.2rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.title)}</h1>
@@ -1791,14 +1942,12 @@ function saveAIExample(i,j){
   const t=getThread(activeThreadId); if(!t) return;
   const m=t.messages[i]; if(!m||!m.examples) return;
   const x=m.examples[j]; if(!x) return;
-  setTab('notes');
   editText(null,{title:x.en||'', body:x.ja||''});
 }
 function saveAICard(i){
   const t=getThread(activeThreadId); if(!t) return;
   const m=t.messages[i]; if(!m||!m.card) return;
   const c=m.card;
-  setTab('notes');
   editCard(null,{term:c.term||'',pron:c.pron||'',mean:c.mean||'',exEn:c.exEn||'',exJa:c.exJa||'',pos:Array.isArray(c.pos)?c.pos:(c.pos?[c.pos]:[]),other:c.other||''});
 }
 function autoGrow(t){ t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,120)+'px'; }
