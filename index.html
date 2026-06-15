@@ -1021,6 +1021,7 @@ async function sendAI(){
     else if(msg==='AI_OFF') msg='AIがオフです。設定からオンにしてください。';
     else if(/40[013]/.test(msg)) msg='APIキーが無効か、リクエストが拒否されました。設定を確認してください。';
     else if(/429/.test(msg)) msg=aiProvider()==='gemini'?'無料枠の上限に達した可能性があります。少し時間をおいて再試行してください。':'利用制限/残高切れの可能性があります（OpenAIの請求設定を確認）。';
+    else if(/50[0234]/.test(msg)) msg='AIサーバーが一時的に混雑しています。少し待ってから、もう一度送信してください。';
     else if(/Failed to fetch|NetworkError/i.test(msg)) msg='通信に失敗しました。ネット接続を確認してください。';
     chatMessages.push({role:'assistant',content:'⚠️ '+msg});
   }
@@ -1031,14 +1032,24 @@ async function callOpenAI(messages,opts){
   if(!key) throw new Error('NO_KEY');
   const body={ model:state.settings.model||'gpt-4o-mini', messages, temperature:(opts&&opts.temp!=null)?opts.temp:0.7 };
   if(opts&&opts.json) body.response_format={type:'json_object'};
-  const res=await fetch('https://api.openai.com/v1/chat/completions',{
+  const res=await aiFetch('https://api.openai.com/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
     body:JSON.stringify(body)
   });
-  if(!res.ok){ throw new Error('API '+res.status); }
   const data=await res.json();
   return data.choices[0].message.content.trim();
+}
+// fetch with one automatic retry on transient server errors (5xx)
+async function aiFetch(url,init){
+  for(let attempt=0; attempt<2; attempt++){
+    let res;
+    try{ res=await fetch(url,init); }
+    catch(e){ if(attempt===0){ await new Promise(r=>setTimeout(r,1200)); continue; } throw e; }
+    if(res.ok) return res;
+    if(res.status>=500 && attempt===0){ await new Promise(r=>setTimeout(r,1500)); continue; }
+    throw new Error('API '+res.status);
+  }
 }
 async function callAI(messages,opts){
   opts=opts||{};
@@ -1060,8 +1071,7 @@ async function callGemini(messages,opts){
   if(sys) body.systemInstruction={ parts:[{text:sys}] };
   if(opts.json) body.generationConfig.responseMimeType='application/json';
   const url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent?key='+encodeURIComponent(key);
-  const res=await fetch(url,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
-  if(!res.ok){ throw new Error('API '+res.status); }
+  const res=await aiFetch(url,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
   const data=await res.json();
   const cand=(data.candidates||[])[0];
   const parts=cand && cand.content && cand.content.parts;
@@ -1089,7 +1099,7 @@ async function aiFillCard(){
     if(c.exEn) document.getElementById('cExEn').value=c.exEn;
     if(c.exJa) document.getElementById('cExJa').value=c.exJa;
     toast('生成しました（確認して保存）');
-  }catch(err){ toast('生成に失敗: '+(/40[013]/.test(err.message)?'キーが無効':/429/.test(err.message)?'利用上限の可能性':'通信エラー')); }
+  }catch(err){ toast('生成に失敗: '+(/40[013]/.test(err.message)?'キーが無効':/429/.test(err.message)?'利用上限の可能性':/50[0234]/.test(err.message)?'サーバー混雑（再試行を）':'通信エラー')); }
   btn.disabled=false; btn.innerHTML=I.sparkle+' AIで意味・例文を生成';
 }
 
