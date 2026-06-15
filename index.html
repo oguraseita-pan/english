@@ -500,6 +500,7 @@ function defaultState(){
     threads:[], aiThreadSeed:false,
     settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:0.9, newPerDay:20 },
     stats:{ reviews:{}, streak:0, lastStudy:null },
+    history:{ compo:[], speech:[] },
     seeded:false
   };
 }
@@ -511,6 +512,9 @@ function load(){
   }catch(e){ state = defaultState(); }
   state.settings = Object.assign(defaultState().settings, state.settings || {});
   if(!state.stats) state.stats = defaultState().stats;
+  if(!state.history || typeof state.history!=='object') state.history = {compo:[],speech:[]};
+  if(!Array.isArray(state.history.compo)) state.history.compo=[];
+  if(!Array.isArray(state.history.speech)) state.history.speech=[];
   if(!Array.isArray(state.threads)) state.threads = [];
   // migrate cards: tags -> pos (品詞), note -> other (その他)
   Object.values(state.cards||{}).forEach(c=>{
@@ -551,6 +555,7 @@ function seed(){
 
 /* ---------- helpers ---------- */
 function esc(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function spkBtn(text,size){ size=size||30; return `<button class="spk" style="display:inline-grid;vertical-align:middle;width:${size}px;height:${size}px" onclick='speak(${esc(JSON.stringify(String(text||"")))})' aria-label="読み上げ">${I.speaker}</button>`; }
 
 /* ---------- generic drag-to-reorder (pointer: touch+mouse) ---------- */
 let _drag=null;
@@ -1062,7 +1067,7 @@ function deleteCard(id){
 /* ====================================================================
    STUDY
    ==================================================================== */
-let session=null, quiz=null, compo=null, speech=null;
+let session=null, quiz=null, compo=null, speech=null, histView=null;
 const PRESET_DECKS=[
   {id:'daily', name:'日常会話', cards:[
     {term:'How have you been?',pron:'',mean:'最近どうしてた？',exEn:'Hey! How have you been?',exJa:'やあ！最近どう？',pos:['フレーズ']},
@@ -1090,6 +1095,7 @@ function renderStudy(){
   if(quiz){ renderQuiz(); return; }
   if(compo){ renderCompo(); return; }
   if(speech){ renderSpeech(); return; }
+  if(histView){ renderHistory(); return; }
   const v=document.getElementById('view-study');
   const all=Object.values(state.cards).filter(c=>c.type!=='text');
   const dueAll=all.filter(c=>c.srs&&c.srs.state!=='new'&&c.srs.due<=now()).length;
@@ -1097,6 +1103,7 @@ function renderStudy(){
   const ready=dueAll+Math.min(newAll,state.settings.newPerDay);
   v.innerHTML=`
     <div class="topbar"><h1>学習</h1></div>
+    <div class="section-title">単語学習</div>
     <div class="mode-card" onclick="originalDeckPick()">
       <div class="mc-ic" style="background:var(--green-soft);color:var(--green)">${I.folder}</div>
       <div class="mc-body"><div class="mc-t">オリジナルデッキ</div><div class="mc-d">自分の単語で学習（忘却曲線／追加順）</div></div>
@@ -1112,6 +1119,7 @@ function renderStudy(){
       <div class="mc-body"><div class="mc-t">4択クイズで腕試し</div><div class="mc-d">意味を4択で当てる</div></div>
       <span class="chev">${I.chev}</span>
     </div>
+    <div class="section-title" style="margin-top:22px">スピーキング学習</div>
     <div class="mode-card" onclick="startCompoMenu()">
       <div class="mc-ic" style="background:var(--green-soft);color:var(--green)">${I.mic}</div>
       <div class="mc-body"><div class="mc-t">瞬間英作文</div><div class="mc-d">日本語→英語を声で（音声入力OK）</div></div>
@@ -1413,6 +1421,7 @@ function startCompoMenu(){
     <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();startCompoPick()">${I.cardPlus} カードの例文から出題</button>
     <button class="btn btn-primary full" style="padding:15px;justify-content:flex-start;gap:12px" onclick="${aiReady()?"closeModal();startCompoThemePick()":"toast('テーマ出題にはAIが必要です。設定でオンにしてください')"}">${I.sparkle} テーマを選んで出題（AI生成）</button>
     ${!aiReady()?`<div class="compo-hint" style="margin-top:8px">※テーマ出題は、設定でAI（OpenAI/Gemini）をオンにすると使えます。</div>`:''}
+    <button class="btn btn-ghost full" style="padding:13px;justify-content:flex-start;gap:12px;margin-top:10px" onclick="openHistory('compo')">${I.refresh} これまでの履歴を見る</button>
     <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>
   `);
 }
@@ -1496,11 +1505,12 @@ function renderCompo(){
   if(compo.idx>=compo.items.length){
     const logs=compo.log||[];
     const good=logs.filter(r=>r.fb&&r.fb.verdict==='○').length;
+    if(!compo.saved){ compo.saved=true; pushCompoHistory(); }
     v.innerHTML=`
       <div class="study-top"><button class="icon-btn x-btn" onclick="compo=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:100%"></div></div><div class="study-count">結果</div></div>
       <div class="compo-result-head">${I.trophy}<div class="big">${good} / ${logs.length}</div><div class="sub2">「○」と判定された数</div></div>
       <div class="section-title">解答一覧（タップで解説）</div>
-      <div class="list">${logs.map((r,i)=>compoResultRow(r,i)).join('')}</div>
+      <div class="list">${logs.map((r,i)=>compoResultRow(r,i,compo.openIdx===i)).join('')}</div>
       <button class="btn btn-primary full" style="padding:15px;margin-top:16px" onclick="compo=null;renderStudy()">学習に戻る</button>`;
     return; // keep compo alive so rows can expand
   }
@@ -1539,19 +1549,19 @@ function renderCompo(){
     <div class="compo-jp">${esc(it.jp)}</div>
     ${answerArea}`;
 }
-function compoResultRow(r,i){
+function compoResultRow(r,i,open,onclickExpr){
   const v=(r.fb&&r.fb.verdict)?r.fb.verdict:'－';
   const vc = v==='○'?'o':(v==='×'?'x':'t');
-  const open=compo.openIdx===i; const fb=r.fb||{};
+  const fb=r.fb||{};
   return `<div class="result-row">
-    <div class="rr-head" onclick="toggleResult(${i})">
+    <div class="rr-head" onclick="${onclickExpr||`toggleResult(${i})`}">
       <span class="verdict ${vc}" style="font-size:1.3rem;min-width:22px;text-align:center">${esc(v)}</span>
       <div class="rr-meta"><div class="rr-jp">${esc(r.jp)}</div><div class="rr-ans">${esc(r.userAns||'(無回答)')}</div></div>
       <span class="chev">${I.chev}</span>
     </div>
     ${open?`<div class="rr-detail">
       <div class="blk"><div class="lab">あなたの解答</div><div class="en">${esc(r.userAns||'(無回答)')}</div></div>
-      <div class="blk"><div class="lab">お手本</div><div class="en">${esc(r.en)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:28px;height:28px" onclick="speak('${esc(r.en).replace(/'/g,"\\'")}')">${I.speaker}</button></div></div>
+      <div class="blk"><div class="lab">お手本</div><div class="en">${esc(r.en)} ${spkBtn(r.en,28)}</div></div>
       ${fb.comment?`<div class="blk"><div class="lab">コメント</div><div>${esc(fb.comment)}</div></div>`:''}
       ${fb.fixed?`<div class="blk"><div class="lab">自然な形</div><div class="en">${esc(fb.fixed)}</div></div>`:''}
       ${(fb.alts&&fb.alts.length)?`<div class="blk"><div class="lab">言い換え</div><div class="en">${fb.alts.map(a=>esc(a)).join('<br>')}</div></div>`:''}
@@ -1559,6 +1569,54 @@ function compoResultRow(r,i){
   </div>`;
 }
 function toggleResult(i){ if(!compo) return; compo.openIdx = (compo.openIdx===i)?null:i; renderCompo(); }
+function pushCompoHistory(){
+  if(!compo||!compo.log||!compo.log.length) return;
+  const good=compo.log.filter(r=>r.fb&&r.fb.verdict==='○').length;
+  state.history.compo.unshift({ ts:now(), source:compo.source||'card', theme:compo.theme||'', total:compo.log.length, good, log:compo.log.map(r=>({jp:r.jp,en:r.en,userAns:r.userAns,fb:r.fb})) });
+  if(state.history.compo.length>50) state.history.compo.length=50;
+  save();
+}
+/* ---------- review history (compo + speech) ---------- */
+function fmtHistDate(ts){ const d=new Date(ts); return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+function histLabel(rec){ return rec.source==='theme' ? ('テーマ：'+(rec.theme||'')) : 'カードの例文'; }
+function openHistory(type){ histView={type, mode:'list', idx:null, openIdx:null}; closeModal(); renderStudy(); }
+function exitHistory(){ histView=null; renderStudy(); }
+function openHistDetail(i){ histView.mode='detail'; histView.idx=i; histView.openIdx=null; renderStudy(); }
+function histBackToList(){ histView.mode='list'; histView.idx=null; histView.openIdx=null; renderStudy(); }
+function toggleHistResult(i){ if(!histView) return; histView.openIdx=(histView.openIdx===i)?null:i; renderStudy(); }
+function histListRow(rec,i,isCompo){
+  const nm = isCompo ? `${rec.good!=null?rec.good:'?'} / ${rec.total||(rec.log?rec.log.length:0)}　${esc(histLabel(rec))}` : (esc(rec.theme)||'(お題なし)');
+  return `<div class="deck-row" onclick="openHistDetail(${i})"><div class="meta"><div class="nm" style="font-size:.95rem">${nm}</div><div class="ct">${fmtHistDate(rec.ts)}</div></div><span class="chev">${I.chev}</span></div>`;
+}
+function renderHistory(){
+  const v=document.getElementById('view-study');
+  const isCompo=histView.type==='compo';
+  const list = isCompo ? state.history.compo : state.history.speech;
+  const top=`<div class="study-top"><button class="icon-btn x-btn" onclick="${histView.mode==='detail'?'histBackToList()':'exitHistory()'}" style="box-shadow:none;background:transparent">${histView.mode==='detail'?I.back:'✕'}</button><div class="progress"><div style="width:100%"></div></div><div class="study-count">${isCompo?'瞬間英作文の履歴':'1分スピーチの履歴'}</div></div>`;
+  if(histView.mode==='list'){
+    if(!list.length){ v.innerHTML=top+`<div class="empty" style="padding:60px 20px">${I.book}<div class="t">履歴がありません</div><div class="d">学習するとここに記録されます</div></div>`; return; }
+    v.innerHTML=top+`<div class="list" style="margin-top:8px">${list.map((rec,i)=>histListRow(rec,i,isCompo)).join('')}</div>`;
+    return;
+  }
+  const rec=list[histView.idx];
+  if(!rec){ histBackToList(); return; }
+  if(isCompo){
+    const good=rec.good!=null?rec.good:rec.log.filter(r=>r.fb&&r.fb.verdict==='○').length;
+    v.innerHTML=top+`
+      <div class="compo-result-head">${I.trophy}<div class="big">${good} / ${rec.total||rec.log.length}</div><div class="sub2">${esc(histLabel(rec))} ・ ${fmtHistDate(rec.ts)}</div></div>
+      <div class="section-title">解答一覧（タップで解説）</div>
+      <div class="list">${rec.log.map((r,i)=>compoResultRow(r,i,histView.openIdx===i,`toggleHistResult(${i})`)).join('')}</div>`;
+  } else {
+    const fb=rec.fb||{};
+    v.innerHTML=top+`
+      <div class="compo-kind">お題 ・ ${fmtHistDate(rec.ts)}</div>
+      <div class="compo-jp" style="font-size:1.15rem">${esc(rec.theme)}</div>
+      <div class="compo-ref"><div class="lab">あなたのスピーチ</div><div class="en" style="font-size:1rem">${esc(rec.transcript)}</div></div>
+      ${fb.corrected?`<div class="compo-ref" style="border-color:var(--amber)"><div class="lab">自然な英語に整えると</div><div class="en" style="font-size:1rem">${esc(fb.corrected)} ${spkBtn(fb.corrected)}</div></div>`:''}
+      ${(fb.points&&fb.points.length)?`<div class="compo-fb"><div class="lab" style="font-size:.72rem;color:var(--ink-3);font-weight:700;margin-bottom:6px">修正ポイント</div><ul style="margin:0;padding-left:18px;line-height:1.7">${fb.points.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`:''}
+      ${(fb.richer&&fb.richer.length)?`<div class="compo-fb" style="background:var(--green-soft)"><div class="lab" style="font-size:.72rem;color:var(--ink-3);font-weight:700;margin-bottom:6px">より自然で豊かな別表現</div>${fb.richer.map(rr=>`<div class="ex-item" style="margin-bottom:8px"><div class="ex-en">${esc(rr)} ${spkBtn(rr,26)}</div></div>`).join('')}</div>`:''}`;
+  }
+}
 async function checkCompo(){
   if(!compo || compo.checking || compo.answered) return;
   const myIdx=compo.idx;
@@ -1625,6 +1683,7 @@ function startSpeechMenu(){
     <div class="mfield"><label>自由入力</label><div style="display:flex;gap:8px"><input id="spCustom" placeholder="話したいテーマを入力" style="flex:1" /><button class="btn btn-primary" onclick="startSpeechCustom()">開始</button></div></div>
     <div class="sub-label">お題から選ぶ</div>
     <div class="chip-wrap" style="max-height:38vh;overflow-y:auto">${chips}</div>
+    <button class="btn btn-ghost full" style="padding:13px;justify-content:flex-start;gap:12px;margin-top:6px" onclick="openHistory('speech')">${I.refresh} これまでの履歴を見る</button>
     <div class="modal-actions" style="margin-top:12px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>
   `);
 }
@@ -1687,7 +1746,15 @@ async function gradeSpeech(){
     const m=err.message||'';
     speech.fb={corrected:'',points:['添削に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')],richer:[]};
   }
-  speech.phase='result'; renderSpeech();
+  speech.phase='result';
+  pushSpeechHistory();
+  renderSpeech();
+}
+function pushSpeechHistory(){
+  if(!speech||!speech.fb) return;
+  state.history.speech.unshift({ ts:now(), theme:speech.theme, transcript:speech.transcript, fb:speech.fb });
+  if(state.history.speech.length>50) state.history.speech.length=50;
+  save();
 }
 function renderSpeech(){
   const v=document.getElementById('view-study');
@@ -1704,9 +1771,9 @@ function renderSpeech(){
       <div class="compo-kind">お題</div>
       <div class="compo-jp" style="font-size:1.15rem">${esc(speech.theme)}</div>
       <div class="compo-ref"><div class="lab">あなたのスピーチ</div><div class="en" style="font-size:1rem">${esc(speech.transcript)}</div></div>
-      ${fb.corrected?`<div class="compo-ref" style="border-color:var(--amber)"><div class="lab">自然な英語に整えると</div><div class="en" style="font-size:1rem">${esc(fb.corrected)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:30px;height:30px" onclick="speak('${esc(fb.corrected).replace(/'/g,"\\'")}')">${I.speaker}</button></div></div>`:''}
+      ${fb.corrected?`<div class="compo-ref" style="border-color:var(--amber)"><div class="lab">自然な英語に整えると</div><div class="en" style="font-size:1rem">${esc(fb.corrected)} ${spkBtn(fb.corrected)}</div></div>`:''}
       ${(fb.points&&fb.points.length)?`<div class="compo-fb"><div class="lab" style="font-size:.72rem;color:var(--ink-3);font-weight:700;margin-bottom:6px">修正ポイント</div><ul style="margin:0;padding-left:18px;line-height:1.7">${fb.points.map(p=>`<li>${esc(p)}</li>`).join('')}</ul></div>`:''}
-      ${(fb.richer&&fb.richer.length)?`<div class="compo-fb" style="background:var(--green-soft)"><div class="lab" style="font-size:.72rem;color:var(--ink-3);font-weight:700;margin-bottom:6px">より自然で豊かな別表現</div>${fb.richer.map(rr=>`<div class="ex-item" style="margin-bottom:8px"><div class="ex-en">${esc(rr)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:26px;height:26px" onclick="speak('${esc(rr).replace(/'/g,"\\'")}')">${I.speaker}</button></div></div>`).join('')}</div>`:''}
+      ${(fb.richer&&fb.richer.length)?`<div class="compo-fb" style="background:var(--green-soft)"><div class="lab" style="font-size:.72rem;color:var(--ink-3);font-weight:700;margin-bottom:6px">より自然で豊かな別表現</div>${fb.richer.map(rr=>`<div class="ex-item" style="margin-bottom:8px"><div class="ex-en">${esc(rr)} ${spkBtn(rr,26)}</div></div>`).join('')}</div>`:''}
       <div style="display:flex;gap:10px;margin-top:16px">
         <button class="btn btn-ghost" style="flex:1;padding:14px" onclick="startSpeech(speech.theme)">同じお題でもう一度</button>
         <button class="btn btn-ghost" style="flex:1;padding:14px" onclick="startSpeechMenu()">別のお題</button>
