@@ -174,6 +174,8 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .card-row .mean{font-size:.84rem;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .card-row .due-dot{width:8px;height:8px;border-radius:50%;flex:none;}
 .spk{width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center;flex:none;transition:transform .12s;}
+.ico-doc{width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center;flex:none;}
+.ico-doc svg{width:20px;height:20px;}
 .spk:active{transform:scale(.88);}
 .spk svg{width:18px;height:18px;}
 .tag-chip{display:inline-block;font-size:.68rem;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);padding:1px 8px;border-radius:20px;margin-right:4px;}
@@ -212,6 +214,21 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .deck-row .nm{font-weight:600;}
 .deck-row .ct{font-size:.78rem;color:var(--ink-3);}
 .deck-row .badge{background:var(--green);color:#fff;font-weight:700;font-size:.82rem;min-width:30px;height:26px;padding:0 9px;border-radius:13px;display:grid;place-items:center;}
+.mode-card{display:flex;align-items:center;gap:14px;background:var(--surface);box-shadow:var(--shadow);border-radius:16px;padding:16px;margin-bottom:12px;transition:transform .12s;cursor:pointer;}
+.mode-card:active{transform:scale(.985);}
+.mode-card .mc-ic{width:46px;height:46px;border-radius:12px;display:grid;place-items:center;flex:none;}
+.mode-card .mc-ic svg{width:24px;height:24px;}
+.mode-card .mc-body{flex:1;min-width:0;}
+.mode-card .mc-t{font-weight:700;font-size:1.05rem;}
+.mode-card .mc-d{font-size:.8rem;color:var(--ink-3);margin-top:2px;}
+.mode-card .badge{background:var(--green);color:#fff;font-weight:700;font-size:.82rem;min-width:30px;height:26px;padding:0 9px;border-radius:13px;display:grid;place-items:center;flex:none;}
+.mode-card .badge.zero{background:var(--line);color:var(--ink-3);}
+.opt-btn{display:flex;align-items:center;gap:13px;width:100%;text-align:left;background:var(--surface);box-shadow:var(--shadow);border-radius:14px;padding:15px 16px;margin-bottom:10px;transition:transform .12s;}
+.opt-btn:active{transform:scale(.985);}
+.opt-btn .oic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;flex:none;background:var(--green-soft);color:var(--green);}
+.opt-btn .oic svg{width:22px;height:22px;}
+.opt-btn .ot{font-weight:700;}
+.opt-btn .od{font-size:.8rem;color:var(--ink-3);margin-top:2px;}
 .deck-row .badge.zero{background:var(--line);color:var(--ink-3);}
 
 .study-wrap{display:flex;flex-direction:column;min-height:70vh;min-height:70dvh;}
@@ -316,6 +333,8 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .msg.user{align-self:flex-end;background:var(--green);color:#fff;border-bottom-right-radius:5px;}
 .msg.ai{align-self:flex-start;background:var(--surface);box-shadow:var(--shadow);border-bottom-left-radius:5px;}
 .msg.ai .save-card{margin-top:10px;display:inline-flex;align-items:center;gap:6px;background:var(--amber);color:#3a2e0c;font-weight:700;font-size:.8rem;padding:7px 12px;border-radius:10px;}
+.msg.ai .retry-btn{margin-top:10px;display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);color:var(--ink);font-weight:600;font-size:.82rem;padding:7px 12px;border-radius:10px;}
+.msg.ai .retry-btn svg{width:15px;height:15px;}
 .chat-input{position:sticky;bottom:calc(var(--tabbar-h) + var(--safe-b) + 8px);display:flex;gap:8px;align-items:flex-end;background:var(--surface);border-radius:18px;box-shadow:var(--shadow-lg);padding:8px 8px 8px 14px;}
 .chat-input textarea{flex:1;border:none;outline:none;background:none;resize:none;max-height:120px;padding:8px 0;line-height:1.4;}
 .send-btn{background:var(--green);color:#fff;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none;transition:transform .12s;}
@@ -358,7 +377,10 @@ html[data-theme="dark"] .tabbar{background:rgba(28,33,35,.86);}
 /* ---------- Modal ---------- */
 .modal-bg{position:fixed;inset:0;background:rgba(20,24,22,.45);backdrop-filter:blur(2px);z-index:60;display:none;align-items:flex-end;justify-content:center;}
 .modal-bg.open{display:flex;animation:fade .2s;}
-.modal{background:var(--paper);width:100%;max-width:680px;border-radius:24px 24px 0 0;padding:8px 18px calc(22px + var(--safe-b));max-height:92vh;overflow-y:auto;animation:slideup .28s cubic-bezier(.2,.7,.2,1);}
+.modal{position:relative;background:var(--paper);width:100%;max-width:680px;border-radius:24px 24px 0 0;padding:8px 18px calc(22px + var(--safe-b));max-height:92vh;overflow-y:auto;animation:slideup .28s cubic-bezier(.2,.7,.2,1);}
+.modal-close{position:absolute;top:14px;right:14px;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:1.45rem;line-height:1;color:var(--ink-2);background:var(--surface-2);z-index:6;}
+.modal-close:active{transform:scale(.92);}
+.x-btn{font-size:1.6rem;width:46px;height:46px;line-height:1;}
 @keyframes slideup{from{transform:translateY(100%);}to{transform:none;}}
 .modal .grip{width:40px;height:5px;background:var(--line);border-radius:3px;margin:6px auto 14px;}
 .modal h2{font-family:var(--font-en);font-weight:600;font-size:1.3rem;margin:0 0 4px;}
@@ -371,6 +393,9 @@ html[data-theme="dark"] .tabbar{background:rgba(28,33,35,.86);}
 .modal-actions{display:flex;gap:10px;margin-top:18px;}
 .modal-actions .btn{flex:1;justify-content:center;padding:14px;}
 .del-link{display:block;width:100%;text-align:center;color:var(--r-again);font-weight:600;font-size:.88rem;padding:14px;margin-top:6px;}
+.key-set{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface-2);border-radius:12px;padding:11px 14px;font-size:.9rem;color:var(--ink);}
+.key-set .lbl{display:inline-flex;align-items:center;gap:7px;}
+.key-set svg{width:16px;height:16px;color:var(--green);}
 .ai-gen-btn{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:600;color:var(--green);background:var(--green-soft);padding:6px 11px;border-radius:9px;margin-top:6px;}
 .ai-gen-btn:disabled{opacity:.5;}
 
@@ -450,6 +475,10 @@ const I = {
   trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
   grip:'<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.6"/><circle cx="15" cy="6" r="1.6"/><circle cx="9" cy="12" r="1.6"/><circle cx="15" cy="12" r="1.6"/><circle cx="9" cy="18" r="1.6"/><circle cx="15" cy="18" r="1.6"/></svg>',
   mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5"/></svg>',
+  book:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM19 3v18"/></svg>',
+  flame:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1 4-2 5-2 8a4 4 0 0 0 8 0c0-1-.5-2-1-3 2 1 3 3.5 3 6a8 8 0 1 1-16 0c0-4 3-6 4-9 1 1 1.5 2 2 3z"/></svg>',
+  doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></svg>',
 };
 
 /* ---------- state & storage ---------- */
@@ -635,7 +664,7 @@ function setTab(name){
    HOME
    ==================================================================== */
 function renderHome(){
-  const all = Object.values(state.cards);
+  const all = Object.values(state.cards).filter(c=>c.type!=='text' && c.srs);
   const due = all.filter(c=>c.srs.state!=='new' && c.srs.due<=now()).length;
   const newCount = all.filter(c=>c.srs.state==='new').length;
   const learned = all.filter(c=>c.srs.state==='review').length;
@@ -727,8 +756,12 @@ function renderNotes(){
   let body;
   if(noteSearch){
     const q=noteSearch.toLowerCase();
-    const hits=Object.values(state.cards).filter(c=>
-      (c.term+c.mean+c.exEn+c.exJa+(c.pos||[]).join('')+(c.other||'')).toLowerCase().includes(q));
+    const hits=Object.values(state.cards).filter(c=>{
+      const hay = c.type==='text'
+        ? (c.title||'')+(c.body||'')
+        : (c.term||'')+(c.mean||'')+(c.exEn||'')+(c.exJa||'')+((c.pos||[]).join(''))+(c.other||'');
+      return hay.toLowerCase().includes(q);
+    });
     body = hits.length? `<div class="list">${hits.map(cardRow).join('')}</div>` :
       `<div class="empty">${I.search}<div class="t">見つかりません</div><div class="d">別のキーワードで試してください</div></div>`;
   } else if(!hasItems){
@@ -777,10 +810,15 @@ function folderRowEdit(f){
   </div>`;
 }
 function cardRowEdit(c){
+  const isText=c.type==='text';
+  const tap = isText?`editText('${c.id}')`:`editCard('${c.id}')`;
+  const title = isText?(esc(c.title)||'(無題)'):esc(c.term);
+  const sub = isText?(esc((c.body||'').slice(0,40))||'<span style=color:var(--ink-3)>本文なし</span>')
+                    :(esc(c.mean)||'<span style=color:var(--ink-3)>意味は未入力</span>');
   return `<div class="card-row reorderable" data-rid="${c.id}">
-    <div class="term-wrap" style="cursor:pointer" onclick="editCard('${c.id}')">
-      <div class="term">${esc(c.term)}</div>
-      <div class="mean">${esc(c.mean)|| '<span style=color:var(--ink-3)>意味は未入力</span>'}</div>
+    <div class="term-wrap" style="cursor:pointer" onclick="${tap}">
+      <div class="term"${isText?' style="font-family:var(--font-jp);font-size:1rem"':''}>${title}</div>
+      <div class="mean">${sub}</div>
     </div>
     <div class="row-ctrls">
       <button class="rc del" onclick="deleteCard('${c.id}')" aria-label="削除">${I.trash}</button>
@@ -799,16 +837,58 @@ function openAddMenu(){
   openModal(`
     <h2>追加</h2>
     <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();editFolder()">${I.folderPlus} フォルダを追加</button>
-    <button class="btn btn-primary full" style="padding:15px;justify-content:flex-start;gap:12px" onclick="closeModal();editCard()">${I.cardPlus} カードを追加</button>
+    <button class="btn btn-primary full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();editCard()">${I.cardPlus} 単語カードを追加</button>
+    <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px" onclick="closeModal();editText()">${I.doc} 文章メモを追加</button>
     <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>
   `);
+}
+function editText(id){
+  const c=id?state.cards[id]:{};
+  const folderOpts=folderSelectOptions(c.folderId||currentFolder);
+  openModal(`
+    <h2>${id?'文章メモを編集':'新しい文章メモ'}</h2>
+    <div class="mfield"><label>タイトル</label><input id="tTitle" value="${esc(c.title||'')}" placeholder="例：好きな英語のフレーズ" /></div>
+    <div class="mfield"><label>本文</label><textarea id="tBody" rows="7" placeholder="メモしたい文章を自由に入力できます。">${esc(c.body||'')}</textarea></div>
+    <div class="mfield"><label>保存先フォルダ</label><select id="tFolder">${folderOpts}</select></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveText('${id||''}')">${id?'保存':'追加'}</button>
+    </div>
+    ${id?`<button class="del-link" onclick="deleteCard('${id}')">この文章メモを削除</button>`:''}
+  `);
+}
+function saveText(id){
+  const title=document.getElementById('tTitle').value.trim();
+  const body=document.getElementById('tBody').value.trim();
+  if(!title && !body){ toast('タイトルか本文を入力してください'); return; }
+  const folderId=document.getElementById('tFolder').value;
+  if(id){ Object.assign(state.cards[id], {title, body, folderId, type:'text'}); }
+  else { const nid=uid(); state.cards[nid]={id:nid, type:'text', title, body, folderId, createdAt:now()}; }
+  save(); closeModal();
+  if(currentTab==='notes'){ if(id && !noteEditMode) currentCardView=id; renderNotes(); } else renderHome();
+  toast('保存しました');
 }
 
 function viewCard(id){ currentCardView=id; renderNotes(); }
 function closeCardView(){ currentCardView=null; renderNotes(); }
 
+function renderTextDetail(v,c){
+  v.innerHTML=`
+    <div class="topbar"><h1>ノート</h1></div>
+    <button class="cd-back" onclick="closeCardView()">${I.back} 一覧へ戻る</button>
+    <div class="cd-card">
+      <div class="cd-term" style="font-family:var(--font-jp);font-weight:700">${esc(c.title)||'(無題)'}</div>
+      <div class="cd-sec" style="margin-top:10px"><div class="val" style="white-space:pre-wrap;line-height:1.7">${esc(c.body)||'<span style="color:var(--ink-3)">本文がありません</span>'}</div></div>
+    </div>
+    <div class="cd-actions">
+      <button class="btn btn-ghost" style="flex:1;padding:14px" onclick="deleteCard('${c.id}')">削除</button>
+      <button class="btn btn-primary" style="flex:2;padding:14px" onclick="editText('${c.id}')">${I.gear} 編集する</button>
+    </div>`;
+}
 function renderCardDetail(v){
   const c=state.cards[currentCardView];
+  if(!c){ closeCardView(); return; }
+  if(c.type==='text'){ renderTextDetail(v,c); return; }
   const spk=t=>`<button class="spk" onclick="speak('${esc(t).replace(/'/g,"\\'")}')" aria-label="読み上げ">${I.speaker}</button>`;
   v.innerHTML=`
     <div class="topbar"><h1>ノート</h1></div>
@@ -841,6 +921,17 @@ function folderRow(f){
   </div>`;
 }
 function cardRow(c){
+  if(c.type==='text'){
+    const preview=(c.body||'').replace(/\s+/g,' ').slice(0,60);
+    return `<div class="card-row">
+      <div class="ico-doc">${I.doc}</div>
+      <div class="term-wrap" onclick="viewCard('${c.id}')">
+        <div class="term" style="font-family:var(--font-jp);font-size:1rem">${esc(c.title)||'(無題)'}</div>
+        <div class="mean">${esc(preview)|| '<span style=color:var(--ink-3)>本文なし</span>'}</div>
+      </div>
+      <span class="chev" onclick="viewCard('${c.id}')">${I.chev}</span>
+    </div>`;
+  }
   const isDue = c.srs.state!=='new' && c.srs.due<=now();
   const dot = c.srs.state==='new'?'var(--amber)':(isDue?'var(--green)':'var(--line)');
   return `<div class="card-row">
@@ -886,9 +977,15 @@ function deleteFolder(id){
 }
 
 /* ---------- card modal ---------- */
+function inboxFolderId(){ const f=Object.values(state.folders).find(x=>x.name==='受信箱'&&x.parentId===null); return f?f.id:null; }
+function getWordFolderId(){ let f=Object.values(state.folders).find(x=>x.name==='単語'&&x.parentId===null); if(!f){ const id=uid(); state.folders[id]={id,name:'単語',parentId:null,createdAt:now()}; save(); f=state.folders[id]; } return f.id; }
+function ensureFolderOption(sel,id,name){ if(sel && ![...sel.options].some(o=>o.value===id)){ const o=document.createElement('option'); o.value=id; o.textContent=name; sel.appendChild(o); } }
 function editCard(id, prefill){
   const c = id?state.cards[id]:(prefill||{});
-  const folderOpts = folderSelectOptions(c.folderId||currentFolder);
+  let defFolder = c.folderId||currentFolder;
+  const ib=inboxFolderId();
+  if(c.id && ib && c.folderId===ib && (c.mean||'').trim()){ defFolder=getWordFolderId(); } // inbox item that now has meaning -> 単語
+  const folderOpts = folderSelectOptions(defFolder);
   openModal(`
     <h2>${id?'カードを編集':'新しいカード'}</h2>
     <div class="mfield"><label>単語・フレーズ（英語）</label>
@@ -951,39 +1048,94 @@ function deleteCard(id){
    STUDY
    ==================================================================== */
 let session=null, quiz=null, compo=null;
+const PRESET_DECKS=[
+  {id:'daily', name:'日常会話', cards:[
+    {term:'How have you been?',pron:'',mean:'最近どうしてた？',exEn:'Hey! How have you been?',exJa:'やあ！最近どう？',pos:['フレーズ']},
+    {term:'It depends.',pron:'',mean:'場合による',exEn:'"Will you come?" "It depends."',exJa:'「来る？」「場合によるね」',pos:['フレーズ']},
+    {term:'I appreciate it.',pron:'',mean:'感謝します',exEn:'Thanks for your help, I appreciate it.',exJa:'手伝ってくれてありがとう、感謝します。',pos:['フレーズ']},
+    {term:'No worries.',pron:'',mean:'気にしないで',exEn:'No worries, it happens.',exJa:'気にしないで、よくあることだよ。',pos:['フレーズ']},
+    {term:'grab a bite',pron:'',mean:'軽く食べる',exEn:'Let\'s grab a bite after work.',exJa:'仕事の後で軽く食べよう。',pos:['フレーズ']},
+    {term:'run late',pron:'',mean:'遅れる',exEn:'Sorry, I\'m running late.',exJa:'ごめん、遅れています。',pos:['フレーズ']},
+    {term:'sounds good',pron:'',mean:'いいね',exEn:'Dinner at seven? Sounds good.',exJa:'7時に夕食？いいね。',pos:['フレーズ']},
+    {term:'by the way',pron:'',mean:'ところで',exEn:'By the way, did you call him?',exJa:'ところで、彼に電話した？',pos:['副詞句']}
+  ]},
+  {id:'toeic', name:'TOEIC基礎', cards:[
+    {term:'invoice',pron:'/ˈɪnvɔɪs/',mean:'請求書',exEn:'Please send the invoice by Friday.',exJa:'金曜までに請求書を送ってください。',pos:['名詞']},
+    {term:'attend',pron:'/əˈtend/',mean:'出席する',exEn:'I will attend the meeting.',exJa:'会議に出席します。',pos:['動詞']},
+    {term:'deadline',pron:'/ˈdedlaɪn/',mean:'締め切り',exEn:'The deadline is next Monday.',exJa:'締め切りは来週月曜です。',pos:['名詞']},
+    {term:'schedule',pron:'/ˈskedʒuːl/',mean:'予定・予定を組む',exEn:'Let\'s schedule a call.',exJa:'電話の予定を組みましょう。',pos:['名詞','動詞']},
+    {term:'in charge of',pron:'',mean:'～を担当して',exEn:'She is in charge of sales.',exJa:'彼女は営業の担当です。',pos:['フレーズ']},
+    {term:'available',pron:'/əˈveɪləbl/',mean:'空いている・利用できる',exEn:'Are you available tomorrow?',exJa:'明日は空いていますか？',pos:['形容詞']},
+    {term:'confirm',pron:'/kənˈfɜːrm/',mean:'確認する',exEn:'Please confirm your reservation.',exJa:'予約を確認してください。',pos:['動詞']},
+    {term:'reschedule',pron:'/ˌriːˈskedʒuːl/',mean:'予定を変更する',exEn:'Can we reschedule the meeting?',exJa:'会議の予定を変更できますか？',pos:['動詞']}
+  ]}
+];
 function renderStudy(){
   if(session){ renderStudySession(); return; }
   if(quiz){ renderQuiz(); return; }
   if(compo){ renderCompo(); return; }
   const v=document.getElementById('view-study');
-  const all=Object.values(state.cards);
-  const dueAll=all.filter(c=>c.srs.state!=='new'&&c.srs.due<=now()).length;
-  const newAll=all.filter(c=>c.srs.state==='new').length;
-  const decks=childFolders(null).map(f=>{
-    const list=cardsInTree(f.id);
-    const d=list.filter(c=>c.srs.state!=='new'&&c.srs.due<=now()).length;
-    const n=list.filter(c=>c.srs.state==='new').length;
-    return {f, total:list.length, ready:d+Math.min(n,state.settings.newPerDay)};
-  });
+  const all=Object.values(state.cards).filter(c=>c.type!=='text');
+  const dueAll=all.filter(c=>c.srs&&c.srs.state!=='new'&&c.srs.due<=now()).length;
+  const newAll=all.filter(c=>c.srs&&c.srs.state==='new').length;
+  const ready=dueAll+Math.min(newAll,state.settings.newPerDay);
   v.innerHTML=`
     <div class="topbar"><h1>学習</h1></div>
-    <div class="deck-row" style="background:linear-gradient(150deg,var(--green),var(--green-d));color:#F4F1E8;box-shadow:0 8px 24px rgba(36,84,70,.25)" onclick="startSession(null)">
-      <div class="meta"><div class="nm" style="font-size:1.05rem">すべてのカード</div><div class="ct" style="color:rgba(244,241,232,.8)">復習 ${dueAll} ・ 新規 ${newAll}</div></div>
-      <div class="badge" style="background:#F6F4EE;color:var(--green-d)">${dueAll+Math.min(newAll,state.settings.newPerDay)}</div>
+    <div class="mode-card" onclick="originalDeckPick()">
+      <div class="mc-ic" style="background:var(--green-soft);color:var(--green)">${I.folder}</div>
+      <div class="mc-body"><div class="mc-t">オリジナルデッキ</div><div class="mc-d">自分の単語で学習（忘却曲線／追加順）</div></div>
+      <div class="badge ${ready===0?'zero':''}">${ready}</div>
     </div>
-    <div class="section-title">デッキ（フォルダ）</div>
+    <div class="mode-card" onclick="presetPick()">
+      <div class="mc-ic" style="background:var(--amber-soft);color:var(--amber-d)">${I.book}</div>
+      <div class="mc-body"><div class="mc-t">用意した単語で学習</div><div class="mc-d">日常会話・TOEICなどのプリセット</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>
+    <div class="mode-card" onclick="startQuizPick()">
+      <div class="mc-ic" style="background:var(--amber-soft);color:var(--amber-d)">${I.trophy}</div>
+      <div class="mc-body"><div class="mc-t">4択クイズで腕試し</div><div class="mc-d">意味を4択で当てる</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>
+    <div class="mode-card" onclick="startCompoMenu()">
+      <div class="mc-ic" style="background:var(--green-soft);color:var(--green)">${I.mic}</div>
+      <div class="mc-body"><div class="mc-t">瞬間英作文</div><div class="mc-d">日本語→英語を声で（音声入力OK）</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>`;
+}
+function originalDeckPick(){
+  const decks=childFolders(null);
+  openModal(`
+    <h2>オリジナルデッキ</h2>
+    <p class="d" style="margin:0 0 12px;font-size:.85rem">学習するデッキを選んでください。</p>
     <div class="deck-pick">
-      ${decks.length?decks.map(d=>`
-        <div class="deck-row" onclick="startSession('${d.f.id}')">
-          <div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${I.folder}</div>
-          <div class="meta"><div class="nm">${esc(d.f.name)}</div><div class="ct">${d.total}枚</div></div>
-          <div class="badge ${d.ready===0?'zero':''}">${d.ready}</div>
-        </div>`).join(''):`<div class="empty">${I.inbox}<div class="t">デッキがありません</div><div class="d">ノートタブで単語を追加しましょう</div></div>`}
+      <div class="deck-row" onclick="studyMethodPick(null)"><div class="meta"><div class="nm">すべてのカード</div></div><span class="chev">${I.chev}</span></div>
+      ${decks.map(f=>`<div class="deck-row" onclick="studyMethodPick('${f.id}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${I.folder}</div><div class="meta"><div class="nm">${esc(f.name)}</div><div class="ct">${cardsInTree(f.id).filter(c=>c.type!=='text').length}枚</div></div><span class="chev">${I.chev}</span></div>`).join('')}
     </div>
-    <div class="section-title">べつのモード</div>
-    <button class="btn btn-ghost full" style="padding:15px;margin-bottom:10px" onclick="startCompoMenu()">${I.mic} 瞬間英作文（音声入力OK）</button>
-    <button class="btn btn-ghost full" style="padding:15px" onclick="startQuizPick()">${I.trophy} 4択クイズで腕試し</button>
-  `;
+    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>`);
+}
+function studyMethodPick(fid){
+  const arg = fid===null ? 'null' : `'${fid}'`;
+  openModal(`
+    <h2>学習方法</h2>
+    <p class="d" style="margin:0 0 12px;font-size:.85rem">このデッキの学習方法を選んでください。</p>
+    <button class="opt-btn" onclick="closeModal();startSession(${arg},'srs')">
+      <span class="oic">${I.flame}</span>
+      <span><span class="ot">忘却曲線で学習</span><span class="od">復習タイミング（SRS）に沿って出題。記憶の定着向け。</span></span>
+    </button>
+    <button class="opt-btn" onclick="closeModal();startSession(${arg},'order')">
+      <span class="oic" style="background:var(--amber-soft);color:var(--amber-d)">${I.book}</span>
+      <span><span class="ot">追加順に学習</span><span class="od">追加した順にカードを確認。ざっと見直したいときに。</span></span>
+    </button>
+    <div class="modal-actions" style="margin-top:8px"><button class="btn btn-ghost" onclick="originalDeckPick()">戻る</button></div>`);
+}
+function presetPick(){
+  openModal(`
+    <h2>用意した単語で学習</h2>
+    <p class="d" style="margin:0 0 12px;font-size:.85rem">カテゴリを選んでください（今後さらに追加予定）。</p>
+    <div class="deck-pick">
+      ${PRESET_DECKS.map(dk=>`<div class="deck-row" onclick="startPreset('${dk.id}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${I.book}</div><div class="meta"><div class="nm">${esc(dk.name)}</div><div class="ct">${dk.cards.length}語</div></div><span class="chev">${I.chev}</span></div>`).join('')}
+    </div>
+    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>`);
 }
 
 /* ---------- SRS engine ---------- */
@@ -1014,34 +1166,58 @@ function schedule(c,r){
   }
 }
 
-function startSession(folderId){
-  const list = folderId===null ? Object.values(state.cards) : cardsInTree(folderId);
+function startSession(folderId, mode){
+  mode = mode||'srs';
+  const base=(folderId===null ? Object.values(state.cards) : cardsInTree(folderId)).filter(c=>c.type!=='text');
+  if(mode==='order'){
+    const items=[...base].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    if(items.length===0){ toast('このデッキにはカードがありません'); return; }
+    session={ mode:'order', items, idx:0, total:items.length, flipped:false, folderId };
+    renderStudySession(); return;
+  }
   const t=now();
-  const due=list.filter(c=>c.srs.state!=='new'&&c.srs.due<=t);
-  const news=list.filter(c=>c.srs.state==='new').slice(0,state.settings.newPerDay||20);
+  const due=base.filter(c=>c.srs.state!=='new'&&c.srs.due<=t);
+  const news=base.filter(c=>c.srs.state==='new').slice(0,state.settings.newPerDay||20);
   const pool=shuffle([...due,...news]);
   if(pool.length===0){ toast('このデッキは今学習するカードがありません'); return; }
-  session={ queue:pool.map(c=>c.id), graduated:new Set(), total:pool.length, flipped:false, folderId };
+  session={ mode:'srs', queue:pool.map(c=>c.id), graduated:new Set(), total:pool.length, flipped:false, folderId };
+  renderStudySession();
+}
+function startPreset(catId){
+  const dk=PRESET_DECKS.find(d=>d.id===catId); if(!dk){ toast('プリセットが見つかりません'); return; }
+  const items=dk.cards.map(c=>({term:c.term,pron:c.pron||'',mean:c.mean||'',exEn:c.exEn||'',exJa:c.exJa||'',pos:c.pos||[],other:c.other||''}));
+  closeModal();
+  session={ mode:'preset', items, idx:0, total:items.length, flipped:false, catName:dk.name };
   renderStudySession();
 }
 function renderStudySession(){
   const v=document.getElementById('view-study');
-  if(session.queue.length===0){ finishSession(); return; }
-  const c=state.cards[session.queue[0]];
-  if(!c){ session.queue.shift(); renderStudySession(); return; }
-  const remaining=session.total - session.graduated.size;
-  const prog=Math.round(session.graduated.size/session.total*100);
+  const srs = session.mode==='srs';
+  let c, prog, countLabel;
+  if(srs){
+    if(session.queue.length===0){ finishSession(); return; }
+    c=state.cards[session.queue[0]];
+    if(!c){ session.queue.shift(); renderStudySession(); return; }
+    prog=Math.round(session.graduated.size/session.total*100);
+    countLabel='残り '+(session.total - session.graduated.size);
+  } else {
+    if(session.idx>=session.items.length){ finishSession(); return; }
+    c=session.items[session.idx];
+    prog=Math.round(session.idx/session.total*100);
+    countLabel=(session.idx+1)+'/'+session.total;
+  }
+  const tag = srs ? (c.srs.state==='new'?'NEW':'問題') : (session.mode==='preset'?(session.catName||'プリセット'):'問題');
   v.innerHTML=`
     <div class="study-wrap">
       <div class="study-top">
-        <button class="icon-btn" onclick="if(confirm('学習を終了しますか？'))endSessionEarly()" style="box-shadow:none;background:transparent">✕</button>
+        <button class="icon-btn x-btn" onclick="if(confirm('学習を終了しますか？'))endSessionEarly()" style="box-shadow:none;background:transparent">✕</button>
         <div class="progress"><div style="width:${prog}%"></div></div>
-        <div class="study-count">残り ${remaining}</div>
+        <div class="study-count">${countLabel}</div>
       </div>
       <div class="flash" onclick="flipCard()">
         <div class="flash-inner ${session.flipped?'flipped':''}">
           <div class="face front">
-            <div class="face-tag">${c.srs.state==='new'?'NEW':'問題'}</div>
+            <div class="face-tag">${esc(tag)}</div>
             <div class="term">${esc(c.term)}</div>
             ${c.pron?`<div class="pron">${esc(c.pron)}</div>`:''}
             <button class="spk-big" onclick="event.stopPropagation();speak('${esc(c.term).replace(/'/g,"\\'")}')">${I.speaker}</button>
@@ -1057,16 +1233,19 @@ function renderStudySession(){
           </div>
         </div>
       </div>
-      ${session.flipped?`
-        <div class="rate-row">
-          <button class="rate-btn" style="background:var(--r-again)" onclick="rate(0)"><span class="lab">もう一度</span><span class="ivl">${previewIvl(c,0)}</span></button>
-          <button class="rate-btn" style="background:var(--r-hard)" onclick="rate(1)"><span class="lab">むずかしい</span><span class="ivl">${previewIvl(c,1)}</span></button>
-          <button class="rate-btn" style="background:var(--r-good)" onclick="rate(2)"><span class="lab">できた</span><span class="ivl">${previewIvl(c,2)}</span></button>
-          <button class="rate-btn" style="background:var(--r-easy)" onclick="rate(3)"><span class="lab">かんたん</span><span class="ivl">${previewIvl(c,3)}</span></button>
-        </div>`:`
-        <button class="reveal-btn" onclick="flipCard()">答えを見る</button>`}
+      ${session.flipped
+        ? (srs
+          ? `<div class="rate-row">
+              <button class="rate-btn" style="background:var(--r-again)" onclick="rate(0)"><span class="lab">もう一度</span><span class="ivl">${previewIvl(c,0)}</span></button>
+              <button class="rate-btn" style="background:var(--r-hard)" onclick="rate(1)"><span class="lab">むずかしい</span><span class="ivl">${previewIvl(c,1)}</span></button>
+              <button class="rate-btn" style="background:var(--r-good)" onclick="rate(2)"><span class="lab">できた</span><span class="ivl">${previewIvl(c,2)}</span></button>
+              <button class="rate-btn" style="background:var(--r-easy)" onclick="rate(3)"><span class="lab">かんたん</span><span class="ivl">${previewIvl(c,3)}</span></button>
+            </div>`
+          : `<button class="btn btn-primary full" style="padding:15px" onclick="nextFlash()">${session.idx+1>=session.total?'終わる':'次へ'}</button>`)
+        : `<button class="reveal-btn" onclick="flipCard()">答えを見る</button>`}
     </div>`;
 }
+function nextFlash(){ session.idx++; session.flipped=false; renderStudySession(); }
 function flipCard(){ if(!session.flipped){ session.flipped=true; renderStudySession(); } }
 function rate(r){
   const id=session.queue.shift();
@@ -1092,13 +1271,14 @@ function updateStreak(){
 }
 function finishSession(){
   const cnt=session.total;
+  const wasSrs=session.mode==='srs';
   session=null;
   document.getElementById('view-study').innerHTML=`
     <div class="session-done">
       ${I.check.replace('stroke-width="2.5"','stroke-width="2"')}
       <div class="big">おつかれさま！</div>
-      <p style="color:var(--ink-2)">${cnt}枚を学習しました。<br>連続 ${state.stats.streak}日 🔥</p>
-      <button class="btn btn-primary full" style="margin-top:18px;padding:15px" onclick="renderStudy()">デッキに戻る</button>
+      <p style="color:var(--ink-2)">${cnt}枚を${wasSrs?'学習':'確認'}しました。${wasSrs?`<br>連続 ${state.stats.streak}日 🔥`:''}</p>
+      <button class="btn btn-primary full" style="margin-top:18px;padding:15px" onclick="renderStudy()">学習に戻る</button>
     </div>`;
 }
 function endSessionEarly(){ session=null; renderStudy(); }
@@ -1138,7 +1318,7 @@ function renderQuiz(){
   quiz.correct=c.mean; quiz.answered=false;
   v.innerHTML=`
     <div class="study-top">
-      <button class="icon-btn" onclick="quiz=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button>
+      <button class="icon-btn x-btn" onclick="quiz=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button>
       <div class="progress"><div style="width:${Math.round(quiz.idx/quiz.items.length*100)}%"></div></div>
       <div class="study-count">${quiz.idx+1}/${quiz.items.length}</div>
     </div>
@@ -1288,7 +1468,7 @@ function renderCompo(){
   const v=document.getElementById('view-study');
   if(compo.loading){
     v.innerHTML=`
-      <div class="study-top"><button class="icon-btn" onclick="exitCompo()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:8%"></div></div><div class="study-count"></div></div>
+      <div class="study-top"><button class="icon-btn x-btn" onclick="exitCompo()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:8%"></div></div><div class="study-count"></div></div>
       <div class="empty" style="padding:64px 20px"><div class="spinner"></div><div class="t">問題を生成中…</div><div class="d">「${esc(compo.theme||'')}」の問題をAIが作成しています</div></div>`;
     return;
   }
@@ -1296,7 +1476,7 @@ function renderCompo(){
     const logs=compo.log||[];
     const good=logs.filter(r=>r.fb&&r.fb.verdict==='○').length;
     v.innerHTML=`
-      <div class="study-top"><button class="icon-btn" onclick="compo=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:100%"></div></div><div class="study-count">結果</div></div>
+      <div class="study-top"><button class="icon-btn x-btn" onclick="compo=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:100%"></div></div><div class="study-count">結果</div></div>
       <div class="compo-result-head">${I.trophy}<div class="big">${good} / ${logs.length}</div><div class="sub2">「○」と判定された数</div></div>
       <div class="section-title">解答一覧（タップで解説）</div>
       <div class="list">${logs.map((r,i)=>compoResultRow(r,i)).join('')}</div>
@@ -1330,7 +1510,7 @@ function renderCompo(){
   }
   v.innerHTML=`
     <div class="study-top">
-      <button class="icon-btn" onclick="exitCompo()" style="box-shadow:none;background:transparent">✕</button>
+      <button class="icon-btn x-btn" onclick="exitCompo()" style="box-shadow:none;background:transparent">✕</button>
       <div class="progress"><div style="width:${Math.round(compo.idx/compo.items.length*100)}%"></div></div>
       <div class="study-count">${compo.idx+1}/${compo.items.length}</div>
     </div>
@@ -1588,6 +1768,7 @@ function msgHtml(m,i){
   if(m.role==='user') return `<div class="msg user">${esc(m.content)}</div>`;
   let extra='';
   if(m.card){ extra=`<button class="save-card" onclick="saveAICard(${i})">${I.plus} カードに保存</button>`; }
+  if(m.error){ extra+=`<button class="retry-btn" onclick="retryAI(${i})">${I.refresh} 再試行</button>`; }
   return `<div class="msg ai">${esc(m.content)}${extra}</div>`;
 }
 function saveAICard(i){
@@ -1609,10 +1790,22 @@ async function sendAI(){
   if(!aiReady()){ toast(aiEnabled()?'設定でAPIキーを入力してください':'設定でAIをオンにしてください'); return; }
   inp.value=''; autoGrow(inp);
   t.messages.push({role:'user',content:text}); save();
+  await generateReply(t, text);
+}
+function retryAI(i){
+  if(aiBusy) return;
+  const t=getThread(activeThreadId); if(!t) return;
+  const m=t.messages[i]; if(!m||!m.error) return;
+  let text=m.retryFor;
+  if(!text){ for(let k=i-1;k>=0;k--){ if(t.messages[k].role==='user'){ text=t.messages[k].content; break; } } }
+  if(!text){ toast('再試行できる内容が見つかりません'); return; }
+  t.messages.splice(i,1); save(); // remove the error bubble
+  generateReply(t, text);
+}
+async function generateReply(t, text){
   aiBusy=true; renderThread();
   const log=document.getElementById('chatLog');
   if(log){ log.insertAdjacentHTML('beforeend','<div class="msg ai" id="typing"><div class="typing"><span></span><span></span><span></span></div></div>'); log.scrollTop=log.scrollHeight; }
-
   try{
     if(t.mode==='card'){
       const content=await callAI([{role:'system',content:CARD_SYS},{role:'user',content:text}],{json:true,temp:0.5});
@@ -1640,7 +1833,7 @@ async function sendAI(){
     else if(/429/.test(msg)) msg=aiProvider()==='gemini'?'無料枠の上限に達した可能性があります。少し時間をおいて再試行してください。':'利用制限/残高切れの可能性があります（OpenAIの請求設定を確認）。';
     else if(/50[0234]/.test(msg)) msg='AIサーバーが一時的に混雑しています。少し待ってから、もう一度送信してください。';
     else if(/Failed to fetch|NetworkError/i.test(msg)) msg='通信に失敗しました。ネット接続を確認してください。';
-    t.messages.push({role:'assistant',content:'⚠️ '+msg});
+    t.messages.push({role:'assistant',content:'⚠️ '+msg, error:true, retryFor:text});
   }
   save(); aiBusy=false; renderThread();
 }
@@ -1714,7 +1907,10 @@ async function aiFillCard(){
     if(Array.isArray(c.pos)&&c.pos.length) document.getElementById('cPos').value=c.pos.join(', ');
     else if(typeof c.pos==='string'&&c.pos) document.getElementById('cPos').value=c.pos;
     if(c.other) document.getElementById('cOther').value=c.other;
-    toast('生成しました（確認して保存）');
+    // a word that got meaning generated should default to the 単語 folder (out of 受信箱)
+    const sel=document.getElementById('cFolder'); const ib=inboxFolderId();
+    if(sel && ib && sel.value===ib){ const wid=getWordFolderId(); ensureFolderOption(sel,wid,'単語'); sel.value=wid; toast('生成しました（保存先を「単語」に変更）'); }
+    else toast('生成しました（確認して保存）');
   }catch(err){ toast('生成に失敗: '+(/40[013]/.test(err.message)?'キーが無効':/429/.test(err.message)?'利用上限の可能性':/50[0234]/.test(err.message)?'サーバー混雑（再試行を）':'通信エラー')); }
   btn.disabled=false; btn.innerHTML=I.sparkle+' AIで意味・例文を生成';
 }
@@ -1722,11 +1918,12 @@ async function aiFillCard(){
 /* ====================================================================
    SETTINGS
    ==================================================================== */
+let keyOpen=false;
 function renderSettings(){
   const s=state.settings;
   document.getElementById('view-settings').innerHTML=`
     <div class="topbar"><h1>設定</h1>
-      <button class="icon-btn" onclick="setTab('home')" style="box-shadow:none;background:transparent">✕</button></div>
+      <button class="icon-btn x-btn" onclick="setTab('home')" style="box-shadow:none;background:transparent">✕</button></div>
 
     <div class="section-title">AI連携</div>
     <div class="set-group">
@@ -1742,7 +1939,9 @@ function renderSettings(){
       ${s.aiProvider==='openai'?`
       <div class="field">
         <label>OpenAI APIキー</label>
-        <input type="password" id="setKey" value="${esc(s.apiKey)}" placeholder="sk-..." autocomplete="off" />
+        ${(s.apiKey && !keyOpen)
+          ? `<div class="key-set"><span class="lbl">${I.check} 設定済み（••••${esc(s.apiKey.slice(-4))}）</span><button class="btn btn-ghost" style="padding:7px 13px" onclick="keyOpen=true;renderSettings()">変更</button></div>`
+          : `<input type="password" id="setKey" value="${esc(s.apiKey)}" placeholder="sk-..." autocomplete="off" />`}
         <div class="d">キーはこの端末のブラウザにのみ保存され、OpenAIに直接送信されます。<a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">キーを取得 ↗</a></div>
       </div>
       <div class="field">
@@ -1759,7 +1958,9 @@ function renderSettings(){
       ${s.aiProvider==='gemini'?`
       <div class="field">
         <label>Gemini APIキー</label>
-        <input type="password" id="setGeminiKey" value="${esc(s.geminiKey)}" placeholder="AIza..." autocomplete="off" />
+        ${(s.geminiKey && !keyOpen)
+          ? `<div class="key-set"><span class="lbl">${I.check} 設定済み（••••${esc(s.geminiKey.slice(-4))}）</span><button class="btn btn-ghost" style="padding:7px 13px" onclick="keyOpen=true;renderSettings()">変更</button></div>`
+          : `<input type="password" id="setGeminiKey" value="${esc(s.geminiKey)}" placeholder="AIza..." autocomplete="off" />`}
         <div class="d">Google AI Studioで無料取得でき（カード登録不要）、無料枠内なら料金はかかりません。<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">キーを取得 ↗</a></div>
       </div>
       <div class="field">
@@ -1804,7 +2005,8 @@ function saveSettings(){
   const m=document.getElementById('setModel'); if(m) state.settings.model=m.value;
   const gk=document.getElementById('setGeminiKey'); if(gk) state.settings.geminiKey=gk.value.trim();
   const gm=document.getElementById('setGeminiModel'); if(gm) state.settings.geminiModel=gm.value;
-  save(); toast('設定を保存しました');
+  keyOpen=false;
+  save(); toast('設定を保存しました'); renderSettings();
 }
 function exportData(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
@@ -1835,7 +2037,7 @@ function resetAll(){
 /* ====================================================================
    MODAL / THEME / LOGO / INIT
    ==================================================================== */
-function openModal(html){ const m=document.getElementById('modal'); m.innerHTML='<div class="grip"></div>'+html; document.getElementById('modalBg').classList.add('open'); }
+function openModal(html){ const m=document.getElementById('modal'); m.innerHTML='<div class="grip"></div><button class="modal-close" onclick="closeModal()" aria-label="閉じる">✕</button>'+html; document.getElementById('modalBg').classList.add('open'); }
 function closeModal(){ document.getElementById('modalBg').classList.remove('open'); }
 function applyTheme(){
   document.documentElement.setAttribute('data-theme', state.settings.dark?'dark':'light');
