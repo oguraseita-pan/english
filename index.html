@@ -156,6 +156,12 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .folder-row .meta{flex:1;min-width:0;}
 .folder-row .nm{font-weight:600;}
 .folder-row .ct{font-size:.76rem;color:var(--ink-3);}
+.folder-row .ct.one{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.row-ctrls{display:flex;align-items:center;gap:6px;flex:none;}
+.row-ctrls .rc{width:34px;height:34px;border-radius:9px;background:var(--surface-2);color:var(--ink-2);display:grid;place-items:center;font-size:.9rem;font-weight:700;}
+.row-ctrls .rc:disabled{opacity:.3;}
+.row-ctrls .rc.del{color:var(--r-again);}
+.row-ctrls .rc svg{width:17px;height:17px;}
 .chev{color:var(--ink-3);flex:none;}
 
 .card-row .term-wrap{flex:1;min-width:0;}
@@ -370,6 +376,8 @@ const I = {
   sparkle:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.6 5.4L19 9l-5.4 1.6L12 16l-1.6-5.4L5 9l5.4-1.6z"/></svg>',
   inbox:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h5l2 3h4l2-3h5"/><path d="M5 5h14l2 7v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-6z"/></svg>',
   flame:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1 4-3 5-3 9a3 3 0 0 0 6 0c0-1-.5-2-1-3 2 1 4 3 4 6a6 6 0 0 1-12 0c0-4 4-6 6-12z"/></svg>',
+  back:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>',
+  trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>',
 };
 
 /* ---------- state & storage ---------- */
@@ -379,6 +387,7 @@ let state;
 function defaultState(){
   return {
     folders:{}, cards:{},
+    threads:[], aiThreadSeed:false,
     settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:0.9, newPerDay:20 },
     stats:{ reviews:{}, streak:0, lastStudy:null },
     seeded:false
@@ -392,6 +401,7 @@ function load(){
   }catch(e){ state = defaultState(); }
   state.settings = Object.assign(defaultState().settings, state.settings || {});
   if(!state.stats) state.stats = defaultState().stats;
+  if(!Array.isArray(state.threads)) state.threads = [];
   save(); // persist any migrated/normalized fields
 }
 function save(){
@@ -917,17 +927,36 @@ function answerQuiz(btn,isCorrect){
 /* ====================================================================
    AI (ChatGPT)
    ==================================================================== */
-let chatMessages=[]; // {role, content}
-let aiMode='chat';
 let aiBusy=false;
+let activeThreadId=null;   // null = thread list
+let aiEditMode=false;      // reorder/delete affordances in list
+let ntFunc='chat', ntTitle='', ntPrompt=''; // new-thread modal draft
+
 const AI_MODES={
-  chat:{label:'チューター',sys:'You are a friendly, encouraging English tutor for a Japanese learner. Reply concisely in Japanese unless asked otherwise. Use simple explanations and give example sentences.'},
-  card:{label:'🌱 単語をカード化',sys:'JSON'},
-  correct:{label:'英文添削',sys:'You are an English proofreader for a Japanese learner. Correct the English the user writes, show the corrected version, then briefly explain the key fixes in Japanese.'},
-  example:{label:'例文づくり',sys:'You create natural example sentences. For the word or phrase the user gives, output 3 natural English example sentences with Japanese translations.'},
-  nuance:{label:'ニュアンス解説',sys:'You explain nuance and usage differences of English words/phrases for Japanese learners, in Japanese, with examples.'},
-  translate:{label:'翻訳',sys:'Translate between Japanese and English naturally. If the input is Japanese, give natural English; if English, give natural Japanese. Add a short note on nuance if helpful.'}
+  chat:{label:'チューター',convo:true,ph:'英語について何でも質問できます',phs:'メッセージを入力…',sys:'You are a friendly, encouraging English tutor for a Japanese learner. Reply concisely in Japanese unless asked otherwise. Use simple explanations and give example sentences.'},
+  card:{label:'単語をカード化',convo:false,ph:'単語を送るとカード化できます',phs:'単語・フレーズ…',sys:'CARD'},
+  correct:{label:'英文添削',convo:false,ph:'添削したい英文を入力',phs:'英文を入力…',sys:'You are an English proofreader for a Japanese learner. Correct the English the user writes, show the corrected version, then briefly explain the key fixes in Japanese.'},
+  example:{label:'例文づくり',convo:false,ph:'例文がほしい単語を入力',phs:'単語を入力…',sys:'You create natural example sentences. For the word or phrase the user gives, output 3 natural English example sentences with Japanese translations.'},
+  nuance:{label:'ニュアンス解説',convo:false,ph:'違いを知りたい語を入力（例：see / watch）',phs:'語を入力…',sys:'You explain nuance and usage differences of English words/phrases for Japanese learners, in Japanese, with examples.'},
+  translate:{label:'翻訳',convo:false,ph:'日本語↔英語を翻訳します',phs:'文章を入力…',sys:'Translate between Japanese and English naturally. If the input is Japanese, give natural English; if English, give natural Japanese. Add a short note on nuance if helpful.'}
 };
+const CARD_SYS='You output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"term":string,"pron":IPA string,"mean":Japanese meaning,"exEn":English example,"exJa":Japanese translation of the example}. No markdown.';
+
+function ensureThreads(){
+  if(!Array.isArray(state.threads)) state.threads=[];
+  if(state.threads.length===0 && !state.aiThreadSeed){
+    ['chat','card','correct','example','nuance','translate'].forEach(k=>{
+      state.threads.push({id:uid(),title:AI_MODES[k].label,mode:k,sys:'',messages:[],createdAt:now()});
+    });
+    state.aiThreadSeed=true; save();
+  }
+}
+function getThread(id){ return state.threads.find(t=>t.id===id); }
+function threadFunc(t){ return t.mode==='custom' ? {label:t.title,convo:true,ph:'メッセージを入力…',phs:'メッセージを入力…'} : (AI_MODES[t.mode]||AI_MODES.chat); }
+function threadBadge(t){ return t.mode==='custom' ? 'カスタム指示' : (AI_MODES[t.mode]?AI_MODES[t.mode].label:'チューター'); }
+function spkInk(){ return I.sparkle.replace('fill="currentColor"','fill="var(--ink-3)"'); }
+function keyHintHtml(){ return `<div class="ai-hint">AI機能を使うには <b>${aiProviderName()}のAPIキー</b> が必要です。<br>「設定 → AI連携」でキーを入力してください。
+  <button class="btn btn-primary" style="margin-top:10px;padding:9px 14px" onclick="setTab('settings');renderSettings()">設定をひらく</button></div>`; }
 
 function aiProvider(){ return state.settings.aiProvider || 'openai'; }
 function aiKey(){ return aiProvider()==='gemini' ? (state.settings.geminiKey||'') : (state.settings.apiKey||''); }
@@ -940,80 +969,197 @@ function renderAI(){
   if(!aiEnabled()){
     v.innerHTML=`
       <div class="topbar"><h1>AI</h1></div>
-      <div class="empty" style="padding:46px 22px">${I.sparkle.replace('fill="currentColor"','fill="var(--ink-3)"')}
+      <div class="empty" style="padding:46px 22px">${spkInk()}
         <div class="t">AI機能はオフです</div>
         <div class="d">設定でAIプロバイダー（OpenAI または 無料枠のあるGemini）を選ぶと、<br>チューター・添削・カード化などが使えます。</div>
         <button class="btn btn-primary" style="margin-top:16px;padding:11px 18px" onclick="setTab('settings');renderSettings()">設定をひらく</button>
       </div>`;
     return;
   }
-  const ready=aiReady();
+  ensureThreads();
+  if(activeThreadId && getThread(activeThreadId)) renderThread();
+  else { activeThreadId=null; renderThreadList(); }
+}
+
+function renderThreadList(){
+  const v=document.getElementById('view-ai');
+  const list=state.threads;
   v.innerHTML=`
-    <div class="topbar"><h1>AI</h1>
-      <button class="icon-btn" onclick="chatMessages=[];renderAI()" aria-label="リセット" title="会話をクリア">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></button>
+    <div class="topbar">
+      <div><h1>AI</h1><div class="sub">スレッドごとに機能を使い分け</div></div>
+      ${list.length?`<button class="btn btn-ghost" style="padding:8px 13px" onclick="aiEditMode=!aiEditMode;renderAI()">${aiEditMode?'完了':'並び替え・編集'}</button>`:''}
     </div>
-    <div class="ai-tabs">
-      ${Object.entries(AI_MODES).map(([k,m])=>`<button class="${aiMode===k?'on':''}" onclick="aiMode='${k}';renderAI()">${m.label}</button>`).join('')}
+    ${!aiReady()?keyHintHtml():''}
+    <button class="btn btn-primary full" style="padding:13px;margin-bottom:14px" onclick="openNewThread()">${I.plus} 新しいスレッド</button>
+    ${list.length===0
+      ? `<div class="empty" style="padding:36px 20px">${spkInk()}<div class="t">スレッドがありません</div><div class="d">「新しいスレッド」から用途に合わせて作成できます。<br>例：チューター／英文添削／自分専用の指示</div></div>`
+      : `<div class="list">${list.map((t,i)=>threadRow(t,i,list.length)).join('')}</div>`}
+    ${list.length&&!aiEditMode?`<div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:14px">タップで開く・「並び替え・編集」で順序変更や削除</div>`:''}
+  `;
+}
+function threadRow(t,i,n){
+  if(aiEditMode){
+    return `<div class="folder-row">
+      <div class="meta" style="cursor:pointer" onclick="renameThread('${t.id}')">
+        <div class="nm">${esc(t.title)}</div>
+        <div class="ct">${esc(threadBadge(t))}・タップで名前/指示を編集</div>
+      </div>
+      <div class="row-ctrls">
+        <button class="rc" ${i===0?'disabled':''} onclick="moveThread('${t.id}',-1)" aria-label="上へ">▲</button>
+        <button class="rc" ${i===n-1?'disabled':''} onclick="moveThread('${t.id}',1)" aria-label="下へ">▼</button>
+        <button class="rc del" onclick="deleteThread('${t.id}')" aria-label="削除">${I.trash}</button>
+      </div></div>`;
+  }
+  const last=t.messages.length?t.messages[t.messages.length-1].content:threadFunc(t).ph;
+  const preview=esc(String(last).replace(/\s+/g,' ').slice(0,42));
+  return `<div class="folder-row" onclick="activeThreadId='${t.id}';aiEditMode=false;renderAI()">
+    <div class="ico" style="background:var(--green-soft);color:var(--green)">${spkInk().replace('var(--ink-3)','currentColor')}</div>
+    <div class="meta"><div class="nm">${esc(t.title)}</div><div class="ct one">${esc(threadBadge(t))}・${preview||'…'}</div></div>
+    <span class="chev">${I.chev}</span>
+  </div>`;
+}
+
+/* ---- create / rename / move / delete ---- */
+function openNewThread(){ ntFunc='chat'; ntTitle=''; ntPrompt=''; renderNewThread(); }
+function ntSync(){ const t=document.getElementById('ntTitle'); if(t) ntTitle=t.value; const p=document.getElementById('ntPrompt'); if(p) ntPrompt=p.value; }
+function defaultTitle(){ return ntFunc==='custom' ? 'カスタム' : AI_MODES[ntFunc].label; }
+function renderNewThread(){
+  openModal(`
+    <h2>新しいスレッド</h2>
+    <div class="mfield"><label>機能</label>
+      <select id="ntFunc" onchange="ntSync();ntFunc=this.value;renderNewThread()">
+        ${Object.entries(AI_MODES).map(([k,m])=>`<option value="${k}" ${ntFunc===k?'selected':''}>${m.label}</option>`).join('')}
+        <option value="custom" ${ntFunc==='custom'?'selected':''}>カスタム（自分で指示を書く）</option>
+      </select></div>
+    <div class="mfield"><label>名前</label>
+      <input id="ntTitle" value="${esc(ntTitle)}" placeholder="${esc(defaultTitle())}" oninput="ntTitle=this.value" /></div>
+    ${ntFunc==='custom'
+      ? `<div class="mfield"><label>AIへの指示（プロンプト）</label>
+          <textarea id="ntPrompt" placeholder="例：あなたはTOEIC講師です。私が送る英作文を採点し、改善案と理由を日本語で示してください。" oninput="ntPrompt=this.value">${esc(ntPrompt)}</textarea>
+          <div class="d" style="font-size:.78rem">この指示に沿ってAIが応答します。</div></div>`
+      : `<div class="mfield"><div class="d" style="font-size:.82rem;color:var(--ink-2)">${esc(AI_MODES[ntFunc].ph)}</div></div>`}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="createThread()">作成</button>
+    </div>`);
+}
+function createThread(){
+  ntSync();
+  if(ntFunc==='custom' && !ntPrompt.trim()){ toast('カスタム指示を入力してください'); return; }
+  const id=uid();
+  state.threads.push({ id, title:(ntTitle.trim()||defaultTitle()), mode:ntFunc, sys:(ntFunc==='custom'?ntPrompt.trim():''), messages:[], createdAt:now() });
+  save(); closeModal(); activeThreadId=id; aiEditMode=false; renderAI();
+}
+function renameThread(id){
+  const t=getThread(id); if(!t) return;
+  openModal(`
+    <h2>スレッドを編集</h2>
+    <div class="mfield"><label>名前</label><input id="rnTitle" value="${esc(t.title)}" /></div>
+    ${t.mode==='custom'?`<div class="mfield"><label>AIへの指示（プロンプト）</label><textarea id="rnPrompt">${esc(t.sys||'')}</textarea></div>`:`<div class="mfield"><div class="d">機能：${esc(threadBadge(t))}</div></div>`}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveRename('${id}')">保存</button>
     </div>
-    ${!ready?`<div class="ai-hint">AI機能を使うには <b>${aiProviderName()}のAPIキー</b> が必要です。<br>「設定 → AI連携」でキーを入力してください。
-      <button class="btn btn-primary" style="margin-top:10px;padding:9px 14px" onclick="setTab('settings');renderSettings()">設定をひらく</button></div>`:''}
-    ${aiMode==='card'?`<div class="ai-hint" style="background:var(--green-soft)">単語やフレーズを送ると、意味・発音・例文を生成して<b>カードに保存</b>できます。例：「serendipity」</div>`:''}
+    <button class="del-link" onclick="deleteThread('${id}')">このスレッドを削除</button>`);
+}
+function saveRename(id){
+  const t=getThread(id); if(!t) return;
+  const ti=document.getElementById('rnTitle').value.trim(); if(ti) t.title=ti;
+  const p=document.getElementById('rnPrompt'); if(p) t.sys=p.value.trim();
+  save(); closeModal(); renderAI();
+}
+function moveThread(id,dir){
+  const i=state.threads.findIndex(t=>t.id===id); if(i<0) return;
+  const j=i+dir; if(j<0||j>=state.threads.length) return;
+  const arr=state.threads; [arr[i],arr[j]]=[arr[j],arr[i]];
+  save(); renderAI();
+}
+function deleteThread(id){
+  const t=getThread(id); if(!t) return;
+  if(!confirm('「'+t.title+'」を削除しますか？会話も消えます。')) return;
+  state.threads=state.threads.filter(x=>x.id!==id);
+  if(activeThreadId===id) activeThreadId=null;
+  save(); closeModal(); renderAI();
+}
+
+/* ---- single thread (chat) ---- */
+function renderThread(){
+  const v=document.getElementById('view-ai');
+  const t=getThread(activeThreadId);
+  if(!t){ activeThreadId=null; renderThreadList(); return; }
+  const f=threadFunc(t);
+  v.innerHTML=`
+    <div class="topbar" style="gap:6px">
+      <button class="icon-btn" style="box-shadow:none;background:transparent;width:38px" onclick="activeThreadId=null;renderAI()" aria-label="一覧へ戻る">${I.back}</button>
+      <div style="flex:1;min-width:0">
+        <h1 style="font-size:1.2rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.title)}</h1>
+        <div class="sub">${esc(threadBadge(t))}</div>
+      </div>
+      <button class="icon-btn" onclick="clearThread()" aria-label="会話をクリア" title="この会話を消去">${I.trash}</button>
+    </div>
+    ${!aiReady()?keyHintHtml():''}
+    ${t.mode==='card'?`<div class="ai-hint" style="background:var(--green-soft)">単語やフレーズを送ると、意味・発音・例文を生成して<b>カードに保存</b>できます。例：「serendipity」</div>`:''}
     <div class="chat-log" id="chatLog">
-      ${chatMessages.length===0?`<div class="empty" style="padding:30px 20px">${I.sparkle.replace('fill="currentColor"','fill="var(--ink-3)"')}<div class="t">${AI_MODES[aiMode].label}</div><div class="d">${aiPlaceholder()}</div></div>`:chatMessages.map(msgHtml).join('')}
+      ${t.messages.length===0
+        ? `<div class="empty" style="padding:30px 20px">${spkInk()}<div class="t">${esc(t.title)}</div><div class="d">${esc(f.ph)}</div></div>`
+        : t.messages.map((m,i)=>msgHtml(m,i)).join('')}
     </div>
     <div class="chat-input">
-      <textarea id="chatInput" rows="1" placeholder="${aiPlaceholderShort()}" oninput="autoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!isMobile()){event.preventDefault();sendAI();}"></textarea>
+      <textarea id="chatInput" rows="1" placeholder="${esc(f.phs)}" oninput="autoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!isMobile()){event.preventDefault();sendAI();}"></textarea>
       <button class="send-btn" id="sendBtn" onclick="sendAI()" ${aiBusy?'disabled':''}>${I.send}</button>
     </div>`;
   const log=document.getElementById('chatLog'); if(log) log.scrollTop=log.scrollHeight;
 }
-function aiPlaceholder(){
-  return {chat:'英語について何でも質問できます',card:'単語を送るとカード化できます',correct:'添削したい英文を入力',example:'例文がほしい単語を入力',nuance:'違いを知りたい語を入力（例：see / watch）',translate:'日本語↔英語を翻訳します'}[aiMode];
+function clearThread(){
+  const t=getThread(activeThreadId); if(!t) return;
+  if(t.messages.length && !confirm('この会話を消去しますか？')) return;
+  t.messages=[]; save(); renderThread();
 }
-function aiPlaceholderShort(){
-  return {chat:'メッセージを入力…',card:'単語・フレーズ…',correct:'英文を入力…',example:'単語を入力…',nuance:'語を入力…',translate:'文章を入力…'}[aiMode];
-}
-function msgHtml(m){
+function msgHtml(m,i){
   if(m.role==='user') return `<div class="msg user">${esc(m.content)}</div>`;
   let extra='';
-  if(m.card){ extra=`<button class="save-card" onclick='openCardFromAI(${JSON.stringify(JSON.stringify(m.card))})'>${I.plus} カードに保存</button>`; }
+  if(m.card){ extra=`<button class="save-card" onclick="saveAICard(${i})">${I.plus} カードに保存</button>`; }
   return `<div class="msg ai">${esc(m.content)}${extra}</div>`;
+}
+function saveAICard(i){
+  const t=getThread(activeThreadId); if(!t) return;
+  const m=t.messages[i]; if(!m||!m.card) return;
+  const c=m.card;
+  setTab('notes');
+  editCard(null,{term:c.term||'',pron:c.pron||'',mean:c.mean||'',exEn:c.exEn||'',exJa:c.exJa||'',tags:[]});
 }
 function autoGrow(t){ t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,120)+'px'; }
 function isMobile(){ return /Mobi|Android|iPhone/i.test(navigator.userAgent); }
 
 async function sendAI(){
   if(aiBusy) return;
+  const t=getThread(activeThreadId); if(!t) return;
   const inp=document.getElementById('chatInput');
   const text=inp.value.trim();
   if(!text) return;
   if(!aiReady()){ toast(aiEnabled()?'設定でAPIキーを入力してください':'設定でAIをオンにしてください'); return; }
   inp.value=''; autoGrow(inp);
-  chatMessages.push({role:'user',content:text});
-  aiBusy=true; renderAI();
-  // typing indicator
+  t.messages.push({role:'user',content:text}); save();
+  aiBusy=true; renderThread();
   const log=document.getElementById('chatLog');
-  log.insertAdjacentHTML('beforeend','<div class="msg ai" id="typing"><div class="typing"><span></span><span></span><span></span></div></div>');
-  log.scrollTop=log.scrollHeight;
+  if(log){ log.insertAdjacentHTML('beforeend','<div class="msg ai" id="typing"><div class="typing"><span></span><span></span><span></span></div></div>'); log.scrollTop=log.scrollHeight; }
 
   try{
-    if(aiMode==='card'){
-      const sys='You output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"term":string,"pron":IPA string,"mean":Japanese meaning,"exEn":English example,"exJa":Japanese translation of the example}. No markdown.';
-      const content=await callAI([{role:'system',content:sys},{role:'user',content:text}],{json:true,temp:0.5});
+    if(t.mode==='card'){
+      const content=await callAI([{role:'system',content:CARD_SYS},{role:'user',content:text}],{json:true,temp:0.5});
       let card; try{ card=JSON.parse(content); }catch(e){ card=null; }
       if(card&&card.term){
-        chatMessages.push({role:'assistant',content:`📘 ${card.term} ${card.pron||''}\n意味：${card.mean||''}\n例：${card.exEn||''}\n　　${card.exJa||''}`,card});
+        t.messages.push({role:'assistant',content:`📘 ${card.term} ${card.pron||''}\n意味：${card.mean||''}\n例：${card.exEn||''}\n　　${card.exJa||''}`,card});
       } else {
-        chatMessages.push({role:'assistant',content:content});
+        t.messages.push({role:'assistant',content});
       }
     } else {
-      const sys=AI_MODES[aiMode].sys;
-      // include short history for chat mode
-      const history = aiMode==='chat' ? chatMessages.slice(-8).map(m=>({role:m.role,content:m.content})) : [{role:'user',content:text}];
+      const sys = t.mode==='custom' ? (t.sys||'You are a helpful assistant for a Japanese English-learner. Reply in Japanese unless asked otherwise.') : AI_MODES[t.mode].sys;
+      const convo = t.mode==='custom' ? true : !!AI_MODES[t.mode].convo;
+      const history = convo ? t.messages.slice(-10).map(m=>({role:m.role,content:m.content})) : [{role:'user',content:text}];
       const msgs=[{role:'system',content:sys},...history];
       const content=await callAI(msgs,{temp:0.7});
-      chatMessages.push({role:'assistant',content});
+      t.messages.push({role:'assistant',content});
     }
   }catch(err){
     let msg=err.message||'エラーが発生しました';
@@ -1023,9 +1169,9 @@ async function sendAI(){
     else if(/429/.test(msg)) msg=aiProvider()==='gemini'?'無料枠の上限に達した可能性があります。少し時間をおいて再試行してください。':'利用制限/残高切れの可能性があります（OpenAIの請求設定を確認）。';
     else if(/50[0234]/.test(msg)) msg='AIサーバーが一時的に混雑しています。少し待ってから、もう一度送信してください。';
     else if(/Failed to fetch|NetworkError/i.test(msg)) msg='通信に失敗しました。ネット接続を確認してください。';
-    chatMessages.push({role:'assistant',content:'⚠️ '+msg});
+    t.messages.push({role:'assistant',content:'⚠️ '+msg});
   }
-  aiBusy=false; renderAI();
+  save(); aiBusy=false; renderThread();
 }
 async function callOpenAI(messages,opts){
   const key=state.settings.apiKey;
@@ -1078,11 +1224,7 @@ async function callGemini(messages,opts){
   if(!parts || !parts.length) throw new Error('EMPTY');
   return parts.map(p=>p.text||'').join('').trim();
 }
-function openCardFromAI(jsonStr){
-  let c; try{ c=JSON.parse(JSON.parse(jsonStr)); }catch(e){ try{c=JSON.parse(jsonStr);}catch(e2){return;} }
-  setTab('notes');
-  editCard(null, {term:c.term||'',pron:c.pron||'',mean:c.mean||'',exEn:c.exEn||'',exJa:c.exJa||'',tags:[]});
-}
+function openCardFromAI(){ /* deprecated: replaced by saveAICard */ }
 
 /* ---------- AI fill inside card editor ---------- */
 async function aiFillCard(){
@@ -1237,6 +1379,7 @@ function logoSvg(size,cls){
 function init(){
   load();
   if(!state.seeded) seed();
+  ensureThreads();
   applyTheme();
   // tab bar
   document.querySelectorAll('.tabbar button').forEach(b=>{
