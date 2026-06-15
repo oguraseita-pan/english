@@ -335,6 +335,10 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .msg.ai .save-card{margin-top:10px;display:inline-flex;align-items:center;gap:6px;background:var(--amber);color:#3a2e0c;font-weight:700;font-size:.8rem;padding:7px 12px;border-radius:10px;}
 .msg.ai .retry-btn{margin-top:10px;display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);color:var(--ink);font-weight:600;font-size:.82rem;padding:7px 12px;border-radius:10px;}
 .msg.ai .retry-btn svg{width:15px;height:15px;}
+.msg.ai .ex-list{display:flex;flex-direction:column;gap:13px;}
+.msg.ai .ex-item .ex-en{font-family:var(--font-en);font-size:1.02rem;line-height:1.4;}
+.msg.ai .ex-item .ex-ja{font-size:.86rem;color:var(--ink-2);margin-top:3px;}
+.msg.ai .ex-item .save-card{margin-top:8px;}
 .chat-input{position:sticky;bottom:calc(var(--tabbar-h) + var(--safe-b) + 8px);display:flex;gap:8px;align-items:flex-end;background:var(--surface);border-radius:18px;box-shadow:var(--shadow-lg);padding:8px 8px 8px 14px;}
 .chat-input textarea{flex:1;border:none;outline:none;background:none;resize:none;max-height:120px;padding:8px 0;line-height:1.4;}
 .send-btn{background:var(--green);color:#fff;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none;transition:transform .12s;}
@@ -842,8 +846,8 @@ function openAddMenu(){
     <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>
   `);
 }
-function editText(id){
-  const c=id?state.cards[id]:{};
+function editText(id, prefill){
+  const c=id?state.cards[id]:(prefill||{});
   const folderOpts=folderSelectOptions(c.folderId||currentFolder);
   openModal(`
     <h2>${id?'文章メモを編集':'新しい文章メモ'}</h2>
@@ -1120,11 +1124,11 @@ function studyMethodPick(fid){
     <p class="d" style="margin:0 0 12px;font-size:.85rem">このデッキの学習方法を選んでください。</p>
     <button class="opt-btn" onclick="closeModal();startSession(${arg},'srs')">
       <span class="oic">${I.flame}</span>
-      <span><span class="ot">忘却曲線で学習</span><span class="od">復習タイミング（SRS）に沿って出題。記憶の定着向け。</span></span>
+      <span class="ot">忘却曲線で学習</span>
     </button>
     <button class="opt-btn" onclick="closeModal();startSession(${arg},'order')">
       <span class="oic" style="background:var(--amber-soft);color:var(--amber-d)">${I.book}</span>
-      <span><span class="ot">追加順に学習</span><span class="od">追加した順にカードを確認。ざっと見直したいときに。</span></span>
+      <span class="ot">追加順に学習</span>
     </button>
     <div class="modal-actions" style="margin-top:8px"><button class="btn btn-ghost" onclick="originalDeckPick()">戻る</button></div>`);
 }
@@ -1587,11 +1591,13 @@ const AI_MODES={
   chat:{label:'チューター',convo:true,ph:'英語について何でも質問できます',phs:'メッセージを入力…',sys:'You are a friendly, encouraging English tutor for a Japanese learner. Reply concisely in Japanese unless asked otherwise. Use simple explanations and give example sentences.'},
   card:{label:'単語をカード化',convo:false,ph:'単語を送るとカード化できます',phs:'単語・フレーズ…',sys:'CARD'},
   correct:{label:'英文添削',convo:false,ph:'添削したい英文を入力',phs:'英文を入力…',sys:'You are an English proofreader for a Japanese learner. Correct the English the user writes, show the corrected version, then briefly explain the key fixes in Japanese.'},
-  example:{label:'例文づくり',convo:false,ph:'例文がほしい単語を入力',phs:'単語を入力…',sys:'You create natural example sentences. For the word or phrase the user gives, output 3 natural English example sentences with Japanese translations.'},
+  example:{label:'例文作成',convo:false,ph:'日本語または英語を入力（例：認識を合わせる / proceed）',phs:'日本語/英語を入力…',sys:'EXAMPLE'},
   nuance:{label:'ニュアンス解説',convo:false,ph:'違いを知りたい語を入力（例：see / watch）',phs:'語を入力…',sys:'You explain nuance and usage differences of English words/phrases for Japanese learners, in Japanese, with examples.'},
   translate:{label:'翻訳',convo:false,ph:'日本語↔英語を翻訳します',phs:'文章を入力…',sys:'Translate between Japanese and English naturally. If the input is Japanese, give natural English; if English, give natural Japanese. Add a short note on nuance if helpful.'}
 };
 const CARD_SYS='You output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"term":string,"pron":IPA string,"mean":concise Japanese meaning,"exEn":natural English example,"exJa":Japanese translation of the example,"pos":array of ALL applicable Japanese parts of speech for this term (e.g. ["形容詞","名詞"]; if both a noun and adjective exist, include both. For phrases use ["フレーズ"] or ["句動詞"]),"other":a short Japanese note of extra info — for a phrase give similar expressions; for a word give other parts of speech/meanings or usage tips}. mean, exJa, pos and other MUST be in Japanese. No markdown, no code fences.';
+
+const EXAMPLE_SYS='You generate everyday English for a Japanese learner. First detect the input language. If the input is JAPANESE: output 3 natural English expressions that convey it, the kind commonly used in daily life. If the input is ENGLISH: output 3 natural everyday example sentences that CONTAIN the given English word/phrase. Output ONLY JSON: {"items":[{"en":"English expression or sentence","ja":"its natural Japanese translation"}]} with EXACTLY 3 items. Keep them short, common and useful in daily life. No markdown, no code fences.';
 
 function ensureThreads(){
   if(!Array.isArray(state.threads)) state.threads=[];
@@ -1766,10 +1772,27 @@ function clearThread(){
 }
 function msgHtml(m,i){
   if(m.role==='user') return `<div class="msg user">${esc(m.content)}</div>`;
+  if(m.examples && m.examples.length){
+    const blocks=m.examples.map((x,j)=>`
+      <div class="ex-item">
+        <div class="ex-en">${esc(x.en)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:26px;height:26px" onclick="speak('${esc(x.en).replace(/'/g,"\\'")}')">${I.speaker}</button></div>
+        ${x.ja?`<div class="ex-ja">${esc(x.ja)}</div>`:''}
+        <button class="save-card" onclick="saveAIExample(${i},${j})">${I.plus} ノートに保存</button>
+      </div>`).join('');
+    return `<div class="msg ai"><div class="ex-list">${blocks}</div></div>`;
+  }
   let extra='';
   if(m.card){ extra=`<button class="save-card" onclick="saveAICard(${i})">${I.plus} カードに保存</button>`; }
-  if(m.error){ extra+=`<button class="retry-btn" onclick="retryAI(${i})">${I.refresh} 再試行</button>`; }
+  const isErr = m.error || (typeof m.content==='string' && m.content.indexOf('⚠️')===0);
+  if(isErr){ extra+=`<button class="retry-btn" onclick="retryAI(${i})">${I.refresh} 再試行</button>`; }
   return `<div class="msg ai">${esc(m.content)}${extra}</div>`;
+}
+function saveAIExample(i,j){
+  const t=getThread(activeThreadId); if(!t) return;
+  const m=t.messages[i]; if(!m||!m.examples) return;
+  const x=m.examples[j]; if(!x) return;
+  setTab('notes');
+  editText(null,{title:x.en||'', body:x.ja||''});
 }
 function saveAICard(i){
   const t=getThread(activeThreadId); if(!t) return;
@@ -1795,7 +1818,9 @@ async function sendAI(){
 function retryAI(i){
   if(aiBusy) return;
   const t=getThread(activeThreadId); if(!t) return;
-  const m=t.messages[i]; if(!m||!m.error) return;
+  const m=t.messages[i];
+  const isErr = m && (m.error || (typeof m.content==='string' && m.content.indexOf('⚠️')===0));
+  if(!isErr) return;
   let text=m.retryFor;
   if(!text){ for(let k=i-1;k>=0;k--){ if(t.messages[k].role==='user'){ text=t.messages[k].content; break; } } }
   if(!text){ toast('再試行できる内容が見つかりません'); return; }
@@ -1817,6 +1842,12 @@ async function generateReply(t, text){
       } else {
         t.messages.push({role:'assistant',content});
       }
+    } else if(t.mode==='example'){
+      const content=await callAI([{role:'system',content:EXAMPLE_SYS},{role:'user',content:text}],{json:true,temp:0.6});
+      let items=[]; try{ const j=JSON.parse(content); items=Array.isArray(j)?j:(j.items||[]); }catch(e){ items=[]; }
+      items=items.filter(x=>x&&x.en).slice(0,3).map(x=>({en:String(x.en),ja:x.ja?String(x.ja):''}));
+      if(items.length){ t.messages.push({role:'assistant',content:items.map((x,k)=>`${k+1}. ${x.en}${x.ja?'\n　'+x.ja:''}`).join('\n\n'),examples:items}); }
+      else { t.messages.push({role:'assistant',content}); }
     } else {
       const sys = t.mode==='custom' ? (t.sys||'You are a helpful assistant for a Japanese English-learner. Reply in Japanese unless asked otherwise.') : AI_MODES[t.mode].sys;
       const convo = t.mode==='custom' ? true : !!AI_MODES[t.mode].convo;
