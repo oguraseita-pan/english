@@ -285,6 +285,27 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .theme-chip{display:inline-block;background:var(--surface);box-shadow:var(--shadow);border:1.5px solid transparent;border-radius:20px;padding:9px 15px;margin:0 8px 9px 0;font-size:.88rem;font-weight:600;color:var(--ink);transition:transform .1s;}
 .theme-chip:active{transform:scale(.94);border-color:var(--green);}
 .sub-label{font-size:.74rem;color:var(--ink-3);font-weight:700;letter-spacing:.05em;margin:14px 0 8px;}
+.compo-speak{display:flex;flex-direction:column;align-items:center;margin:30px 0 4px;}
+.mic-big{width:108px;height:108px;border-radius:50%;background:var(--green-soft);color:var(--green);display:grid;place-items:center;box-shadow:0 10px 26px rgba(36,84,70,.18);transition:transform .12s;}
+.mic-big:active{transform:scale(.93);}
+.mic-big.listening{background:var(--r-again);color:#fff;animation:micpulse 1.1s infinite;}
+.mic-big svg{width:46px;height:46px;}
+.mic-cap{margin-top:13px;font-size:.92rem;color:var(--ink-2);font-weight:600;}
+.compo-edit{width:100%;background:transparent;text-align:center;font-family:var(--font-en);font-size:1.16rem;margin-top:18px;padding:10px 12px;border-bottom:2px solid var(--line);}
+.compo-edit:focus{border-color:var(--green);}
+.compo-result-head{text-align:center;padding:12px 0 6px;}
+.compo-result-head svg{width:48px;height:48px;color:var(--green);}
+.compo-result-head .big{font-family:var(--font-en);font-size:2rem;font-weight:600;margin-top:6px;}
+.compo-result-head .sub2{color:var(--ink-2);font-size:.85rem;}
+.result-row{background:var(--surface);box-shadow:var(--shadow);border-radius:14px;margin-bottom:9px;overflow:hidden;}
+.rr-head{display:flex;align-items:center;gap:12px;padding:13px 14px;cursor:pointer;}
+.rr-meta{flex:1;min-width:0;}
+.rr-jp{font-weight:600;font-size:.95rem;}
+.rr-ans{font-family:var(--font-en);font-size:.82rem;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rr-detail{padding:2px 14px 14px;border-top:1px solid var(--line);}
+.rr-detail .blk{margin-top:11px;}
+.rr-detail .lab{font-size:.7rem;color:var(--ink-3);font-weight:700;margin-bottom:3px;}
+.rr-detail .en{font-family:var(--font-en);line-height:1.4;}
 
 /* ---------- AI ---------- */
 .ai-tabs{display:flex;gap:7px;margin-bottom:14px;overflow-x:auto;padding-bottom:2px;}
@@ -607,7 +628,7 @@ function setTab(name){
   if(name==='home') renderHome();
   if(name==='notes'){ currentCardView=null; renderNotes(); }
   if(name==='study') renderStudy();
-  if(name==='ai') renderAI();
+  if(name==='ai'){ activeThreadId=null; aiEditMode=false; renderAI(); }
 }
 
 /* ====================================================================
@@ -1091,7 +1112,8 @@ function startQuizPick(){
     <div class="deck-pick">
       <div class="deck-row" onclick="startQuiz(null)"><div class="meta"><div class="nm">すべてのカード</div></div><span class="chev">${I.chev}</span></div>
       ${decks.map(f=>`<div class="deck-row" onclick="startQuiz('${f.id}')"><div class="meta"><div class="nm">${esc(f.name)}</div></div><span class="chev">${I.chev}</span></div>`).join('')}
-    </div>`);
+    </div>
+    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>`);
 }
 function startQuiz(fid){
   closeModal();
@@ -1149,18 +1171,20 @@ function toggleDictation(inputId, btn, autoSubmit){
   const base=inp?inp.value.trim():'';
   let got=false;
   if(btn) btn.classList.add('listening');
+  const cap=document.getElementById('micCap'); if(cap) cap.textContent='聞き取り中…（タップで停止）';
   clearTimeout(_recogTimer);
   _recogTimer=setTimeout(()=>{ stopDictation(); }, 12000); // safety: never hang
   r.onresult=(e)=>{
     let txt=''; for(let i=0;i<e.results.length;i++){ txt+=e.results[i][0].transcript; }
     if(txt.trim()) got=true;
-    if(inp){ inp.value=(base?base+' ':'')+txt; if(typeof autoGrow==='function') autoGrow(inp); }
+    if(inp){ inp.value=(base?base+' ':'')+txt; if(inp.tagName==='TEXTAREA'&&typeof autoGrow==='function') autoGrow(inp); }
   };
   r.onspeechend=()=>{ stopDictation(); }; // stop as soon as the user goes quiet
   r.onerror=(e)=>{ if(e.error==='not-allowed'||e.error==='service-not-allowed') toast('マイクの使用が許可されていません'); };
   r.onend=()=>{
     clearTimeout(_recogTimer);
     if(_recogBtn) _recogBtn.classList.remove('listening');
+    const c2=document.getElementById('micCap'); if(c2) c2.textContent='タップして話す';
     _recog=null; _recogBtn=null;
     // auto-grade as soon as speech finishes
     if(autoSubmit && got && compo && !compo.answered && !compo.checking){
@@ -1199,14 +1223,15 @@ function startCompoPick(){
     <div class="deck-pick">
       <div class="deck-row" onclick="startCompo(null)"><div class="meta"><div class="nm">すべてのカード</div></div><span class="chev">${I.chev}</span></div>
       ${decks.map(f=>`<div class="deck-row" onclick="startCompo('${f.id}')"><div class="meta"><div class="nm">${esc(f.name)}</div></div><span class="chev">${I.chev}</span></div>`).join('')}
-    </div>`);
+    </div>
+    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>`);
 }
 function startCompo(fid){
   const list=(fid===null?Object.values(state.cards):cardsInTree(fid));
   const items=shuffle(compoItemsFrom(list)).slice(0,10);
   if(items.length===0){ toast('日本語と英語が両方入ったカードが必要です'); return; }
   closeModal();
-  compo={ items, idx:0, answered:false, checking:false, fb:null, userAns:'', results:[], source:'card' };
+  compo={ items, idx:0, answered:false, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:'card' };
   renderCompo();
 }
 
@@ -1225,6 +1250,7 @@ function startCompoThemePick(){
     <div class="mfield" style="margin-top:14px"><label>自由入力（テーマ・場面）</label>
       <div style="display:flex;gap:8px"><input id="thCustom" placeholder="例：週末の予定を話す" style="flex:1" />
       <button class="btn btn-primary" onclick="genThemeCustom()">作成</button></div></div>
+    <div class="modal-actions" style="margin-top:8px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>
   `);
 }
 function genThemeCustom(){
@@ -1246,7 +1272,7 @@ async function genTheme(theme){
     let arr=[]; try{ const j=JSON.parse(content); arr=Array.isArray(j)?j:(j.items||[]); }catch(e){ arr=[]; }
     const items=arr.filter(x=>x&&x.jp&&x.en).map(x=>({jp:String(x.jp),en:String(x.en),kind:'テーマ：'+theme}));
     if(items.length===0){ toast('問題を生成できませんでした。もう一度お試しください'); compo=null; renderStudy(); return; }
-    compo={ items, idx:0, answered:false, checking:false, fb:null, userAns:'', results:[], source:'theme', theme };
+    compo={ items, idx:0, answered:false, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:'theme', theme };
     renderCompo();
   }catch(err){
     if(!compo) return;
@@ -1267,24 +1293,28 @@ function renderCompo(){
     return;
   }
   if(compo.idx>=compo.items.length){
-    const good=compo.results.filter(x=>x==='○').length;
-    v.innerHTML=`<div class="session-done">${I.trophy}<div class="big">${good} / ${compo.items.length}</div>
-      <p style="color:var(--ink-2)">「○」と判定された数</p>
-      <button class="btn btn-primary full" style="margin-top:18px;padding:15px" onclick="compo=null;renderStudy()">学習に戻る</button></div>`;
-    compo=null; return;
+    const logs=compo.log||[];
+    const good=logs.filter(r=>r.fb&&r.fb.verdict==='○').length;
+    v.innerHTML=`
+      <div class="study-top"><button class="icon-btn" onclick="compo=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:100%"></div></div><div class="study-count">結果</div></div>
+      <div class="compo-result-head">${I.trophy}<div class="big">${good} / ${logs.length}</div><div class="sub2">「○」と判定された数</div></div>
+      <div class="section-title">解答一覧（タップで解説）</div>
+      <div class="list">${logs.map((r,i)=>compoResultRow(r,i)).join('')}</div>
+      <button class="btn btn-primary full" style="padding:15px;margin-top:16px" onclick="compo=null;renderStudy()">学習に戻る</button>`;
+    return; // keep compo alive so rows can expand
   }
   const it=compo.items[compo.idx];
-  const micBtn = speechSupported()
-    ? `<button class="mic-btn" id="compoMic" onclick="toggleDictation('compoInput',this,true)" aria-label="音声入力">${I.mic}</button>` : '';
   let answerArea;
   if(!compo.answered){
     answerArea=`
-      <div class="compo-inrow">
-        <textarea id="compoInput" rows="1" placeholder="英語で入力 / 🎤で音声入力" oninput="autoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();checkCompo();}">${esc(compo.userAns||'')}</textarea>
-        ${micBtn}
+      <div class="compo-speak">
+        ${speechSupported()
+          ? `<button class="mic-big" id="compoMic" onclick="toggleDictation('compoInput',this,true)" aria-label="音声入力">${I.mic}</button>
+             <div class="mic-cap" id="micCap">タップして話す</div>`
+          : `<div class="mic-cap">この端末は音声入力に非対応です。下に英語を入力してください。</div>`}
+        <input id="compoInput" class="compo-edit" placeholder="${speechSupported()?'認識結果がここに表示（編集できます）':'英語で入力'}" value="${esc(compo.userAns||'')}" onkeydown="if(event.key==='Enter'){event.preventDefault();checkCompo();}" />
       </div>
-      ${!speechSupported()?`<div class="compo-hint" style="margin-top:8px">※この端末は音声入力に非対応のため、キーボードで入力してください。</div>`:''}
-      <button class="btn btn-primary full" style="padding:14px;margin-top:14px" id="compoCheck" onclick="checkCompo()" ${compo.checking?'disabled':''}>${compo.checking?'採点中…':'答え合わせ'}</button>`;
+      <button class="btn btn-primary full" style="padding:15px;margin-top:18px" id="compoCheck" onclick="checkCompo()" ${compo.checking?'disabled':''}>${compo.checking?'採点中…':'答え合わせ'}</button>`;
   } else {
     const fb=compo.fb||{};
     const vc = fb.verdict==='○'?'o':(fb.verdict==='×'?'x':'t');
@@ -1307,8 +1337,27 @@ function renderCompo(){
     <div class="compo-kind">日本語を英語に（${it.kind}）</div>
     <div class="compo-jp">${esc(it.jp)}</div>
     ${answerArea}`;
-  if(!compo.answered){ const ta=document.getElementById('compoInput'); if(ta) autoGrow(ta); }
 }
+function compoResultRow(r,i){
+  const v=(r.fb&&r.fb.verdict)?r.fb.verdict:'－';
+  const vc = v==='○'?'o':(v==='×'?'x':'t');
+  const open=compo.openIdx===i; const fb=r.fb||{};
+  return `<div class="result-row">
+    <div class="rr-head" onclick="toggleResult(${i})">
+      <span class="verdict ${vc}" style="font-size:1.3rem;min-width:22px;text-align:center">${esc(v)}</span>
+      <div class="rr-meta"><div class="rr-jp">${esc(r.jp)}</div><div class="rr-ans">${esc(r.userAns||'(無回答)')}</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>
+    ${open?`<div class="rr-detail">
+      <div class="blk"><div class="lab">あなたの解答</div><div class="en">${esc(r.userAns||'(無回答)')}</div></div>
+      <div class="blk"><div class="lab">お手本</div><div class="en">${esc(r.en)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:28px;height:28px" onclick="speak('${esc(r.en).replace(/'/g,"\\'")}')">${I.speaker}</button></div></div>
+      ${fb.comment?`<div class="blk"><div class="lab">コメント</div><div>${esc(fb.comment)}</div></div>`:''}
+      ${fb.fixed?`<div class="blk"><div class="lab">自然な形</div><div class="en">${esc(fb.fixed)}</div></div>`:''}
+      ${(fb.alts&&fb.alts.length)?`<div class="blk"><div class="lab">言い換え</div><div class="en">${fb.alts.map(a=>esc(a)).join('<br>')}</div></div>`:''}
+    </div>`:''}
+  </div>`;
+}
+function toggleResult(i){ if(!compo) return; compo.openIdx = (compo.openIdx===i)?null:i; renderCompo(); }
 async function checkCompo(){
   if(!compo || compo.checking || compo.answered) return;
   const myIdx=compo.idx;
@@ -1341,6 +1390,8 @@ async function checkCompo(){
   }
   compo.answered=true;
   compo.results.push(compo.fb.verdict||'△');
+  compo.log = compo.log || [];
+  compo.log.push({ jp:it.jp, en:it.en, userAns:user, fb:compo.fb, kind:it.kind });
   renderCompo();
 }
 
