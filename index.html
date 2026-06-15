@@ -66,10 +66,13 @@ html[data-theme="dark"]{
   --shadow-lg:0 8px 40px rgba(0,0,0,.5);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{margin:0;padding:0;height:100%;}
+html,body{margin:0;padding:0;}
+html{min-height:100%;background:var(--paper);}
 body{
   font-family:var(--font-ui);
   background:var(--paper);
+  min-height:100vh;
+  min-height:100dvh;
   color:var(--ink);
   font-size:16px;line-height:1.5;
   -webkit-font-smoothing:antialiased;
@@ -80,7 +83,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 ::selection{background:var(--amber-soft);}
 
 /* ---------- App shell ---------- */
-#app{max-width:680px;margin:0 auto;min-height:100%;position:relative;}
+#app{max-width:680px;margin:0 auto;min-height:100vh;min-height:100dvh;position:relative;}
 .view{display:none;padding:calc(var(--safe-t) + 8px) 18px calc(var(--tabbar-h) + var(--safe-b) + 28px);animation:fade .25s ease;}
 .view.active{display:block;}
 @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
@@ -183,7 +186,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .deck-row .badge{background:var(--green);color:#fff;font-weight:700;font-size:.82rem;min-width:30px;height:26px;padding:0 9px;border-radius:13px;display:grid;place-items:center;}
 .deck-row .badge.zero{background:var(--line);color:var(--ink-3);}
 
-.study-wrap{display:flex;flex-direction:column;min-height:72vh;}
+.study-wrap{display:flex;flex-direction:column;min-height:70vh;min-height:70dvh;}
 .study-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
 .progress{flex:1;height:7px;background:var(--line);border-radius:4px;margin:0 12px;overflow:hidden;}
 .progress > div{height:100%;background:var(--green);border-radius:4px;transition:width .3s;}
@@ -376,7 +379,7 @@ let state;
 function defaultState(){
   return {
     folders:{}, cards:{},
-    settings:{ apiKey:'', model:'gpt-4o-mini', dark:false, ttsRate:0.9, newPerDay:20 },
+    settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:0.9, newPerDay:20 },
     stats:{ reviews:{}, streak:0, lastStudy:null },
     seeded:false
   };
@@ -387,8 +390,9 @@ function load(){
     if(raw){ state = Object.assign(defaultState(), JSON.parse(raw)); }
     else state = defaultState();
   }catch(e){ state = defaultState(); }
-  if(!state.settings) state.settings = defaultState().settings;
+  state.settings = Object.assign(defaultState().settings, state.settings || {});
   if(!state.stats) state.stats = defaultState().stats;
+  save(); // persist any migrated/normalized fields
 }
 function save(){
   try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
@@ -653,7 +657,7 @@ function editCard(id, prefill){
     <h2>${id?'カードを編集':'新しいカード'}</h2>
     <div class="mfield"><label>単語・フレーズ（英語）</label>
       <input id="cTerm" class="term-input" value="${esc(c.term)}" placeholder="reluctant" />
-      <button class="ai-gen-btn" id="aiGenBtn" onclick="aiFillCard()">${I.sparkle} AIで意味・例文を生成</button>
+      ${aiEnabled()?`<button class="ai-gen-btn" id="aiGenBtn" onclick="aiFillCard()">${I.sparkle} AIで意味・例文を生成</button>`:''}
     </div>
     <div class="mfield"><label>発音（任意）</label><input id="cPron" value="${esc(c.pron)}" placeholder="/rɪˈlʌktənt/" /></div>
     <div class="mfield"><label>意味</label><textarea id="cMean" placeholder="気が進まない、しぶしぶの">${esc(c.mean)}</textarea></div>
@@ -925,9 +929,25 @@ const AI_MODES={
   translate:{label:'翻訳',sys:'Translate between Japanese and English naturally. If the input is Japanese, give natural English; if English, give natural Japanese. Add a short note on nuance if helpful.'}
 };
 
+function aiProvider(){ return state.settings.aiProvider || 'openai'; }
+function aiKey(){ return aiProvider()==='gemini' ? (state.settings.geminiKey||'') : (state.settings.apiKey||''); }
+function aiEnabled(){ return aiProvider() !== 'none'; }
+function aiReady(){ return aiEnabled() && !!aiKey(); }
+function aiProviderName(){ return aiProvider()==='gemini' ? 'Gemini' : 'OpenAI'; }
+
 function renderAI(){
   const v=document.getElementById('view-ai');
-  const hasKey=!!state.settings.apiKey;
+  if(!aiEnabled()){
+    v.innerHTML=`
+      <div class="topbar"><h1>AI</h1></div>
+      <div class="empty" style="padding:46px 22px">${I.sparkle.replace('fill="currentColor"','fill="var(--ink-3)"')}
+        <div class="t">AI機能はオフです</div>
+        <div class="d">設定でAIプロバイダー（OpenAI または 無料枠のあるGemini）を選ぶと、<br>チューター・添削・カード化などが使えます。</div>
+        <button class="btn btn-primary" style="margin-top:16px;padding:11px 18px" onclick="setTab('settings');renderSettings()">設定をひらく</button>
+      </div>`;
+    return;
+  }
+  const ready=aiReady();
   v.innerHTML=`
     <div class="topbar"><h1>AI</h1>
       <button class="icon-btn" onclick="chatMessages=[];renderAI()" aria-label="リセット" title="会話をクリア">
@@ -936,7 +956,7 @@ function renderAI(){
     <div class="ai-tabs">
       ${Object.entries(AI_MODES).map(([k,m])=>`<button class="${aiMode===k?'on':''}" onclick="aiMode='${k}';renderAI()">${m.label}</button>`).join('')}
     </div>
-    ${!hasKey?`<div class="ai-hint">AI機能を使うには <b>OpenAIのAPIキー</b> が必要です。<br>「設定 → ChatGPT連携」でキーを入力してください。
+    ${!ready?`<div class="ai-hint">AI機能を使うには <b>${aiProviderName()}のAPIキー</b> が必要です。<br>「設定 → AI連携」でキーを入力してください。
       <button class="btn btn-primary" style="margin-top:10px;padding:9px 14px" onclick="setTab('settings');renderSettings()">設定をひらく</button></div>`:''}
     ${aiMode==='card'?`<div class="ai-hint" style="background:var(--green-soft)">単語やフレーズを送ると、意味・発音・例文を生成して<b>カードに保存</b>できます。例：「serendipity」</div>`:''}
     <div class="chat-log" id="chatLog">
@@ -968,7 +988,7 @@ async function sendAI(){
   const inp=document.getElementById('chatInput');
   const text=inp.value.trim();
   if(!text) return;
-  if(!state.settings.apiKey){ toast('設定でAPIキーを入力してください'); return; }
+  if(!aiReady()){ toast(aiEnabled()?'設定でAPIキーを入力してください':'設定でAIをオンにしてください'); return; }
   inp.value=''; autoGrow(inp);
   chatMessages.push({role:'user',content:text});
   aiBusy=true; renderAI();
@@ -980,7 +1000,7 @@ async function sendAI(){
   try{
     if(aiMode==='card'){
       const sys='You output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"term":string,"pron":IPA string,"mean":Japanese meaning,"exEn":English example,"exJa":Japanese translation of the example}. No markdown.';
-      const content=await callOpenAI([{role:'system',content:sys},{role:'user',content:text}],{json:true,temp:0.5});
+      const content=await callAI([{role:'system',content:sys},{role:'user',content:text}],{json:true,temp:0.5});
       let card; try{ card=JSON.parse(content); }catch(e){ card=null; }
       if(card&&card.term){
         chatMessages.push({role:'assistant',content:`📘 ${card.term} ${card.pron||''}\n意味：${card.mean||''}\n例：${card.exEn||''}\n　　${card.exJa||''}`,card});
@@ -992,14 +1012,15 @@ async function sendAI(){
       // include short history for chat mode
       const history = aiMode==='chat' ? chatMessages.slice(-8).map(m=>({role:m.role,content:m.content})) : [{role:'user',content:text}];
       const msgs=[{role:'system',content:sys},...history];
-      const content=await callOpenAI(msgs,{temp:0.7});
+      const content=await callAI(msgs,{temp:0.7});
       chatMessages.push({role:'assistant',content});
     }
   }catch(err){
     let msg=err.message||'エラーが発生しました';
     if(msg==='NO_KEY') msg='APIキーが未設定です。設定から入力してください。';
-    else if(/401/.test(msg)) msg='APIキーが無効です。設定を確認してください。';
-    else if(/429/.test(msg)) msg='利用制限/残高切れの可能性があります（OpenAIの請求設定を確認）。';
+    else if(msg==='AI_OFF') msg='AIがオフです。設定からオンにしてください。';
+    else if(/40[013]/.test(msg)) msg='APIキーが無効か、リクエストが拒否されました。設定を確認してください。';
+    else if(/429/.test(msg)) msg=aiProvider()==='gemini'?'無料枠の上限に達した可能性があります。少し時間をおいて再試行してください。':'利用制限/残高切れの可能性があります（OpenAIの請求設定を確認）。';
     else if(/Failed to fetch|NetworkError/i.test(msg)) msg='通信に失敗しました。ネット接続を確認してください。';
     chatMessages.push({role:'assistant',content:'⚠️ '+msg});
   }
@@ -1019,6 +1040,34 @@ async function callOpenAI(messages,opts){
   const data=await res.json();
   return data.choices[0].message.content.trim();
 }
+async function callAI(messages,opts){
+  opts=opts||{};
+  const p=aiProvider();
+  if(p==='none') throw new Error('AI_OFF');
+  if(p==='gemini') return callGemini(messages,opts);
+  return callOpenAI(messages,opts);
+}
+async function callGemini(messages,opts){
+  const key=state.settings.geminiKey;
+  if(!key) throw new Error('NO_KEY');
+  const model=state.settings.geminiModel||'gemini-2.5-flash';
+  const sys=messages.filter(m=>m.role==='system').map(m=>m.content).join('\n');
+  const contents=messages.filter(m=>m.role!=='system').map(m=>({
+    role: m.role==='assistant' ? 'model' : 'user',
+    parts:[{text:m.content}]
+  }));
+  const body={ contents, generationConfig:{ temperature:(opts.temp!=null)?opts.temp:0.7 } };
+  if(sys) body.systemInstruction={ parts:[{text:sys}] };
+  if(opts.json) body.generationConfig.responseMimeType='application/json';
+  const url='https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(model)+':generateContent?key='+encodeURIComponent(key);
+  const res=await fetch(url,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
+  if(!res.ok){ throw new Error('API '+res.status); }
+  const data=await res.json();
+  const cand=(data.candidates||[])[0];
+  const parts=cand && cand.content && cand.content.parts;
+  if(!parts || !parts.length) throw new Error('EMPTY');
+  return parts.map(p=>p.text||'').join('').trim();
+}
 function openCardFromAI(jsonStr){
   let c; try{ c=JSON.parse(JSON.parse(jsonStr)); }catch(e){ try{c=JSON.parse(jsonStr);}catch(e2){return;} }
   setTab('notes');
@@ -1027,20 +1076,20 @@ function openCardFromAI(jsonStr){
 
 /* ---------- AI fill inside card editor ---------- */
 async function aiFillCard(){
-  if(!state.settings.apiKey){ toast('設定でAPIキーを入力してください'); return; }
+  if(!aiReady()){ toast(aiEnabled()?'設定でAPIキーを入力してください':'設定でAIをオンにしてください'); return; }
   const term=document.getElementById('cTerm').value.trim();
   if(!term){ toast('先に単語を入力してください'); return; }
   const btn=document.getElementById('aiGenBtn'); btn.disabled=true; btn.innerHTML=I.sparkle+' 生成中…';
   try{
     const sys='Output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"pron":IPA,"mean":Japanese meaning (concise),"exEn":natural English example,"exJa":Japanese translation}. No markdown.';
-    const content=await callOpenAI([{role:'system',content:sys},{role:'user',content:term}],{json:true,temp:0.4});
+    const content=await callAI([{role:'system',content:sys},{role:'user',content:term}],{json:true,temp:0.4});
     const c=JSON.parse(content);
     if(c.pron) document.getElementById('cPron').value=c.pron;
     if(c.mean) document.getElementById('cMean').value=c.mean;
     if(c.exEn) document.getElementById('cExEn').value=c.exEn;
     if(c.exJa) document.getElementById('cExJa').value=c.exJa;
     toast('生成しました（確認して保存）');
-  }catch(err){ toast('生成に失敗: '+(/401/.test(err.message)?'キーが無効':'通信エラー')); }
+  }catch(err){ toast('生成に失敗: '+(/40[013]/.test(err.message)?'キーが無効':/429/.test(err.message)?'利用上限の可能性':'通信エラー')); }
   btn.disabled=false; btn.innerHTML=I.sparkle+' AIで意味・例文を生成';
 }
 
@@ -1053,12 +1102,22 @@ function renderSettings(){
     <div class="topbar"><h1>設定</h1>
       <button class="icon-btn" onclick="setTab('home')" style="box-shadow:none;background:transparent">✕</button></div>
 
-    <div class="section-title">ChatGPT連携</div>
+    <div class="section-title">AI連携</div>
     <div class="set-group">
+      <div class="field">
+        <label>AIプロバイダー</label>
+        <select id="setProvider" onchange="state.settings.aiProvider=this.value;save();renderSettings()">
+          <option value="none" ${s.aiProvider==='none'?'selected':''}>使わない（AIオフ）</option>
+          <option value="openai" ${s.aiProvider==='openai'?'selected':''}>OpenAI（ChatGPT）</option>
+          <option value="gemini" ${s.aiProvider==='gemini'?'selected':''}>Google Gemini（無料枠あり）</option>
+        </select>
+        <div class="d">AIは任意です。「使わない」を選んでも、ノート・暗記・クイズ・読み上げなどキー不要の機能はすべて使えます。</div>
+      </div>
+      ${s.aiProvider==='openai'?`
       <div class="field">
         <label>OpenAI APIキー</label>
         <input type="password" id="setKey" value="${esc(s.apiKey)}" placeholder="sk-..." autocomplete="off" />
-        <div class="d">キーはこの端末のブラウザにのみ保存され、入力したサーバーには送られません（OpenAIに直接送信）。<a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">キーを取得 ↗</a></div>
+        <div class="d">キーはこの端末のブラウザにのみ保存され、OpenAIに直接送信されます。<a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">キーを取得 ↗</a></div>
       </div>
       <div class="field">
         <label>モデル</label>
@@ -1067,9 +1126,28 @@ function renderSettings(){
           <option value="gpt-4o" ${s.model==='gpt-4o'?'selected':''}>gpt-4o（高性能）</option>
           <option value="gpt-4.1-mini" ${s.model==='gpt-4.1-mini'?'selected':''}>gpt-4.1-mini</option>
         </select>
-        <div class="d">利用料はOpenAIアカウントに課金されます。mini系なら数百回の利用でも数十円程度です。</div>
+        <div class="d">利用料はOpenAIアカウントに従量課金されます。mini系なら数百回でも数十円程度です。</div>
       </div>
       <button class="btn btn-primary full" style="padding:13px" onclick="saveSettings()">${I.check} 保存</button>
+      `:''}
+      ${s.aiProvider==='gemini'?`
+      <div class="field">
+        <label>Gemini APIキー</label>
+        <input type="password" id="setGeminiKey" value="${esc(s.geminiKey)}" placeholder="AIza..." autocomplete="off" />
+        <div class="d">Google AI Studioで無料取得でき（カード登録不要）、無料枠内なら料金はかかりません。<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">キーを取得 ↗</a></div>
+      </div>
+      <div class="field">
+        <label>モデル</label>
+        <select id="setGeminiModel">
+          <option value="gemini-2.5-flash" ${s.geminiModel==='gemini-2.5-flash'?'selected':''}>gemini-2.5-flash（推奨）</option>
+          <option value="gemini-2.5-flash-lite" ${s.geminiModel==='gemini-2.5-flash-lite'?'selected':''}>gemini-2.5-flash-lite（無料枠が多め）</option>
+          <option value="gemini-2.5-pro" ${s.geminiModel==='gemini-2.5-pro'?'selected':''}>gemini-2.5-pro（高性能）</option>
+        </select>
+        <div class="d">無料枠は1分・1日あたりの回数に上限があり、超えると一時的に制限されます。入力内容がGoogleの改善に使われる場合があります。</div>
+      </div>
+      <button class="btn btn-primary full" style="padding:13px" onclick="saveSettings()">${I.check} 保存</button>
+      `:''}
+      ${s.aiProvider==='none'?`<div class="field" style="text-align:center;color:var(--ink-2)">AIはオフです。いつでもここからオンにできます。</div>`:''}
     </div>
 
     <div class="section-title">学習</div>
@@ -1095,8 +1173,11 @@ function renderSettings(){
   `;
 }
 function saveSettings(){
-  state.settings.apiKey=document.getElementById('setKey').value.trim();
-  state.settings.model=document.getElementById('setModel').value;
+  const prov=document.getElementById('setProvider'); if(prov) state.settings.aiProvider=prov.value;
+  const k=document.getElementById('setKey'); if(k) state.settings.apiKey=k.value.trim();
+  const m=document.getElementById('setModel'); if(m) state.settings.model=m.value;
+  const gk=document.getElementById('setGeminiKey'); if(gk) state.settings.geminiKey=gk.value.trim();
+  const gm=document.getElementById('setGeminiModel'); if(gm) state.settings.geminiModel=gm.value;
   save(); toast('設定を保存しました');
 }
 function exportData(){
@@ -1130,7 +1211,11 @@ function resetAll(){
    ==================================================================== */
 function openModal(html){ const m=document.getElementById('modal'); m.innerHTML='<div class="grip"></div>'+html; document.getElementById('modalBg').classList.add('open'); }
 function closeModal(){ document.getElementById('modalBg').classList.remove('open'); }
-function applyTheme(){ document.documentElement.setAttribute('data-theme', state.settings.dark?'dark':'light'); }
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', state.settings.dark?'dark':'light');
+  const tc=document.querySelector('meta[name="theme-color"]');
+  if(tc) tc.setAttribute('content', state.settings.dark?'#14181A':'#F6F4EE');
+}
 function logoSvg(size,cls){
   return `<svg class="${cls||''}" width="${size}" height="${size}" viewBox="0 0 120 120" fill="none" style="${cls?'':'flex:none'}">
     <path d="M60 100V52" stroke="${cls?'#F4F1E8':'var(--green)'}" stroke-width="7" stroke-linecap="round"/>
