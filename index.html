@@ -2413,7 +2413,8 @@ function keyHintHtml(){ return `<div class="ai-hint">AI機能を使うには <b>
 function aiProvider(){ return state.settings.aiProvider || 'openai'; }
 function aiKey(){ return aiProvider()==='gemini' ? (state.settings.geminiKey||'') : (state.settings.apiKey||''); }
 function aiEnabled(){ return aiProvider() !== 'none'; }
-function aiReady(){ return aiEnabled() && !!aiKey(); }
+function managedAI(){ return cloudConfigured() && loggedIn(); }   // ログイン中はアプリ提供のAI（キー不要）
+function aiReady(){ return managedAI() || (aiEnabled() && !!aiKey()); }
 function aiProviderName(){ return aiProvider()==='gemini' ? 'Gemini' : 'OpenAI'; }
 
 function renderAI(){
@@ -2687,10 +2688,25 @@ async function aiFetch(url,init){
 }
 async function callAI(messages,opts){
   opts=opts||{};
+  if(managedAI()) return callManaged(messages,opts);
   const p=aiProvider();
   if(p==='none') throw new Error('AI_OFF');
   if(p==='gemini') return callGemini(messages,opts);
   return callOpenAI(messages,opts);
+}
+// アプリ提供のAI：Supabase Edge Function 経由（APIキーはサーバーに隠す）
+async function callManaged(messages,opts){
+  let token='';
+  try{ const { data }=await _sb.auth.getSession(); token=(data&&data.session)?data.session.access_token:''; }catch(e){}
+  if(!token) throw new Error('NO_SESSION');
+  const res=await aiFetch(CLOUD.url.replace(/\/$/,'')+'/functions/v1/ai',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':CLOUD.anonKey},
+    body:JSON.stringify({ messages, json:!!opts.json, temp:(opts.temp!=null)?opts.temp:0.7 })
+  });
+  const data=await res.json();
+  if(data && data.error) throw new Error(data.error);
+  return ((data&&data.text)||'').trim();
 }
 async function callGemini(messages,opts){
   const key=state.settings.geminiKey;
@@ -2785,8 +2801,13 @@ function renderSettings(){
 
     <div class="section-title">AI連携</div>
     <div class="set-group">
+      ${managedAI()?`
       <div class="field">
-        <label>AIプロバイダー</label>
+        <div class="key-set" style="background:var(--green-soft);border-color:var(--green)"><span class="lbl">${I.check} アプリのAIが有効です（キー不要）</span></div>
+        <div class="d">ログイン中は、Sproutが提供するAI（Google Gemini）で採点・添削・例文生成が使えます。APIキーの設定は不要です。${state.settings.aiProvider!=='none'?'<br>下の個人用APIキー設定は、ログアウト時のみ使われます。':''}</div>
+      </div>`:''}
+      <div class="field">
+        <label>AIプロバイダー${managedAI()?'（ログアウト時用）':''}</label>
         <select id="setProvider" onchange="state.settings.aiProvider=this.value;save();renderSettings()">
           <option value="none" ${s.aiProvider==='none'?'selected':''}>使わない（AIオフ）</option>
           <option value="openai" ${s.aiProvider==='openai'?'selected':''}>OpenAI（ChatGPT）</option>
