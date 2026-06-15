@@ -548,7 +548,7 @@ function save(opts){
      create policy "own row" on sprout_state for all
        using (auth.uid() = user_id) with check (auth.uid() = user_id);
    =================================================================== */
-const CLOUD = { url:'', anonKey:'' };
+const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publishable_jhQ8QRqM6QuCWlEjOPok9A_62zFa10k' };
 let _sb=null, account={ user:null }, _cloudTimer=null, _lastSync=0;
 function cloudConfigured(){ return !!(CLOUD.url && CLOUD.anonKey); }
 function loggedIn(){ return !!(account && account.user); }
