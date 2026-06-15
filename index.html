@@ -172,6 +172,23 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .spk:active{transform:scale(.88);}
 .spk svg{width:18px;height:18px;}
 .tag-chip{display:inline-block;font-size:.68rem;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);padding:1px 8px;border-radius:20px;margin-right:4px;}
+.pos-chip{display:inline-block;font-size:.74rem;font-weight:600;background:var(--green-soft);color:var(--green);padding:3px 11px;border-radius:20px;margin:0 6px 6px 0;}
+
+/* card detail (read view) */
+.cd-back{display:inline-flex;align-items:center;gap:5px;color:var(--ink-2);font-weight:600;font-size:.9rem;margin-bottom:12px;padding:6px 2px;}
+.cd-back svg{width:18px;height:18px;}
+.cd-card{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px 20px;}
+.cd-head{display:flex;align-items:flex-start;gap:12px;}
+.cd-term{flex:1;font-family:var(--font-en);font-size:2rem;font-weight:500;line-height:1.15;word-break:break-word;}
+.cd-pron{color:var(--ink-2);font-size:1rem;margin-top:4px;}
+.cd-pos{margin-top:14px;}
+.cd-sec{margin-top:18px;}
+.cd-sec > .lab{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:700;margin-bottom:6px;}
+.cd-sec .val{font-size:1.04rem;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+.cd-ex{background:var(--surface-2);border-left:3px solid var(--amber);border-radius:0 10px 10px 0;padding:12px 14px;}
+.cd-ex .en{font-family:var(--font-en);font-size:1.05rem;line-height:1.45;}
+.cd-ex .ja{color:var(--ink-2);font-size:.9rem;margin-top:5px;}
+.cd-actions{display:flex;gap:10px;margin-top:18px;}
 
 .empty{text-align:center;color:var(--ink-3);padding:46px 20px;}
 .empty svg{width:54px;height:54px;opacity:.4;margin-bottom:12px;}
@@ -402,6 +419,11 @@ function load(){
   state.settings = Object.assign(defaultState().settings, state.settings || {});
   if(!state.stats) state.stats = defaultState().stats;
   if(!Array.isArray(state.threads)) state.threads = [];
+  // migrate cards: tags -> pos (品詞), note -> other (その他)
+  Object.values(state.cards||{}).forEach(c=>{
+    if(!Array.isArray(c.pos)) c.pos = Array.isArray(c.tags) ? c.tags.slice() : [];
+    if(typeof c.other !== 'string') c.other = c.note || '';
+  });
   save(); // persist any migrated/normalized fields
 }
 function save(){
@@ -420,16 +442,16 @@ function seed(){
   state.folders[f1] = {id:f1,name:'デイリー英会話',parentId:null,createdAt:now()};
   state.folders[f2] = {id:f2,name:'ビジネス',parentId:null,createdAt:now()};
   state.folders[f3] = {id:f3,name:'熟語・フレーズ',parentId:f1,createdAt:now()};
-  const mk=(folderId,term,pron,mean,exEn,exJa,tags)=>{
+  const mk=(folderId,term,pron,mean,exEn,exJa,pos,other)=>{
     const id=uid();
-    state.cards[id]={id,folderId,term,pron:pron||'',mean,exEn:exEn||'',exJa:exJa||'',note:'',tags:tags||[],
+    state.cards[id]={id,folderId,term,pron:pron||'',mean,exEn:exEn||'',exJa:exJa||'',other:other||'',pos:pos||[],
       srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now()};
   };
-  mk(f1,'reluctant','/rɪˈlʌktənt/','気が進まない、しぶしぶの','She was reluctant to leave.','彼女は帰りたがらなかった。',['形容詞']);
-  mk(f1,'come up with','','〜を思いつく','I came up with a new idea.','新しいアイデアを思いついた。',['句動詞']);
-  mk(f3,'on the same page','','認識が一致して','Let\'s make sure we\'re on the same page.','認識を合わせておこう。',['フレーズ']);
-  mk(f2,'leverage','/ˈlevərɪdʒ/','〜を活用する','We can leverage our network.','人脈を活用できる。',['ビジネス']);
-  mk(f2,'on track','','順調で、軌道に乗って','The project is on track.','プロジェクトは順調だ。',['ビジネス']);
+  mk(f1,'reluctant','/rɪˈlʌktənt/','気が進まない、しぶしぶの','She was reluctant to leave.','彼女は帰りたがらなかった。',['形容詞'],'反意語：willing（乗り気な）');
+  mk(f1,'come up with','','〜を思いつく','I came up with a new idea.','新しいアイデアを思いついた。',['句動詞'],'類似表現：think of / devise');
+  mk(f3,'on the same page','','認識が一致して','Let\'s make sure we\'re on the same page.','認識を合わせておこう。',['フレーズ'],'類似表現：in agreement / aligned');
+  mk(f2,'leverage','/ˈlevərɪdʒ/','〜を活用する／てこ入れ','We can leverage our network.','人脈を活用できる。',['動詞','名詞'],'名詞では「てこ・影響力」の意味もある');
+  mk(f2,'on track','','順調で、軌道に乗って','The project is on track.','プロジェクトは順調だ。',['フレーズ'],'反対：off track（軌道を外れて）');
   state.seeded = true;
   save();
 }
@@ -483,7 +505,7 @@ function setTab(name){
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
   window.scrollTo(0,0);
   if(name==='home') renderHome();
-  if(name==='notes') renderNotes();
+  if(name==='notes'){ currentCardView=null; renderNotes(); }
   if(name==='study') renderStudy();
   if(name==='ai') renderAI();
 }
@@ -551,7 +573,7 @@ function quickAdd(){
   let inbox = Object.values(state.folders).find(f=>f.name==='受信箱'&&f.parentId===null);
   if(!inbox){ const id=uid(); state.folders[id]={id,name:'受信箱',parentId:null,createdAt:now()}; inbox=state.folders[id]; }
   const id=uid();
-  state.cards[id]={id,folderId:inbox.id,term,pron:'',mean:'',exEn:'',exJa:'',note:'',tags:[],
+  state.cards[id]={id,folderId:inbox.id,term,pron:'',mean:'',exEn:'',exJa:'',other:'',pos:[],
     srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now()};
   save(); inp.value=''; toast('「'+term+'」を受信箱に追加');
   renderHome();
@@ -562,29 +584,31 @@ function quickAdd(){
    ==================================================================== */
 let currentFolder=null;
 let noteSearch='';
+let currentCardView=null; // card id when viewing detail
 
 function renderNotes(){
   const v=document.getElementById('view-notes');
-  // breadcrumbs
+  // card detail (read) view
+  if(currentCardView && state.cards[currentCardView]){ renderCardDetail(v); return; }
+  currentCardView=null;
+
+  // breadcrumbs (display only — not tappable)
   const trail=[]; let f = currentFolder?state.folders[currentFolder]:null;
   while(f){ trail.unshift(f); f=f.parentId?state.folders[f.parentId]:null; }
-  const crumbs = `<div class="crumbs">
-    <button onclick="currentFolder=null;renderNotes()">${currentFolder?'ノート':'<span class=here>ノート</span>'}</button>
-    ${trail.map((t,i)=>`<span class="sep">›</span>${i===trail.length-1?`<span class="here">${esc(t.name)}</span>`:`<button onclick="currentFolder='${t.id}';renderNotes()">${esc(t.name)}</button>`}`).join('')}
-  </div>`;
+  const crumbs = `<div class="crumbs"><span class="${currentFolder?'':'here'}">ノート</span>${trail.map((t,i)=>`<span class="sep">›</span><span class="${i===trail.length-1?'here':''}">${esc(t.name)}</span>`).join('')}</div>`;
 
   let body;
   if(noteSearch){
     const q=noteSearch.toLowerCase();
     const hits=Object.values(state.cards).filter(c=>
-      (c.term+c.mean+c.exEn+c.exJa+(c.tags||[]).join('')).toLowerCase().includes(q));
+      (c.term+c.mean+c.exEn+c.exJa+(c.pos||[]).join('')+(c.other||'')).toLowerCase().includes(q));
     body = hits.length? `<div class="list">${hits.map(cardRow).join('')}</div>` :
       `<div class="empty">${I.search}<div class="t">見つかりません</div><div class="d">別のキーワードで試してください</div></div>`;
   } else {
     const folders=childFolders(currentFolder);
     const cards=folderCards(currentFolder);
     if(folders.length===0 && cards.length===0){
-      body=`<div class="empty">${I.inbox}<div class="t">まだ空です</div><div class="d">フォルダやカードを追加して<br>単語をまとめましょう</div></div>`;
+      body=`<div class="empty">${I.inbox}<div class="t">まだ空です</div><div class="d">右上の「追加」から<br>フォルダやカードを作成しましょう</div></div>`;
     } else {
       body=`<div class="list">
         ${folders.map(folderRow).join('')}
@@ -593,17 +617,61 @@ function renderNotes(){
     }
   }
 
+  const atRoot = !currentFolder;
   v.innerHTML=`
     <div class="topbar"><h1>ノート</h1></div>
-    <div class="searchbar">${I.search}<input placeholder="単語・意味・タグを検索" value="${esc(noteSearch)}" oninput="noteSearch=this.value;renderNotes()" />${noteSearch?`<button onclick="noteSearch='';renderNotes()" style="color:var(--ink-3)">✕</button>`:''}</div>
-    ${noteSearch?'':crumbs}
+    <div class="searchbar">${I.search}<input placeholder="単語・意味・品詞を検索" value="${esc(noteSearch)}" oninput="noteSearch=this.value;renderNotes()" />${noteSearch?`<button onclick="noteSearch='';renderNotes()" style="color:var(--ink-3)">✕</button>`:''}</div>
     ${noteSearch?'':`<div class="note-actions">
-      <button class="btn btn-ghost" onclick="editFolder()">${I.folderPlus}フォルダ</button>
-      <button class="btn btn-primary" onclick="editCard()">${I.cardPlus}カード</button>
+      <button class="btn btn-ghost" onclick="goUpFolder()" ${atRoot?'disabled style="opacity:.4"':''}>${I.back} 戻る</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-primary" onclick="openAddMenu()">${I.plus} 追加</button>
     </div>`}
+    ${noteSearch?'':crumbs}
     ${body}`;
-  // keep focus caret
   const si=v.querySelector('.searchbar input'); if(noteSearch&&si){ si.focus(); si.setSelectionRange(si.value.length,si.value.length); }
+}
+
+function goUpFolder(){
+  if(!currentFolder) return;
+  const f=state.folders[currentFolder];
+  currentFolder = f && f.parentId ? f.parentId : null;
+  noteSearch=''; renderNotes();
+}
+function openAddMenu(){
+  openModal(`
+    <h2>追加</h2>
+    <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();editFolder()">${I.folderPlus} フォルダを追加</button>
+    <button class="btn btn-primary full" style="padding:15px;justify-content:flex-start;gap:12px" onclick="closeModal();editCard()">${I.cardPlus} カードを追加</button>
+    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>
+  `);
+}
+
+function viewCard(id){ currentCardView=id; renderNotes(); }
+function closeCardView(){ currentCardView=null; renderNotes(); }
+
+function renderCardDetail(v){
+  const c=state.cards[currentCardView];
+  const spk=t=>`<button class="spk" onclick="speak('${esc(t).replace(/'/g,"\\'")}')" aria-label="読み上げ">${I.speaker}</button>`;
+  v.innerHTML=`
+    <div class="topbar"><h1>ノート</h1></div>
+    <button class="cd-back" onclick="closeCardView()">${I.back} 一覧へ戻る</button>
+    <div class="cd-card">
+      <div class="cd-head">
+        <div>
+          <div class="cd-term">${esc(c.term)}</div>
+          ${c.pron?`<div class="cd-pron">${esc(c.pron)}</div>`:''}
+        </div>
+        ${spk(c.term)}
+      </div>
+      ${(c.pos&&c.pos.length)?`<div class="cd-pos">${c.pos.map(p=>`<span class="pos-chip">${esc(p)}</span>`).join('')}</div>`:''}
+      <div class="cd-sec"><div class="lab">意味</div><div class="val">${esc(c.mean)||'<span style="color:var(--ink-3)">未入力</span>'}</div></div>
+      ${c.exEn?`<div class="cd-sec"><div class="lab">例文</div><div class="cd-ex"><div class="en">${esc(c.exEn)} ${spk(c.exEn)}</div>${c.exJa?`<div class="ja">${esc(c.exJa)}</div>`:''}</div></div>`:''}
+      ${c.other?`<div class="cd-sec"><div class="lab">その他</div><div class="val">${esc(c.other)}</div></div>`:''}
+    </div>
+    <div class="cd-actions">
+      <button class="btn btn-ghost" style="flex:1;padding:14px" onclick="deleteCard('${c.id}')">削除</button>
+      <button class="btn btn-primary" style="flex:2;padding:14px" onclick="editCard('${c.id}')">${I.gear} 編集する</button>
+    </div>`;
 }
 function folderRow(f){
   const cnt=cardsInTree(f.id).length, sub=childFolders(f.id).length;
@@ -619,12 +687,12 @@ function cardRow(c){
   const dot = c.srs.state==='new'?'var(--amber)':(isDue?'var(--green)':'var(--line)');
   return `<div class="card-row">
     <button class="spk" onclick="event.stopPropagation();speak('${esc(c.term).replace(/'/g,"\\'")}')" aria-label="読み上げ">${I.speaker}</button>
-    <div class="term-wrap" onclick="editCard('${c.id}')">
+    <div class="term-wrap" onclick="viewCard('${c.id}')">
       <div class="term">${esc(c.term)}</div>
       <div class="mean">${esc(c.mean)|| '<span style=color:var(--ink-3)>意味は未入力</span>'}</div>
     </div>
     <span class="due-dot" style="background:${dot}" title="${c.srs.state==='new'?'未学習':(isDue?'復習可':'習得中')}"></span>
-    <span class="chev" onclick="editCard('${c.id}')">${I.chev}</span>
+    <span class="chev" onclick="viewCard('${c.id}')">${I.chev}</span>
   </div>`;
 }
 
@@ -673,7 +741,8 @@ function editCard(id, prefill){
     <div class="mfield"><label>意味</label><textarea id="cMean" placeholder="気が進まない、しぶしぶの">${esc(c.mean)}</textarea></div>
     <div class="mfield"><label>例文（英語）</label><textarea id="cExEn" placeholder="She was reluctant to leave.">${esc(c.exEn)}</textarea></div>
     <div class="mfield"><label>例文の訳（任意）</label><textarea id="cExJa" placeholder="彼女は帰りたがらなかった。">${esc(c.exJa)}</textarea></div>
-    <div class="mfield"><label>メモ・タグ（カンマ区切り）</label><input id="cTags" value="${esc((c.tags||[]).join(', '))}" placeholder="形容詞, ビジネス" /></div>
+    <div class="mfield"><label>品詞（カンマ区切り・複数可）</label><input id="cPos" value="${esc((c.pos||[]).join(', '))}" placeholder="形容詞, 名詞" /></div>
+    <div class="mfield"><label>その他（任意）</label><textarea id="cOther" placeholder="類似表現、別の品詞での意味、使い方のメモなど">${esc(c.other||'')}</textarea></div>
     <div class="mfield"><label>保存先フォルダ</label><select id="cFolder">${folderOpts}</select></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">キャンセル</button>
@@ -698,24 +767,26 @@ function folderSelectOptions(sel){
 function saveCard(id){
   const term=document.getElementById('cTerm').value.trim();
   if(!term){ toast('単語を入力してください'); return; }
-  const tags=document.getElementById('cTags').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const pos=document.getElementById('cPos').value.split(',').map(s=>s.trim()).filter(Boolean);
   const folderId=document.getElementById('cFolder').value;
   const data={
     term, pron:document.getElementById('cPron').value.trim(),
     mean:document.getElementById('cMean').value.trim(),
     exEn:document.getElementById('cExEn').value.trim(),
     exJa:document.getElementById('cExJa').value.trim(),
-    tags, folderId
+    other:document.getElementById('cOther').value.trim(),
+    pos, folderId
   };
   if(id){ Object.assign(state.cards[id], data); }
-  else { const nid=uid(); state.cards[nid]={id:nid,...data,note:'',srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now()}; }
+  else { const nid=uid(); state.cards[nid]={id:nid,...data,srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now()}; }
   save(); closeModal();
-  if(currentTab==='notes') renderNotes(); else renderHome();
+  if(currentTab==='notes'){ if(id) currentCardView=id; renderNotes(); } else renderHome();
   toast('保存しました');
 }
 function deleteCard(id){
   if(!confirm('このカードを削除しますか？')) return;
-  delete state.cards[id]; save(); closeModal(); renderNotes(); toast('削除しました');
+  delete state.cards[id]; if(currentCardView===id) currentCardView=null;
+  save(); closeModal(); renderNotes(); toast('削除しました');
 }
 
 /* ====================================================================
@@ -821,7 +892,8 @@ function renderStudySession(){
             <div class="b-term">${esc(c.term)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:30px;height:30px" onclick="event.stopPropagation();speak('${esc(c.term).replace(/'/g,"\\'")}')">${I.speaker}</button></div>
             <div class="b-mean">${esc(c.mean)||'<span style=color:var(--ink-3);font-weight:400>意味が未入力です</span>'}</div>
             ${c.exEn?`<div class="b-ex"><div class="en">${esc(c.exEn)}</div>${c.exJa?`<div class="ja">${esc(c.exJa)}</div>`:''}</div>`:''}
-            ${(c.tags&&c.tags.length)?`<div class="b-note">${c.tags.map(t=>`<span class="tag-chip">${esc(t)}</span>`).join('')}</div>`:''}
+            ${(c.pos&&c.pos.length)?`<div class="b-note">${c.pos.map(p=>`<span class="pos-chip">${esc(p)}</span>`).join('')}</div>`:''}
+            ${c.other?`<div class="b-note">${esc(c.other)}</div>`:''}
           </div>
         </div>
       </div>
@@ -940,7 +1012,7 @@ const AI_MODES={
   nuance:{label:'ニュアンス解説',convo:false,ph:'違いを知りたい語を入力（例：see / watch）',phs:'語を入力…',sys:'You explain nuance and usage differences of English words/phrases for Japanese learners, in Japanese, with examples.'},
   translate:{label:'翻訳',convo:false,ph:'日本語↔英語を翻訳します',phs:'文章を入力…',sys:'Translate between Japanese and English naturally. If the input is Japanese, give natural English; if English, give natural Japanese. Add a short note on nuance if helpful.'}
 };
-const CARD_SYS='You output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"term":string,"pron":IPA string,"mean":Japanese meaning,"exEn":English example,"exJa":Japanese translation of the example}. No markdown.';
+const CARD_SYS='You output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"term":string,"pron":IPA string,"mean":concise Japanese meaning,"exEn":natural English example,"exJa":Japanese translation of the example,"pos":array of ALL applicable Japanese parts of speech for this term (e.g. ["形容詞","名詞"]; if both a noun and adjective exist, include both. For phrases use ["フレーズ"] or ["句動詞"]),"other":a short Japanese note of extra info — for a phrase give similar expressions; for a word give other parts of speech/meanings or usage tips}. mean, exJa, pos and other MUST be in Japanese. No markdown, no code fences.';
 
 function ensureThreads(){
   if(!Array.isArray(state.threads)) state.threads=[];
@@ -1126,7 +1198,7 @@ function saveAICard(i){
   const m=t.messages[i]; if(!m||!m.card) return;
   const c=m.card;
   setTab('notes');
-  editCard(null,{term:c.term||'',pron:c.pron||'',mean:c.mean||'',exEn:c.exEn||'',exJa:c.exJa||'',tags:[]});
+  editCard(null,{term:c.term||'',pron:c.pron||'',mean:c.mean||'',exEn:c.exEn||'',exJa:c.exJa||'',pos:Array.isArray(c.pos)?c.pos:(c.pos?[c.pos]:[]),other:c.other||''});
 }
 function autoGrow(t){ t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,120)+'px'; }
 function isMobile(){ return /Mobi|Android|iPhone/i.test(navigator.userAgent); }
@@ -1149,7 +1221,9 @@ async function sendAI(){
       const content=await callAI([{role:'system',content:CARD_SYS},{role:'user',content:text}],{json:true,temp:0.5});
       let card; try{ card=JSON.parse(content); }catch(e){ card=null; }
       if(card&&card.term){
-        t.messages.push({role:'assistant',content:`📘 ${card.term} ${card.pron||''}\n意味：${card.mean||''}\n例：${card.exEn||''}\n　　${card.exJa||''}`,card});
+        const posLine=(Array.isArray(card.pos)&&card.pos.length)?`\n品詞：${card.pos.join('・')}`:'';
+        const otherLine=card.other?`\nその他：${card.other}`:'';
+        t.messages.push({role:'assistant',content:`📘 ${card.term} ${card.pron||''}${posLine}\n意味：${card.mean||''}\n例：${card.exEn||''}\n　　${card.exJa||''}${otherLine}`,card});
       } else {
         t.messages.push({role:'assistant',content});
       }
@@ -1233,13 +1307,16 @@ async function aiFillCard(){
   if(!term){ toast('先に単語を入力してください'); return; }
   const btn=document.getElementById('aiGenBtn'); btn.disabled=true; btn.innerHTML=I.sparkle+' 生成中…';
   try{
-    const sys='Output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"pron":IPA,"mean":Japanese meaning (concise),"exEn":natural English example,"exJa":Japanese translation}. No markdown.';
+    const sys='Output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"pron":IPA,"mean":concise Japanese meaning,"exEn":natural English example,"exJa":Japanese translation,"pos":array of ALL applicable Japanese parts of speech (e.g. ["形容詞","名詞"]),"other":short Japanese note of extra info (similar expressions for phrases, other parts of speech/meanings or usage tips for words)}. Japanese for mean/exJa/pos/other. No markdown.';
     const content=await callAI([{role:'system',content:sys},{role:'user',content:term}],{json:true,temp:0.4});
     const c=JSON.parse(content);
     if(c.pron) document.getElementById('cPron').value=c.pron;
     if(c.mean) document.getElementById('cMean').value=c.mean;
     if(c.exEn) document.getElementById('cExEn').value=c.exEn;
     if(c.exJa) document.getElementById('cExJa').value=c.exJa;
+    if(Array.isArray(c.pos)&&c.pos.length) document.getElementById('cPos').value=c.pos.join(', ');
+    else if(typeof c.pos==='string'&&c.pos) document.getElementById('cPos').value=c.pos;
+    if(c.other) document.getElementById('cOther').value=c.other;
     toast('生成しました（確認して保存）');
   }catch(err){ toast('生成に失敗: '+(/40[013]/.test(err.message)?'キーが無効':/429/.test(err.message)?'利用上限の可能性':/50[0234]/.test(err.message)?'サーバー混雑（再試行を）':'通信エラー')); }
   btn.disabled=false; btn.innerHTML=I.sparkle+' AIで意味・例文を生成';
