@@ -589,7 +589,7 @@ async function cloudInit(){
   if(!cloudConfigured()) return;
   try{
     await loadSupabaseSDK();
-    _sb=window.supabase.createClient(CLOUD.url, CLOUD.anonKey);
+    _sb=window.supabase.createClient(CLOUD.url, CLOUD.anonKey, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, flowType:'pkce' } });
     const { data } = await _sb.auth.getSession();
     if(data && data.session) account.user=data.session.user;
     _sb.auth.onAuthStateChange((_e,session)=>{
@@ -658,8 +658,9 @@ async function authSignIn(){
   catch(e){ toast('ログインに失敗：'+(e.message||'')); }
 }
 async function authGoogle(){
-  try{ await _sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo: location.href.split('#')[0] } }); }
-  catch(e){ toast('Googleログインに失敗：'+(e.message||'')); }
+  if(!_sb){ toast('準備中です。少し待って再度お試しください'); return; }
+  try{ const { error }=await _sb.auth.signInWithOAuth({ provider:'google', options:{ redirectTo: location.origin + location.pathname } }); if(error) throw error; }
+  catch(e){ toast('Googleログインに失敗：'+(e.message||'設定を確認してください')); }
 }
 async function authSignOut(){
   try{ await _sb.auth.signOut(); }catch(e){}
@@ -3292,6 +3293,9 @@ let ntFunc='chat', ntTitle='', ntPrompt=''; // new-thread modal draft
    AI (ChatGPT / Gemini)
    ==================================================================== */
 let aiBusy=false;
+let chatDrafts={};
+try{ chatDrafts=JSON.parse(localStorage.getItem('sprout_drafts')||'{}')||{}; }catch(_){ chatDrafts={}; }
+function setDraft(id,val){ if(!id) return; if(val) chatDrafts[id]=val; else delete chatDrafts[id]; try{ localStorage.setItem('sprout_drafts', JSON.stringify(chatDrafts)); }catch(_){ } }
 const AI_MODES={
   chat:{label:'チューター',convo:true,ph:'英語について何でも質問できます',phs:'メッセージを入力…',sys:'You are a friendly, encouraging English tutor for a Japanese learner. Reply concisely in Japanese unless asked otherwise. Use simple explanations and give example sentences.'},
   card:{label:'単語をカード化',convo:false,ph:'単語を送るとカード化できます',phs:'単語・フレーズ…',sys:'CARD'},
@@ -3486,15 +3490,16 @@ function renderThread(){
         : t.messages.map((m,i)=>msgHtml(m,i)).join('')}
     </div>
     <div class="chat-input">
-      <textarea id="chatInput" rows="1" placeholder="${esc(f.phs)}" oninput="autoGrow(this)" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!isMobile()){event.preventDefault();sendAI();}"></textarea>
+      <textarea id="chatInput" rows="1" placeholder="${esc(f.phs)}" oninput="autoGrow(this);setDraft(activeThreadId,this.value)" onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!isMobile()){event.preventDefault();sendAI();}"></textarea>
       <button class="send-btn" id="sendBtn" onclick="sendAI()" ${aiBusy?'disabled':''}>${I.send}</button>
     </div>`;
   const log=document.getElementById('chatLog'); if(log) log.scrollTop=log.scrollHeight;
+  const ci=document.getElementById('chatInput'); if(ci){ const dr=chatDrafts[t.id]||''; if(dr){ ci.value=dr; autoGrow(ci); } }
 }
 function clearThread(){
   const t=getThread(activeThreadId); if(!t) return;
   if(t.messages.length && !confirm('この会話を消去しますか？')) return;
-  t.messages=[]; save(); renderThread();
+  t.messages=[]; setDraft(t.id,''); save(); renderThread();
 }
 function msgHtml(m,i){
   if(m.role==='user') return `<div class="msg user">${esc(m.content)}</div>`;
@@ -3542,7 +3547,7 @@ async function sendAI(){
   const text=inp.value.trim();
   if(!text) return;
   if(!aiReady()){ toast(aiEnabled()?'設定でAPIキーを入力してください':'設定でAIをオンにしてください'); return; }
-  inp.value=''; autoGrow(inp);
+  inp.value=''; autoGrow(inp); setDraft(t.id,'');
   t.messages.push({role:'user',content:text}); save();
   await generateReply(t, text);
 }
@@ -3746,13 +3751,13 @@ function renderSettings(){
         <div class="d" style="margin-top:8px">登録すると単語・履歴がクラウドに保存され、別の端末でも同じデータで学習できます。</div>`)}
     </div>
 
-    <button class="sec-collapse" onclick="aiSectionOpen=!aiSectionOpen;renderSettings()">
-      <span class="section-title">AI連携</span>
-      <span class="sum">${managedAI()?'アプリのAIが有効':(s.aiProvider==='none'?'オフ':(aiProviderName()+(aiKey()?'・設定済み':'・未設定')))}</span>
-      <span class="chev ${aiSectionOpen?'open':''}">${I.chev}</span>
-    </button>
-    ${aiSectionOpen?`
+    <div class="section-title">AI連携</div>
     <div class="set-group">
+      <div class="set-row" style="cursor:pointer" onclick="aiSectionOpen=!aiSectionOpen;renderSettings()">
+        <div><div class="l">AI連携の設定</div><div class="d">${managedAI()?'アプリのAIが有効（キー不要）':(s.aiProvider==='none'?'オフ ・ タップして設定':(aiProviderName()+(aiKey()?' ・ 設定済み':' ・ 未設定')))}</div></div>
+        <span class="chev ${aiSectionOpen?'open':''}">${I.chev}</span>
+      </div>
+    ${aiSectionOpen?`
       ${managedAI()?`
       <div class="field">
         <div class="key-set" style="background:var(--green-soft);border-color:var(--green)"><span class="lbl">${I.check} アプリのAIが有効です（キー不要）</span></div>
@@ -3806,7 +3811,8 @@ function renderSettings(){
       <button class="btn btn-primary full" style="padding:13px" onclick="saveSettings()">${I.check} 保存</button>
       `:''}
       ${s.aiProvider==='none'?`<div class="field" style="text-align:center;color:var(--ink-2)">AIはオフです。いつでもここからオンにできます。</div>`:''}
-    </div>`:''}
+    `:''}
+    </div>
 
     <div class="section-title">学習</div>
     <div class="set-group">
