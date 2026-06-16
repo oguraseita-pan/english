@@ -314,6 +314,12 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .compo-edit{width:100%;background:transparent;text-align:center;font-family:var(--font-en);font-size:1.16rem;margin-top:18px;padding:10px 12px;border-bottom:2px solid var(--line);}
 .compo-edit:focus{border-color:var(--green);}
 .compo-result-head{text-align:center;padding:12px 0 6px;}
+.compo-grade{display:flex;gap:10px;margin-top:16px;}
+.compo-grade .gb{flex:1;padding:15px 10px;border-radius:14px;border:2px solid var(--line);background:var(--surface);box-shadow:var(--shadow);font-weight:700;font-size:1.05rem;color:var(--ink-2);display:flex;align-items:center;justify-content:center;gap:7px;transition:transform .1s;}
+.compo-grade .gb:active{transform:scale(.96);}
+.compo-grade .gb.sel-o{border-color:var(--r-good);background:var(--green-soft);color:var(--r-good);}
+.compo-grade .gb.sel-x{border-color:var(--r-again);background:#fdecea;color:var(--r-again);}
+.grade-hint{text-align:center;font-size:.78rem;color:var(--ink-3);margin-top:12px;font-weight:600;}
 .speech-theme{font-size:1.25rem;font-weight:700;line-height:1.55;background:var(--surface);box-shadow:var(--shadow);border-radius:16px;padding:18px;text-align:center;margin-top:6px;}
 .speech-timer{font-family:var(--font-en);font-size:2.4rem;font-weight:600;text-align:center;margin:12px 0 2px;}
 .speech-input{width:100%;background:var(--surface);box-shadow:var(--shadow);border-radius:14px;padding:13px 14px;font-family:var(--font-en);font-size:1.02rem;resize:none;margin-top:14px;line-height:1.4;}
@@ -487,6 +493,7 @@ const I = {
   mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>',
   refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5"/></svg>',
   book:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM19 3v18"/></svg>',
+  movef:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 13h6M13 11l2 2-2 2"/></svg>',
   flame:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1 4-2 5-2 8a4 4 0 0 0 8 0c0-1-.5-2-1-3 2 1 3 3.5 3 6a8 8 0 1 1-16 0c0-4 3-6 4-9 1 1 1.5 2 2 3z"/></svg>',
   doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></svg>',
   speech:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.4 9 9 0 0 1-4-1l-4 1 1-3.5a8.38 8.38 0 0 1-1-4A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>',
@@ -509,6 +516,7 @@ function defaultState(){
 function normalizeState(){
   state.settings = Object.assign(defaultState().settings, state.settings || {});
   if(!state.stats) state.stats = defaultState().stats;
+  if(!state.progress || typeof state.progress!=='object') state.progress = {}; // preset/idiom 学習進捗（永続SRS）
   if(!state.history || typeof state.history!=='object') state.history = {compo:[],speech:[]};
   if(!Array.isArray(state.history.compo)) state.history.compo=[];
   if(!Array.isArray(state.history.speech)) state.history.speech=[];
@@ -939,6 +947,7 @@ function folderRowEdit(f){
     <div class="meta" style="cursor:pointer" onclick="editFolder('${f.id}')"><div class="nm">${esc(f.name)}</div><div class="ct">${cnt}枚${sub?` ・ ${sub}フォルダ`:''}・タップで編集</div></div>
     <div class="row-ctrls">
       <button class="rc del" onclick="deleteFolder('${f.id}')" aria-label="削除">${I.trash}</button>
+      <button class="rc" onclick="openMoveTo('${f.id}','folder')" aria-label="移動">${I.movef}</button>
       <div class="drag-handle" aria-label="並び替え">${I.grip}</div>
     </div>
   </div>`;
@@ -956,11 +965,43 @@ function cardRowEdit(c){
     </div>
     <div class="row-ctrls">
       <button class="rc del" onclick="deleteCard('${c.id}')" aria-label="削除">${I.trash}</button>
+      <button class="rc" onclick="openMoveTo('${c.id}','card')" aria-label="移動">${I.movef}</button>
       <div class="drag-handle" aria-label="並び替え">${I.grip}</div>
     </div>
   </div>`;
 }
-
+function folderDepth(fid){ let d=0,f=state.folders[fid]; while(f&&f.parentId){ d++; f=state.folders[f.parentId]; } return d; }
+function openMoveTo(id, kind){
+  const exclude = kind==='folder' ? new Set(descendantFolderIds(id)) : new Set();
+  const curParent = kind==='folder' ? (state.folders[id]&&state.folders[id].parentId) : (state.cards[id]&&state.cards[id].folderId);
+  const all=Object.values(state.folders).filter(f=>!exclude.has(f.id)).sort((a,b)=>a.name.localeCompare(b.name,'ja'));
+  // order folders so each appears under its parent (simple: sort by full path)
+  const path=f=>{ let names=[],x=f; while(x){ names.unshift(x.name); x=x.parentId?state.folders[x.parentId]:null; } return names.join(' › '); };
+  all.sort((a,b)=>path(a).localeCompare(path(b),'ja'));
+  const rowH=(val,label,depth,disabled)=>`<div class="deck-row" ${disabled?'style="opacity:.4;pointer-events:none"':`onclick="doMoveTo('${id}','${kind}','${val}')"`}>
+      <div class="ico" style="width:34px;height:34px;border-radius:9px;background:var(--green-soft);color:var(--green);display:grid;place-items:center;margin-left:${depth*14}px">${I.folder}</div>
+      <div class="meta"><div class="nm">${esc(label)}</div></div>${val===(curParent||'')?'<span style="color:var(--ink-3);font-size:.8rem">現在地</span>':`<span class="chev">${I.chev}</span>`}</div>`;
+  const list=[ rowH('', '最上位（ルート）', 0, (curParent||'')==='') ]
+    .concat(all.map(f=>rowH(f.id, f.name, folderDepth(f.id), f.id===(curParent||'') )));
+  openModal(`
+    <h2>移動先を選ぶ</h2>
+    <p class="d" style="margin:0 0 12px;font-size:.85rem">${kind==='folder'?'フォルダ':'カード'}「${esc(kind==='folder'?(state.folders[id]&&state.folders[id].name):(state.cards[id]&&(state.cards[id].term||state.cards[id].title||'カード')))}」の移動先フォルダを選んでください。</p>
+    <div class="deck-pick" style="max-height:50vh;overflow:auto">${list.join('')}</div>
+    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>`);
+}
+function doMoveTo(id, kind, dest){
+  const target = dest || null;
+  if(kind==='folder'){
+    if(id===target){ toast('同じ場所です'); return; }
+    if(target && descendantFolderIds(id).indexOf(target)>=0){ toast('自分の中には移動できません'); return; }
+    if(!state.folders[id]) return;
+    state.folders[id].parentId=target; state.folders[id].order=null;
+  } else {
+    if(!state.cards[id]) return;
+    state.cards[id].folderId=target; state.cards[id].order=null;
+  }
+  save(); closeModal(); renderNotes(); toast('移動しました');
+}
 function goUpFolder(){
   if(!currentFolder) return;
   const f=state.folders[currentFolder];
@@ -1234,7 +1275,7 @@ function deleteCard(id){
 /* ====================================================================
    STUDY
    ==================================================================== */
-let session=null, quiz=null, idiom=null, compo=null, speech=null, histView=null;
+let session=null, quiz=null, idiom=null, compo=null, speech=null, histView=null, wordList=null;
 const PRESET_LIB=[
   {id:"daily",name:"日常生活",levels:[
     {id:"beg",name:"初級",words:[
@@ -1286,6 +1327,18 @@ const PRESET_LIB=[
       ["study", "勉強する", "動詞", "I study English at night.", "夜に英語を勉強する。"],
       ["beautiful", "美しい", "形容詞", "What a beautiful sky!", "なんて美しい空だ！"],
       ["money", "お金", "名詞", "I don't have much money.", "あまりお金がない。"],
+      ["afternoon", "午後", "名詞", "See you this afternoon.", "また午後に会おう。"],
+      ["evening", "夕方・晩", "名詞", "Good evening!", "こんばんは！"],
+      ["vegetable", "野菜", "名詞", "Eat more vegetables.", "もっと野菜を食べて。"],
+      ["fruit", "果物", "名詞", "I like fresh fruit.", "新鮮な果物が好きだ。"],
+      ["clothes", "衣服", "名詞", "I bought new clothes.", "新しい服を買った。"],
+      ["street", "通り", "名詞", "Cross the street carefully.", "通りは気をつけて渡って。"],
+      ["river", "川", "名詞", "The river is beautiful.", "その川は美しい。"],
+      ["mountain", "山", "名詞", "We climbed a mountain.", "山に登った。"],
+      ["music", "音楽", "名詞", "I love listening to music.", "音楽を聴くのが好きだ。"],
+      ["movie", "映画", "名詞", "Let's watch a movie.", "映画を見よう。"],
+      ["restaurant", "レストラン", "名詞", "This restaurant is nice.", "このレストランはいいね。"],
+      ["airport", "空港", "名詞", "I'll meet you at the airport.", "空港で会おう。"],
     ]},
     {id:"int",name:"中級",words:[
       ["errand","用事","名詞","I have a few errands to run.","用事がいくつかある。"],
@@ -1336,6 +1389,18 @@ const PRESET_LIB=[
       ["a couple of", "2、3の", "フレーズ", "I'll be back in a couple of days.", "2、3日で戻ります。"],
       ["take turns", "交代でする", "フレーズ", "We take turns driving.", "交代で運転する。"],
       ["no longer", "もはや～ない", "フレーズ", "He no longer works here.", "彼はもうここで働いていない。"],
+      ["after all", "結局", "フレーズ", "After all, it was worth it.", "結局、その価値はあった。"],
+      ["in fact", "実際は", "フレーズ", "In fact, I already finished.", "実は、もう終わったんだ。"],
+      ["for example", "例えば", "フレーズ", "Try fruit, for example apples.", "例えばりんごなど果物を。"],
+      ["such as", "～のような", "フレーズ", "Sports such as tennis are fun.", "テニスのようなスポーツは楽しい。"],
+      ["right away", "すぐに", "フレーズ", "I'll do it right away.", "すぐにやります。"],
+      ["in advance", "前もって", "フレーズ", "Please book in advance.", "前もって予約してください。"],
+      ["at first", "最初は", "フレーズ", "At first, it seemed hard.", "最初は難しそうだった。"],
+      ["so far", "今のところ", "フレーズ", "So far, so good.", "今のところ順調だ。"],
+      ["be about to", "まさに～しようとする", "フレーズ", "I was about to leave.", "ちょうど出かけるところだった。"],
+      ["be supposed to", "～することになっている", "フレーズ", "You're supposed to wait here.", "ここで待つことになっている。"],
+      ["as well", "～も", "フレーズ", "I want this one as well.", "これも欲しい。"],
+      ["plenty of", "たくさんの", "フレーズ", "We have plenty of time.", "時間はたっぷりある。"],
     ]},
     {id:"adv",name:"上級",words:[
       ["procrastinate","先延ばしにする","動詞","I tend to procrastinate.","つい先延ばしにしてしまう。"],
@@ -1386,6 +1451,16 @@ const PRESET_LIB=[
       ["serene", "穏やかな", "形容詞", "The lake looked serene.", "湖は穏やかに見えた。"],
       ["hectic", "慌ただしい", "形容詞", "I had a hectic week.", "慌ただしい一週間だった。"],
       ["quirky", "風変わりな", "形容詞", "He has a quirky sense of humor.", "彼は風変わりなユーモアの持ち主だ。"],
+      ["ambivalent", "相反する感情の", "形容詞", "I feel ambivalent about it.", "それには複雑な思いだ。"],
+      ["conscientious", "誠実な・几帳面な", "形容詞", "She is a conscientious worker.", "彼女は誠実に働く。"],
+      ["impeccable", "完璧な", "形容詞", "His manners are impeccable.", "彼の作法は完璧だ。"],
+      ["articulate", "明確に話す", "形容詞", "She is very articulate.", "彼女は話が明快だ。"],
+      ["diligent", "勤勉な", "形容詞", "He is a diligent student.", "彼は勤勉な学生だ。"],
+      ["humble", "謙虚な", "形容詞", "Stay humble after success.", "成功しても謙虚でいて。"],
+      ["stubborn", "頑固な", "形容詞", "He can be quite stubborn.", "彼はかなり頑固だ。"],
+      ["gracious", "丁寧で寛大な", "形容詞", "She was a gracious host.", "彼女は丁寧なもてなしをした。"],
+      ["restless", "落ち着かない", "形容詞", "The kids were restless.", "子どもたちは落ち着かなかった。"],
+      ["vibrant", "活気のある", "形容詞", "a vibrant city", "活気あふれる街"],
     ]},
   ]},
   {id:"business",name:"ビジネス英語",levels:[
@@ -1431,6 +1506,9 @@ const PRESET_LIB=[
       ["priority", "優先事項", "名詞", "This is our top priority.", "これが最優先だ。"],
       ["feedback", "意見・反応", "名詞", "Thanks for your feedback.", "ご意見ありがとうございます。"],
       ["task", "仕事・課題", "名詞", "I have several tasks today.", "今日は仕事がいくつかある。"],
+      ["quote", "見積もり", "名詞", "Can you send a quote?", "見積もりを送ってくれる？"],
+      ["minutes", "議事録", "名詞", "Please take the minutes.", "議事録を取ってください。"],
+      ["workload", "仕事量", "名詞", "My workload is heavy.", "仕事量が多い。"],
     ]},
     {id:"adv",name:"上級",words:[
       ["stakeholder","利害関係者","名詞","We need stakeholder buy-in.","関係者の合意が必要だ。"],
@@ -1474,6 +1552,7 @@ const PRESET_LIB=[
       ["oversee", "監督する", "動詞", "She oversees the whole team.", "彼女はチーム全体を統括する。"],
       ["assess", "評価する", "動詞", "Let's assess the results.", "結果を評価しよう。"],
       ["optimize", "最適化する", "動詞", "We optimized the process.", "工程を最適化した。"],
+      ["liaise", "連絡を取り合う", "動詞", "Please liaise with the team.", "チームと連携して。"],
     ]},
   ]},
   {id:"toeic",name:"TOEIC",levels:[
@@ -1521,6 +1600,10 @@ const PRESET_LIB=[
       ["application", "申請（書）", "名詞", "Fill out the application.", "申請書に記入してください。"],
       ["attachment", "添付ファイル", "名詞", "See the attachment.", "添付ファイルをご覧ください。"],
       ["reservation", "予約", "名詞", "I made a reservation.", "予約を取りました。"],
+      ["venue", "会場", "名詞", "The venue holds 200 people.", "会場は200人収容できる。"],
+      ["merchandise", "商品", "名詞", "The merchandise is on sale.", "商品はセール中だ。"],
+      ["questionnaire", "アンケート", "名詞", "Please fill out the questionnaire.", "アンケートにご記入を。"],
+      ["referral", "紹介", "名詞", "a referral from a colleague", "同僚からの紹介"],
     ]},
     {id:"800",name:"800点レベル",words:[
       ["streamline","効率化する","動詞","We streamlined operations.","業務を効率化した。"],
@@ -1565,6 +1648,8 @@ const PRESET_LIB=[
       ["warrant", "正当化する・値する", "動詞", "This issue warrants attention.", "この問題は注目に値する。"],
       ["preliminary", "予備の・暫定の", "形容詞", "These are preliminary results.", "これは暫定的な結果です。"],
       ["subsequent", "その後の", "形容詞", "in subsequent meetings", "その後の会議で"],
+      ["waive", "免除する", "動詞", "We'll waive the fee.", "手数料を免除します。"],
+      ["mandate", "命じる・義務付ける", "動詞・名詞", "The law mandates safety checks.", "法は安全検査を義務付ける。"],
     ]},
   ]},
   {id:"toefl",name:"TOEFL",levels:[
@@ -1613,6 +1698,10 @@ const PRESET_LIB=[
       ["involve", "伴う", "動詞", "The process involves heat.", "その過程は熱を伴う。"],
       ["regard", "みなす", "動詞", "It is regarded as essential.", "それは不可欠とみなされる。"],
       ["approach", "手法・取り組み", "名詞", "a new approach to the problem", "問題への新しい手法"],
+      ["conduct", "行う・実施する", "動詞", "They conducted a survey.", "彼らは調査を行った。"],
+      ["examine", "調べる", "動詞", "Examine the samples closely.", "試料をよく調べて。"],
+      ["propose", "提案する", "動詞", "She proposed a new model.", "彼女は新しいモデルを提案した。"],
+      ["reveal", "明らかにする", "動詞", "The results reveal a pattern.", "結果はある型を明らかにする。"],
     ]},
     {id:"adv",name:"上級",words:[
       ["empirical","経験に基づく","形容詞","We need empirical evidence.","経験的な証拠が必要だ。"],
@@ -1660,6 +1749,14 @@ const PRESET_LIB=[
       ["delineate", "明確に示す", "動詞", "The map delineates the borders.", "地図は境界を明確に示す。"],
       ["encompass", "包含する", "動詞", "The term encompasses both ideas.", "その語は両方の概念を含む。"],
       ["contend", "主張する", "動詞", "Some scholars contend otherwise.", "異を唱える学者もいる。"],
+      ["hinder", "妨げる", "動詞", "Cost may hinder progress.", "費用が進展を妨げうる。"],
+      ["yield", "生み出す・もたらす", "動詞", "The experiment yielded data.", "実験はデータをもたらした。"],
+      ["comprise", "構成する", "動詞", "The set comprises ten parts.", "その組は10個から成る。"],
+      ["proliferate", "急増する", "動詞", "Such apps have proliferated.", "この種のアプリは急増した。"],
+      ["discern", "識別する", "動詞", "It's hard to discern the cause.", "原因を見分けるのは難しい。"],
+      ["attribute", "～に帰する", "動詞", "They attribute it to climate.", "それを気候のせいとする。"],
+      ["diverge", "分岐する", "動詞", "The paths diverge here.", "ここで道が分かれる。"],
+      ["converge", "収束する", "動詞", "The lines converge at a point.", "線は一点に収束する。"],
     ]},
   ]},
   {id:"eiken",name:"英検",levels:[
@@ -1709,6 +1806,12 @@ const PRESET_LIB=[
       ["arrive", "到着する", "動詞", "We arrived early.", "早く着いた。"],
       ["medicine", "薬", "名詞", "Take this medicine twice a day.", "この薬を1日2回飲んで。"],
       ["sightseeing", "観光", "名詞", "We went sightseeing.", "観光に行った。"],
+      ["subject", "教科・話題", "名詞", "Math is my favorite subject.", "数学が一番好きな教科だ。"],
+      ["dictionary", "辞書", "名詞", "Use a dictionary.", "辞書を使って。"],
+      ["exercise", "運動（する）", "名詞・動詞", "I exercise every day.", "毎日運動する。"],
+      ["imagine", "想像する", "動詞", "Imagine a peaceful place.", "静かな場所を想像して。"],
+      ["receive", "受け取る", "動詞", "I received your letter.", "手紙を受け取った。"],
+      ["climb", "登る", "動詞", "They climbed the hill.", "彼らは丘を登った。"],
     ]},
     {id:"g2",name:"2級",words:[
       ["purchase","購入する","動詞","I purchased a ticket.","チケットを購入した。"],
@@ -1756,6 +1859,14 @@ const PRESET_LIB=[
       ["reflect", "反映する", "動詞", "Prices reflect demand.", "価格は需要を反映する。"],
       ["remain", "～のままである", "動詞", "Please remain seated.", "座ったままでいてください。"],
       ["environment", "環境", "名詞", "We must protect the environment.", "環境を守らなければ。"],
+      ["describe", "描写する", "動詞", "Describe what you saw.", "見たものを説明して。"],
+      ["express", "表現する", "動詞", "Express your opinion.", "意見を述べて。"],
+      ["include", "含む", "動詞", "The price includes tax.", "価格に税が含まれる。"],
+      ["replace", "取り替える", "動詞", "Replace the batteries.", "電池を交換して。"],
+      ["avoid", "避ける", "動詞", "Avoid the busy roads.", "混んだ道を避けて。"],
+      ["achieve", "達成する", "動詞", "She achieved her dream.", "彼女は夢をかなえた。"],
+      ["support", "支える", "動詞", "I support your decision.", "あなたの決断を支持する。"],
+      ["afford", "余裕がある", "動詞", "I can't afford it.", "それを買う余裕がない。"],
     ]},
     {id:"pre1",name:"準1級",words:[
       ["acquire","習得する","動詞","She acquired new skills.","彼女は新しい技術を習得した。"],
@@ -1805,6 +1916,12 @@ const PRESET_LIB=[
       ["prone", "～しがちな", "形容詞", "He is prone to mistakes.", "彼はミスをしがちだ。"],
       ["vague", "曖昧な", "形容詞", "Your answer is too vague.", "君の答えは曖昧すぎる。"],
       ["coherent", "首尾一貫した", "形容詞", "Write a coherent essay.", "筋の通った文章を書いて。"],
+      ["subtle", "微妙な", "形容詞", "a subtle difference", "微妙な違い"],
+      ["thorough", "徹底的な", "形容詞", "a thorough review", "徹底的な見直し"],
+      ["abundant", "豊富な", "形容詞", "abundant resources", "豊富な資源"],
+      ["ample", "十分な", "形容詞", "ample time", "十分な時間"],
+      ["prominent", "著名な・目立つ", "形容詞", "a prominent scientist", "著名な科学者"],
+      ["diverse", "多様な", "形容詞", "a diverse team", "多様なチーム"],
     ]},
   ]},
 ];
@@ -1829,6 +1946,12 @@ const IDIOM_LIB=[
       ["Please ____ here.", "sit down", "座る"],
       ["He will ____ soon.", "come back", "戻ってくる"],
       ["I ____ around six.", "get home", "帰宅する"],
+      ["Please ____ when your name is called.", "stand up", "立ち上がる"],
+      ["I want to ____ for a while.", "lie down", "横になる"],
+      ["Please ____ and have a seat.", "come in", "入る"],
+      ["I'm ____ my keys.", "looking for", "探す"],
+      ["Let's ____ the next bus.", "get on", "乗る"],
+      ["Can I ____ these shoes?", "try on", "試着する"],
     ]},
     {id:"int",name:"中級",items:[
       ["I ____ an old friend at the mall.", "ran into", "偶然会った"],
@@ -1847,6 +1970,12 @@ const IDIOM_LIB=[
       ["Please ____ your report by Friday.", "hand in", "提出する"],
       ["I can't ____ the loud noise.", "put up with", "我慢する"],
       ["We don't always ____, but we respect each other.", "get along", "仲良くやる"],
+      ["I need to ____ these old clothes.", "get rid of", "処分する"],
+      ["Let's ____ a better plan.", "work out", "考え出す・うまくいく"],
+      ["She ____ early today.", "took off", "早退した・出発した"],
+      ["Please ____ the meeting room.", "set up", "用意する・設定する"],
+      ["Let's ____ over coffee.", "catch up", "近況を話す"],
+      ["I'll ____ you at the station.", "drop off", "送り届ける"],
     ]},
     {id:"adv",name:"上級",items:[
       ["I'm feeling ____ today, so I'll rest.", "under the weather", "体調が悪い"],
@@ -1865,6 +1994,12 @@ const IDIOM_LIB=[
       ["We finally ____ on the plan.", "saw eye to eye", "意見が一致した"],
       ["He tends to ____ his feelings.", "bottle up", "感情を抑え込む"],
       ["Let's ____ for today.", "call it a day", "切り上げる"],
+      ["Let's ____; we've earned it.", "let our hair down", "くつろぐ"],
+      ["The deal ____ at the last minute.", "fell through", "流れた・破談になった"],
+      ["It's no use ____.", "crying over spilt milk", "済んだことを悔やむ"],
+      ["He likes to ____ in debates.", "play devil's advocate", "あえて反対意見を言う"],
+      ["Let's not ____ too quickly.", "jump to conclusions", "早合点する"],
+      ["I was kept ____ about the plan.", "in the dark", "知らされていない"],
     ]},
   ]},
   {id:"business",name:"ビジネス英語",fmt:"flash",levels:[
@@ -1885,6 +2020,12 @@ const IDIOM_LIB=[
       ["Let's ____ on this action item.", "follow through", "最後までやり遂げる"],
       ["Can you ____ for me on Monday?", "fill in", "代わりを務める"],
       ["We need to ____ expenses.", "keep down", "抑える"],
+      ["Let's ____ the numbers before the call.", "go through", "一通り確認する"],
+      ["We should ____ this at the meeting.", "bring up", "議題に出す"],
+      ["Please ____ the key points.", "write down", "書き留める"],
+      ["Let's ____ the original plan.", "stick to", "〜を守る"],
+      ["Can you ____ the slides by noon?", "put together", "まとめる・作る"],
+      ["I'll ____ my tasks before I leave.", "hand over", "引き継ぐ"],
     ]},
     {id:"adv",name:"上級",items:[
       ["Let's ____ on priorities first.", "align", "認識を合わせる"],
@@ -1903,6 +2044,12 @@ const IDIOM_LIB=[
       ["Let's ____ expectations early.", "manage", "（期待値を）調整する"],
       ["They ____ the deal at the last minute.", "pulled out of", "手を引いた"],
       ["Let's ____ the project on Monday.", "kick off", "開始する"],
+      ["Let's ____ the requirements first.", "nail down", "確定させる"],
+      ["We need to ____ the timeline.", "firm up", "固める"],
+      ["Let's ____ the old system.", "phase out", "段階的に廃止する"],
+      ["They ____ the new project.", "greenlighted", "承認した"],
+      ["We need to ____ a few issues.", "iron out", "問題を解決する"],
+      ["Let's ____ the competition first.", "scope out", "下調べする"],
     ]},
   ]},
   {id:"toeic",name:"TOEIC",fmt:"choice",levels:[
@@ -1923,6 +2070,12 @@ const IDIOM_LIB=[
       ["Please adhere ____ the safety guidelines.", ["with", "to", "on", "for"], 1, "adhere to 〜を守る"],
       ["The seminar is open ____ all staff.", ["for", "to", "at", "of"], 1, "open to 〜に開かれた"],
       ["Payment is due ____ receipt of the invoice.", ["in", "upon", "at", "for"], 1, "upon 〜の時点で"],
+      ["The new policy takes ____ next week.", ["affect", "effect", "effective", "effectively"], 1, "take effect 発効する（名詞effect）"],
+      ["All employees must wear an ____ badge.", ["identify", "identification", "identity", "identified"], 1, "identification 身分証明（名詞）"],
+      ["The report must be submitted ____ noon.", ["until", "by", "since", "during"], 1, "by 〜までに（期限）"],
+      ["Thank you for your ____ to detail.", ["attend", "attention", "attentive", "attentively"], 1, "attention 注意（名詞）"],
+      ["We offer ____ shipping on all orders.", ["freely", "free", "freedom", "frees"], 1, "free 無料の（形容詞）"],
+      ["The store is conveniently ____ downtown.", ["locate", "located", "location", "locating"], 1, "located 位置している"],
     ]},
     {id:"800",name:"800点（Part 5形式）",items:[
       ["The new policy will ____ effect next month.", ["make", "take", "do", "get"], 1, "take effect 発効する"],
@@ -1941,6 +2094,12 @@ const IDIOM_LIB=[
       ["Profits have been ____ the rise.", ["in", "on", "at", "by"], 1, "on the rise 上昇傾向で"],
       ["All staff must ____ by the new policy.", ["comply", "abide", "adhere", "follow"], 1, "abide by 〜に従う"],
       ["The figures are ____ line with the forecast.", ["on", "in", "at", "by"], 1, "in line with 〜と一致して"],
+      ["The contract will ____ at month's end.", ["retire", "expire", "inspire", "require"], 1, "expire 期限切れになる"],
+      ["We need to ____ the budget before approval.", ["finalizing", "finalize", "final", "finally"], 1, "finalize 確定させる"],
+      ["Sales have grown ____ this year.", ["steady", "steadily", "steadiness", "steadied"], 1, "steadily 着実に（副詞）"],
+      ["The proposal was met ____ enthusiasm.", ["by", "with", "for", "to"], 1, "be met with 〜で迎えられる"],
+      ["All applicants are required ____ a test.", ["take", "to take", "taking", "taken"], 1, "be required to do 〜が求められる"],
+      ["The price is subject ____ change without notice.", ["for", "to", "of", "with"], 1, "subject to 〜の対象となる"],
     ]},
   ]},
   {id:"toefl",name:"TOEFL",fmt:"choice",levels:[
@@ -1961,6 +2120,12 @@ const IDIOM_LIB=[
       ["The data are consistent ____ the model.", ["to", "with", "of", "for"], 1, "consistent with 〜と一致して"],
       ["This factor plays a key ____ in growth.", ["point", "role", "side", "way"], 1, "play a role 役割を果たす"],
       ["Researchers drew a ____ between the two.", ["contrast", "comparison", "relation", "line"], 1, "draw a comparison 比較する"],
+      ["The experiment ____ the hypothesis.", ["agrees", "confirms", "accepts", "admits"], 1, "confirm 裏づける"],
+      ["Carbon dioxide ____ to global warming.", ["adds", "contributes", "gives", "makes"], 1, "contribute to 〜の一因となる"],
+      ["The results ____ a clear correlation.", ["tell", "show", "say", "speak"], 1, "show 示す"],
+      ["This theory ____ on several assumptions.", ["depends", "relies", "trusts", "counts"], 1, "rely on 〜に依拠する"],
+      ["The samples were ____ from a survey.", ["gotten", "obtained", "taken", "received"], 1, "obtain 得る"],
+      ["Temperature ____ a key role in the process.", ["does", "plays", "makes", "takes"], 1, "play a role 役割を果たす"],
     ]},
     {id:"adv",name:"上級（穴埋め4択）",items:[
       ["The evidence ____ the hypothesis.", ["makes", "supports", "gives", "does"], 1, "support 裏づける"],
@@ -1979,6 +2144,12 @@ const IDIOM_LIB=[
       ["The new data ____ the earlier theory.", ["oppose", "contradict", "deny", "refuse"], 1, "contradict 矛盾する"],
       ["We can ____ a pattern from the data.", ["guess", "infer", "assume", "suppose"], 1, "infer 推論する"],
       ["The study ____ light on the issue.", ["throws", "sheds", "puts", "makes"], 1, "shed light on 〜を解明する"],
+      ["The phenomenon ____ across cultures.", ["changes", "varies", "moves", "shifts"], 1, "vary 異なる"],
+      ["These factors are closely ____.", ["mixed", "intertwined", "joined", "packed"], 1, "intertwined 密接に絡み合った"],
+      ["New findings ____ the earlier study.", ["help", "corroborate", "match", "fit"], 1, "corroborate 裏づける"],
+      ["The model fails to ____ the anomaly.", ["count on", "account for", "take in", "bring up"], 1, "account for 〜を説明する"],
+      ["Researchers ____ the data carefully.", ["watched", "scrutinized", "viewed", "noticed"], 1, "scrutinize 精査する"],
+      ["The two theories ____ on key points.", ["separate", "diverge", "split", "break"], 1, "diverge 分かれる"],
     ]},
   ]},
   {id:"eiken",name:"英検",fmt:"choice",levels:[
@@ -1999,6 +2170,12 @@ const IDIOM_LIB=[
       ["Thank you ____ the wonderful gift.", ["to", "for", "of", "with"], 1, "thank you for 〜に感謝する"],
       ["Please turn ____ the TV.", ["in", "on", "of", "at"], 1, "turn on （電源を）つける"],
       ["I'm interested ____ history.", ["on", "in", "at", "of"], 1, "be interested in 〜に興味がある"],
+      ["He is ____ for being kind.", ["know", "known", "knowing", "knew"], 1, "be known for 〜で知られる"],
+      ["I'm looking ____ to the holidays.", ["ahead", "forward", "after", "back"], 1, "look forward to 〜を楽しみにする"],
+      ["Please take ____ of yourself.", ["look", "care", "hand", "part"], 1, "take care of 〜の世話をする"],
+      ["She is fond ____ animals.", ["at", "of", "in", "for"], 1, "be fond of 〜が好き"],
+      ["We arrived ____ time for the show.", ["on", "in", "at", "by"], 1, "in time for 〜に間に合って"],
+      ["Please turn ____ the lights when you leave.", ["on", "off", "in", "at"], 1, "turn off （明かりを）消す"],
     ]},
     {id:"g2",name:"2級（大問1形式）",items:[
       ["He ____ up early to study.", ["takes", "gets", "makes", "does"], 1, "get up 起きる"],
@@ -2017,6 +2194,12 @@ const IDIOM_LIB=[
       ["He ____ up with a clever idea.", ["got", "came", "took", "made"], 1, "come up with 思いつく"],
       ["I'm looking forward ____ the trip.", ["for", "to", "at", "on"], 1, "look forward to 〜を楽しみにする"],
       ["The plan ____ out to be successful.", ["came", "turned", "got", "went"], 1, "turn out （結果が）〜になる"],
+      ["He succeeded ____ passing the exam.", ["at", "in", "on", "for"], 1, "succeed in 〜に成功する"],
+      ["She is capable ____ doing it alone.", ["to", "of", "for", "with"], 1, "be capable of 〜できる"],
+      ["____ to your help, we finished early.", ["For", "Thanks", "Due", "Owing"], 1, "thanks to 〜のおかげで"],
+      ["We are used ____ getting up early.", ["for", "to", "at", "on"], 1, "be used to 〜に慣れている"],
+      ["He apologized ____ being late.", ["to", "for", "of", "with"], 1, "apologize for 〜を詫びる"],
+      ["I am responsible ____ this project.", ["to", "for", "of", "with"], 1, "be responsible for 〜を担当する"],
     ]},
     {id:"pre1",name:"準1級（大問1形式）",items:[
       ["We need to ____ a solution to this.", ["look up to", "come up with", "get away with", "put up with"], 1, "come up with 思いつく"],
@@ -2035,6 +2218,12 @@ const IDIOM_LIB=[
       ["They ____ off the outdoor event.", ["put", "called", "set", "took"], 1, "call off 中止する"],
       ["We ____ out of supplies quickly.", ["got", "ran", "came", "went"], 1, "run out of 〜を切らす"],
       ["She ____ down on people who fail.", ["looks", "puts", "gets", "comes"], 0, "look down on 〜を見下す"],
+      ["The plan was carried ____ successfully.", ["off", "out", "up", "in"], 1, "carry out 実行する"],
+      ["She came ____ a bad cold last week.", ["up with", "down with", "across", "into"], 1, "come down with （病気に）かかる"],
+      ["We must come ____ terms with the loss.", ["at", "to", "on", "in"], 1, "come to terms with 〜を受け入れる"],
+      ["He tends to look ____ on beginners.", ["up", "down", "out", "in"], 1, "look down on 〜を見下す"],
+      ["They ____ off the outdoor concert.", ["set", "put", "take", "get"], 1, "put off 延期する"],
+      ["I can't put ____ with this noise.", ["off", "up", "out", "in"], 1, "put up with 〜を我慢する"],
     ]},
   ]},
 ];
@@ -2042,6 +2231,7 @@ function idiomItem(it,fmt){ if(fmt==='choice'){ const ans=it[1][it[2]]; const ch
 function idiomTotalCount(){ let n=0; IDIOM_LIB.forEach(c=>c.levels.forEach(l=>n+=l.items.length)); return n; }
 function renderStudy(){
   if(session){ renderStudySession(); return; }
+  if(wordList){ renderWordList(); return; }
   if(quiz){ renderQuiz(); return; }
   if(idiom){ renderIdiom(); return; }
   if(compo){ renderCompo(); return; }
@@ -2102,15 +2292,11 @@ function studyMethodPick(fid){
   const arg = fid===null ? 'null' : `'${fid}'`;
   openModal(`
     <h2>学習方法</h2>
-    <p class="d" style="margin:0 0 12px;font-size:.85rem">このデッキの学習方法を選んでください。</p>
-    <button class="opt-btn" onclick="closeModal();startSession(${arg},'srs')">
-      <span class="oic">${I.flame}</span>
-      <span class="ot">忘却曲線で学習</span>
-    </button>
-    <button class="opt-btn" onclick="closeModal();startSession(${arg},'order')">
-      <span class="oic" style="background:var(--amber-soft);color:var(--amber-d)">${I.book}</span>
-      <span class="ot">追加順に学習</span>
-    </button>
+    <p class="d" style="margin:0 0 12px;font-size:.85rem">学習スタイルを選んでください（1回10問）。</p>
+    <button class="opt-btn" onclick="startSession(${arg},'srs')"><span class="oic">${I.flame}</span><span class="ot">忘却曲線で学習</span></button>
+    <button class="opt-btn" onclick="startSession(${arg},'random')"><span class="oic" style="background:var(--green-soft);color:var(--green)">${I.refresh}</span><span class="ot">ランダムで学習</span></button>
+    <button class="opt-btn" onclick="startSession(${arg},'unmastered')"><span class="oic" style="background:var(--amber-soft);color:var(--amber-d)">${I.trophy}</span><span class="ot">習得していないものから</span></button>
+    <button class="opt-btn" onclick="startSession(${arg},'order')"><span class="oic" style="background:var(--green-soft);color:var(--green)">${I.book}</span><span class="ot">追加順に学習</span></button>
     <div class="modal-actions" style="margin-top:8px"><button class="btn btn-ghost" onclick="originalDeckPick()">戻る</button></div>`);
 }
 function presetPick(){
@@ -2128,23 +2314,40 @@ function presetLevelPick(catId){
     <h2>${esc(cat.name)}</h2>
     <p class="d" style="margin:0 0 12px;font-size:.85rem">難易度を選んでください。</p>
     <div class="deck-pick">
-      ${cat.levels.map(l=>`<div class="deck-row" onclick="startPreset('${cat.id}','${l.id}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center">${I.trophy}</div><div class="meta"><div class="nm">${esc(l.name)}</div><div class="ct">${l.words.length}語</div></div><span class="chev">${I.chev}</span></div>`).join('')}
+      ${cat.levels.map(l=>`<div class="deck-row" onclick="presetStylePick('${cat.id}','${l.id}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center">${I.trophy}</div><div class="meta"><div class="nm">${esc(l.name)}</div><div class="ct">${l.words.length}語</div></div><span class="chev">${I.chev}</span></div>`).join('')}
     </div>
     <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="presetPick()">← カテゴリへ戻る</button></div>`);
+}
+function styleOptsHtml(startTmpl, listExpr){
+  // startTmpl: function(style)->onclick string
+  return `
+    <button class="opt-btn" onclick="${startTmpl('srs')}"><span class="oic">${I.flame}</span><span class="ot">忘却曲線で学習</span></button>
+    <button class="opt-btn" onclick="${startTmpl('random')}"><span class="oic" style="background:var(--green-soft);color:var(--green)">${I.refresh}</span><span class="ot">ランダムで学習</span></button>
+    <button class="opt-btn" onclick="${startTmpl('unmastered')}"><span class="oic" style="background:var(--amber-soft);color:var(--amber-d)">${I.trophy}</span><span class="ot">習得していないものから</span></button>
+    <button class="opt-btn" onclick="${listExpr}"><span class="oic" style="background:var(--green-soft);color:var(--green)">${I.book}</span><span class="ot">単語を一覧で見る</span></button>`;
+}
+function presetStylePick(catId, levelId){
+  const cat=PRESET_LIB.find(c=>c.id===catId); const lv=cat&&cat.levels.find(l=>l.id===levelId);
+  if(!lv){ toast('レベルが見つかりません'); return; }
+  openModal(`
+    <h2>${esc(cat.name)} / ${esc(lv.name)}</h2>
+    <p class="d" style="margin:0 0 12px;font-size:.85rem">学習スタイルを選んでください（1回10問）。</p>
+    ${styleOptsHtml(st=>`startPreset('${catId}','${levelId}','${st}')`, `showWordList('preset','${catId}','${levelId}')`)}
+    <div class="modal-actions" style="margin-top:8px"><button class="btn btn-ghost" onclick="presetLevelPick('${catId}')">← 難易度へ戻る</button></div>`);
 }
 
 /* ---------- SRS engine ---------- */
 function fmtDays(d){ if(d>=30){return Math.round(d/30)+'ヶ月';} if(d>=365){return Math.round(d/365)+'年';} return d+'日'; }
-function previewIvl(c,r){
-  const s=c.srs;
+function previewIvl(c,r){ return previewIvlSrs(c.srs,r); }
+function previewIvlSrs(s,r){
   if(s.state==='new'||s.state==='learning'){ return ['<1分','10分','1日','3日'][r]; }
   if(r===0) return '<1分';
   if(r===1) return fmtDays(Math.max(1,Math.round(s.interval*1.2)));
   if(r===2) return fmtDays(Math.max(1,Math.round(s.interval*s.ease)));
   return fmtDays(Math.max(1,Math.round(s.interval*(s.ease+0.15)*1.3)));
 }
-function schedule(c,r){
-  const s=c.srs;
+function schedule(c,r){ scheduleSrs(c.srs,r); }
+function scheduleSrs(s,r){
   if(s.state==='new'||s.state==='learning'){
     if(r===0){ s.state='learning'; s.interval=0; s.due=now()+60*1000; }
     else if(r===1){ s.state='learning'; s.due=now()+10*60*1000; }
@@ -2160,33 +2363,96 @@ function schedule(c,r){
     }
   }
 }
-
-function startSession(folderId, mode){
-  mode = mode||'srs';
-  const base=(folderId===null ? Object.values(state.cards) : cardsInTree(folderId)).filter(c=>c.type!=='text');
-  if(mode==='order'){
-    const items=[...base].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
-    if(items.length===0){ toast('このデッキにはカードがありません'); return; }
-    session=flashSession(items, 'オリジナルデッキ');
-    renderStudySession(); return;
-  }
+// ---- persistent progress for preset/idiom items ----
+function newSrs(){ return {state:'new',due:0,interval:0,ease:2.5,reps:0,lapses:0}; }
+function getProg(key){ if(!state.progress) state.progress={}; if(!state.progress[key]) state.progress[key]=newSrs(); return state.progress[key]; }
+function presetKey(catId,lvlId,term){ return 'p|'+catId+'|'+lvlId+'|'+String(term).toLowerCase(); }
+function idiomKeySig(catId,lvlId,sig){ return 'i|'+catId+'|'+lvlId+'|'+String(sig); }
+function masteryLabel(s){ if(!s||s.state==='new') return ['未学習','var(--ink-3)']; if(s.state==='learning') return ['学習中','var(--amber-d)']; if(s.interval>=21) return ['習得済み','var(--green)']; return ['復習中','var(--green)']; }
+function rankUnmastered(s){ if(s.state==='new') return 0; if(s.state==='learning') return 1; return 2 + Math.min(s.reps,8)*0.1 + Math.min(s.interval,90)*0.001; }
+// select up to 10 items from a pool (each item carries .srs) by learning style
+function selectItems(pool, style){
   const t=now();
-  const due=base.filter(c=>c.srs.state!=='new'&&c.srs.due<=t);
-  const news=base.filter(c=>c.srs.state==='new').slice(0,state.settings.newPerDay||20);
-  const pool=shuffle([...due,...news]);
-  if(pool.length===0){ toast('このデッキは今学習するカードがありません'); return; }
-  session={ mode:'srs', queue:pool.map(c=>c.id), graduated:new Set(), total:pool.length, flipped:false, folderId };
-  renderStudySession();
+  let arr;
+  if(style==='random'){ arr=shuffle(pool.slice()); }
+  else if(style==='unmastered'){ arr=pool.slice().sort((a,b)=>rankUnmastered(a.srs)-rankUnmastered(b.srs)); }
+  else if(style==='order'){ arr=pool.slice(); }
+  else { // 'srs' 忘却曲線：期限到来＋新規を優先、足りなければ近い順で補完
+    const due=pool.filter(p=>p.srs.state!=='new'&&p.srs.due<=t).sort((a,b)=>a.srs.due-b.srs.due);
+    const news=pool.filter(p=>p.srs.state==='new');
+    const rest=pool.filter(p=>p.srs.state!=='new'&&p.srs.due>t).sort((a,b)=>a.srs.due-b.srs.due);
+    arr=[...due,...news,...rest];
+  }
+  return arr.slice(0,10);
 }
-function startPreset(catId, levelId){
+// ---- pools ----
+function deckPool(folderId){ return (folderId===null?Object.values(state.cards):cardsInTree(folderId)).filter(c=>c.type!=='text'); }
+function presetPool(catId,lvlId){
+  const cat=PRESET_LIB.find(c=>c.id===catId); if(!cat) return [];
+  const lv=cat.levels.find(l=>l.id===lvlId); if(!lv) return [];
+  return lv.words.map(w=>{ const c=presetWord(w); c.srs=getProg(presetKey(catId,lvlId,c.term)); return c; });
+}
+function idiomFlashPool(catId,lvlId){
+  const cat=IDIOM_LIB.find(c=>c.id===catId); if(!cat) return [];
+  const lv=cat.levels.find(l=>l.id===lvlId); if(!lv) return [];
+  return lv.items.map(it=>({ term:it[1], pron:'', mean:it[2]||'', exEn:it[0].replace('____',it[1]), exJa:'', pos:['熟語'], other:'', srs:getProg(idiomKeySig(catId,lvlId,it[1])) }));
+}
+
+function startSession(folderId, style){
+  style = style||'srs';
+  const pool=deckPool(folderId);
+  if(!pool.length){ toast('このデッキにはカードがありません'); return; }
+  const ordered = style==='order' ? pool.slice().sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)) : pool;
+  startStudy(ordered, style, 'オリジナルデッキ');
+}
+function startPreset(catId, levelId, style){
   const cat=PRESET_LIB.find(c=>c.id===catId); if(!cat){ toast('カテゴリが見つかりません'); return; }
   const lv=cat.levels.find(l=>l.id===levelId); if(!lv){ toast('レベルが見つかりません'); return; }
-  const items=lv.words.map(presetWord);
-  if(!items.length){ toast('この教材は準備中です'); return; }
-  closeModal();
-  session=flashSession(items, cat.name+' / '+lv.name);
-  renderStudySession();
+  const pool=presetPool(catId,levelId);
+  if(!pool.length){ toast('この教材は準備中です'); return; }
+  startStudy(pool, style||'srs', cat.name+' / '+lv.name);
 }
+// ---- 単語一覧 (browse) ----
+function showWordList(kind, catId, levelId){
+  closeModal();
+  let pool, name;
+  if(kind==='preset'){
+    const c=PRESET_LIB.find(x=>x.id===catId), l=c&&c.levels.find(x=>x.id===levelId); if(!l){ toast('見つかりません'); return; }
+    pool=presetPool(catId,levelId); name=c.name+' / '+l.name;
+  } else {
+    const c=IDIOM_LIB.find(x=>x.id===catId), l=c&&c.levels.find(x=>x.id===levelId); if(!l){ toast('見つかりません'); return; }
+    name=c.name+' / '+l.name;
+    if(c.fmt==='choice') pool=l.items.map(raw=>{ const o=idiomItem(raw,'choice'); return { term:o.answer, mean:o.mean, exEn:o.q.replace('____',o.answer), exJa:'', pos:['熟語'], other:'', srs:getProg(idiomKeySig(catId,levelId,raw[0])) }; });
+    else pool=idiomFlashPool(catId,levelId);
+  }
+  wordList={ pool, name, kind, catId, levelId, openIdx:null };
+  renderWordList();
+}
+function renderWordList(){
+  const v=document.getElementById('view-study');
+  v.innerHTML=`
+    <div class="topbar"><h1 style="font-size:1.3rem">${esc(wordList.name)}</h1></div>
+    <button class="cd-back" onclick="wordList=null;renderStudy()">${I.back} 学習に戻る</button>
+    <div style="color:var(--ink-2);font-size:.85rem;margin:0 0 10px">${wordList.pool.length}語 ・ タップで意味・進捗</div>
+    <div class="list">${wordList.pool.map((c,i)=>wordListRow(c,i,wordList.openIdx===i)).join('')}</div>`;
+}
+function wordListRow(c,i,open){
+  const ml=masteryLabel(c.srs), lab=ml[0], col=ml[1];
+  return `<div class="result-row">
+    <div class="rr-head" onclick="toggleWordList(${i})">
+      <span style="width:11px;height:11px;border-radius:50%;background:${col};flex:none;display:inline-block"></span>
+      <div class="rr-meta" style="flex:1"><div class="rr-jp" style="font-family:var(--font-en);font-weight:600;font-size:1.05rem">${esc(c.term)}</div><div class="rr-ans">${esc(c.mean)}</div></div>
+      ${spkBtn(c.term,26)}
+      <span class="chev">${I.chev}</span>
+    </div>
+    ${open?`<div class="rr-detail">
+      <div class="blk"><div class="lab">意味</div><div>${esc(c.mean)||'<span style="color:var(--ink-3)">（未登録）</span>'}</div></div>
+      ${c.exEn?`<div class="blk"><div class="lab">例文</div><div class="en">${esc(c.exEn)} ${spkBtn(c.exEn,24)}</div>${c.exJa?`<div style="color:var(--ink-2)">${esc(c.exJa)}</div>`:''}</div>`:''}
+      <div class="blk"><div class="lab">進捗</div><div style="color:${col};font-weight:600">${lab}</div></div>
+    </div>`:''}
+  </div>`;
+}
+function toggleWordList(i){ if(!wordList) return; wordList.openIdx=(wordList.openIdx===i)?null:i; renderWordList(); }
 
 /* ---------- 熟語学習（穴埋め） ---------- */
 function idiomPick(){
@@ -2205,24 +2471,36 @@ function idiomLevelPick(catId){
     <h2>${esc(cat.name)}</h2>
     <p class="d" style="margin:0 0 12px;font-size:.85rem">出題形式：${f}。難易度を選んでください。</p>
     <div class="deck-pick">
-      ${cat.levels.map(l=>`<div class="deck-row" onclick="startIdiom('${cat.id}','${l.id}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${I.trophy}</div><div class="meta"><div class="nm">${esc(l.name)}</div><div class="ct">${l.items.length}問</div></div><span class="chev">${I.chev}</span></div>`).join('')}
+      ${cat.levels.map(l=>`<div class="deck-row" onclick="idiomStylePick('${cat.id}','${l.id}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${I.trophy}</div><div class="meta"><div class="nm">${esc(l.name)}</div><div class="ct">${l.items.length}問</div></div><span class="chev">${I.chev}</span></div>`).join('')}
     </div>
     <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="idiomPick()">← カテゴリへ戻る</button></div>`);
 }
-function startIdiom(catId, levelId){
+function idiomStylePick(catId, levelId){
+  const cat=IDIOM_LIB.find(c=>c.id===catId); const lv=cat&&cat.levels.find(l=>l.id===levelId);
+  if(!lv){ toast('レベルが見つかりません'); return; }
+  const fmtNote = cat.fmt==='choice'?'4択（試験形式）':'フラッシュカード';
+  openModal(`
+    <h2>${esc(cat.name)} / ${esc(lv.name)}</h2>
+    <p class="d" style="margin:0 0 12px;font-size:.85rem">${fmtNote}・学習スタイルを選んでください（1回10問）。</p>
+    ${styleOptsHtml(st=>`startIdiom('${catId}','${levelId}','${st}')`, `showWordList('idiom','${catId}','${levelId}')`)}
+    <div class="modal-actions" style="margin-top:8px"><button class="btn btn-ghost" onclick="idiomLevelPick('${catId}')">← 難易度へ戻る</button></div>`);
+}
+function startIdiom(catId, levelId, style){
+  style=style||'srs';
   const cat=IDIOM_LIB.find(c=>c.id===catId); if(!cat){ toast('カテゴリが見つかりません'); return; }
   const lv=cat.levels.find(l=>l.id===levelId); if(!lv){ toast('レベルが見つかりません'); return; }
   if(!lv.items.length){ toast('この教材は準備中です'); return; }
   closeModal();
   if(cat.fmt==='choice'){
-    const items=lv.items.map(it=>idiomItem(it,'choice'));
-    idiom={ catName:cat.name+' / '+lv.name, fmt:cat.fmt, items, idx:0, answered:false, userAns:null, userAnsText:'', correct:null, score:0, log:[], openIdx:null };
+    // 進捗を持つプール → スタイルで最大10問を選択
+    const pool=lv.items.map(raw=>({ raw, srs:getProg(idiomKeySig(catId,levelId,raw[0])) }));
+    const picked=selectItems(pool, style);
+    const items=picked.map(p=>{ const o=idiomItem(p.raw,'choice'); o.srs=p.srs; return o; });
+    idiom={ catName:cat.name+' / '+lv.name, fmt:'choice', items, idx:0, answered:false, userAns:null, userAnsText:'', correct:null, score:0, log:[], openIdx:null };
     renderIdiom(); return;
   }
-  // フラッシュカード（忘却曲線）：熟語を「表＝熟語／裏＝意味＋例文」で学習
-  const cards=lv.items.map(it=>({ term:it[1], pron:'', mean:it[2]||'', exEn:it[0].replace('____', it[1]), exJa:'', pos:['熟語'], other:'' }));
-  session=flashSession(cards, cat.name+' / '+lv.name);
-  renderStudySession();
+  // フラッシュカード：進捗付きプールをスタイルで選択
+  startStudy(idiomFlashPool(catId,levelId), style, cat.name+' / '+lv.name);
 }
 function blankHtml(q){ return esc(q).replace('____','<span style="display:inline-block;min-width:64px;border-bottom:2px solid var(--green);text-align:center;font-weight:700;color:var(--green)">　？　</span>'); }
 function renderIdiom(){
@@ -2273,6 +2551,7 @@ function pickIdiomChoice(i){
   const it=idiom.items[idiom.idx];
   idiom.userAns=i; idiom.correct=(i===it.ansIdx);
   if(idiom.correct) idiom.score++;
+  if(it.srs){ scheduleSrs(it.srs, idiom.correct?2:0); const d=todayStr(); state.stats.reviews[d]=(state.stats.reviews[d]||0)+1; updateStreak(); save(); }
   pushIdiomLog(); idiom.answered=true; renderIdiom();
 }
 function checkIdiomFill(){
@@ -2307,40 +2586,22 @@ function idiomResultRow(r,i,open){
 }
 function renderStudySession(){
   const v=document.getElementById('view-study');
-  const srs = session.mode==='srs';
-  let c, prog, countLabel;
-  if(srs){
-    if(session.queue.length===0){ finishSession(); return; }
-    c=state.cards[session.queue[0]];
-    if(!c){ session.queue.shift(); renderStudySession(); return; }
-    prog=Math.round(session.graduated.size/session.total*100);
-    countLabel='残り '+(session.total - session.graduated.size);
-  } else {
-    if(session.queue.length===0){ finishSession(); return; }
-    c=session.items[session.queue[0]];
-    prog=Math.round(session.done.size/session.total*100);
-    countLabel='残り '+(session.total - session.done.size);
-  }
-  const tag = srs ? (c.srs.state==='new'?'NEW':'復習') : (session.catName||'学習');
-  const rateRow = srs
-    ? `<div class="rate-row">
-        <button class="rate-btn" style="background:var(--r-again)" onclick="event.stopPropagation();rate(0)"><span class="lab">もう一度</span><span class="ivl">${previewIvl(c,0)}</span></button>
-        <button class="rate-btn" style="background:var(--r-hard)" onclick="event.stopPropagation();rate(1)"><span class="lab">むずかしい</span><span class="ivl">${previewIvl(c,1)}</span></button>
-        <button class="rate-btn" style="background:var(--r-good)" onclick="event.stopPropagation();rate(2)"><span class="lab">できた</span><span class="ivl">${previewIvl(c,2)}</span></button>
-        <button class="rate-btn" style="background:var(--r-easy)" onclick="event.stopPropagation();rate(3)"><span class="lab">かんたん</span><span class="ivl">${previewIvl(c,3)}</span></button>
-      </div>`
-    : `<div class="rate-row">
-        <button class="rate-btn" style="background:var(--r-again)" onclick="event.stopPropagation();rateFlash(0)"><span class="lab">もう一度</span></button>
-        <button class="rate-btn" style="background:var(--r-hard)" onclick="event.stopPropagation();rateFlash(1)"><span class="lab">むずかしい</span></button>
-        <button class="rate-btn" style="background:var(--r-good)" onclick="event.stopPropagation();rateFlash(2)"><span class="lab">できた</span></button>
-        <button class="rate-btn" style="background:var(--r-easy)" onclick="event.stopPropagation();rateFlash(3)"><span class="lab">かんたん</span></button>
+  if(session.qi>=session.items.length){ renderStudyResult(); return; }
+  const c=session.items[session.qi], s=c.srs;
+  const prog=Math.round(session.qi/session.total*100);
+  const tag = s.state==='new'?'NEW':'復習';
+  const rateRow=`<div class="rate-row">
+        <button class="rate-btn" style="background:var(--r-again)" onclick="event.stopPropagation();gradeStudy(0)"><span class="lab">もう一度</span><span class="ivl">${previewIvlSrs(s,0)}</span></button>
+        <button class="rate-btn" style="background:var(--r-hard)" onclick="event.stopPropagation();gradeStudy(1)"><span class="lab">むずかしい</span><span class="ivl">${previewIvlSrs(s,1)}</span></button>
+        <button class="rate-btn" style="background:var(--r-good)" onclick="event.stopPropagation();gradeStudy(2)"><span class="lab">できた</span><span class="ivl">${previewIvlSrs(s,2)}</span></button>
+        <button class="rate-btn" style="background:var(--r-easy)" onclick="event.stopPropagation();gradeStudy(3)"><span class="lab">かんたん</span><span class="ivl">${previewIvlSrs(s,3)}</span></button>
       </div>`;
   v.innerHTML=`
     <div class="study-wrap">
       <div class="study-top">
         <button class="icon-btn x-btn" onclick="if(confirm('学習を終了しますか？'))endSessionEarly()" style="box-shadow:none;background:transparent">✕</button>
         <div class="progress"><div style="width:${prog}%"></div></div>
-        <div class="study-count">${countLabel}</div>
+        <div class="study-count">${session.qi+1} / ${session.total}</div>
       </div>
       <div class="flash" onclick="flipCard()">
         <div class="flash-inner ${session.flipped?'flipped':''}">
@@ -2364,39 +2625,56 @@ function renderStudySession(){
       ${rateRow}
     </div>`;
 }
-function flashSession(items, catName){ return { mode:'flash', items, queue:items.map((_,i)=>i), done:new Set(), total:items.length, flipped:false, catName:catName||'学習' }; }
-function rateFlash(r){
-  const idx=session.queue.shift();
-  if(r===0){ session.queue.push(idx); }                                   // もう一度：最後にまた出す
-  else if(r===1){ session.queue.splice(Math.min(3,session.queue.length),0,idx); } // むずかしい：少し後に再出題
-  else { session.done.add(idx); }                                          // できた／かんたん：完了
-  const d=todayStr(); state.stats.reviews[d]=(state.stats.reviews[d]||0)+1;
-  updateStreak();
-  session.flipped=false;
-  save();
+function startStudy(pool, style, catName){
+  const items=selectItems(pool, style);
+  if(!items.length){ toast('学習できるカードがありません'); return; }
+  closeModal();
+  session={ items, qi:0, total:items.length, flipped:false, results:[], openIdx:null, catName:catName||'学習', style };
   renderStudySession();
 }
-function nextFlash(){ if(session.queue&&session.queue.length){ session.done.add(session.queue.shift()); } session.flipped=false; renderStudySession(); }
 function flipCard(){
   if(session.flipped) return;
   session.flipped=true;
-  const c = session.mode==='srs' ? state.cards[session.queue[0]] : session.items[session.queue[0]];
-  if(c && c.term) speak(c.term);   // タップで答えを表示する際に単語・熟語を読み上げ
+  const c=session.items[session.qi];
+  if(c && c.term) speak(c.term);   // タップで答えを表示した瞬間に読み上げ
   renderStudySession();
 }
-function rate(r){
-  const id=session.queue.shift();
-  const c=state.cards[id];
-  schedule(c,r);
-  // record review
+function gradeStudy(r){
+  const c=session.items[session.qi];
+  scheduleSrs(c.srs, r);
   const d=todayStr(); state.stats.reviews[d]=(state.stats.reviews[d]||0)+1;
   updateStreak();
-  // requeue if still due within session (again / learning step soon)
-  if(c.srs.due <= now()+11*60*1000 && c.srs.state==='learning'){ session.queue.push(id); }
-  else { session.graduated.add(id); }
-  session.flipped=false;
+  session.results.push({ term:c.term, mean:c.mean, pron:c.pron, exEn:c.exEn, exJa:c.exJa, pos:c.pos, other:c.other, ok:(r>=2) });
+  session.qi++; session.flipped=false;
   save();
   renderStudySession();
+}
+function renderStudyResult(){
+  const v=document.getElementById('view-study');
+  const total=session.results.length, good=session.results.filter(r=>r.ok).length;
+  v.innerHTML=`
+    <div class="study-top"><button class="icon-btn x-btn" onclick="endSessionEarly()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:100%"></div></div><div class="study-count">結果</div></div>
+    <div class="compo-result-head">${I.trophy}<div class="big">できた ${good} / ${total}</div><div class="sub2">${esc(session.catName)}<br>連続 ${state.stats.streak}日 🔥</div></div>
+    <div class="section-title">学習した単語（タップで意味）</div>
+    <div class="list">${session.results.map((r,i)=>studyResultRow(r,i,session.openIdx===i)).join('')}</div>
+    <button class="btn btn-primary full" style="padding:15px;margin-top:16px" onclick="endSessionEarly()">学習に戻る</button>`;
+}
+function toggleStudyResult(i){ if(!session) return; session.openIdx=(session.openIdx===i)?null:i; renderStudySession(); }
+function studyResultRow(r,i,open){
+  return `<div class="result-row">
+    <div class="rr-head" onclick="toggleStudyResult(${i})">
+      <span class="verdict ${r.ok?'o':'x'}" style="font-size:1.3rem;min-width:22px;text-align:center">${r.ok?'○':'×'}</span>
+      <div class="rr-meta"><div class="rr-jp" style="font-family:var(--font-en);font-weight:600;font-size:1.05rem">${esc(r.term)}</div>${r.pron?`<div class="rr-ans">${esc(r.pron)}</div>`:''}</div>
+      ${spkBtn(r.term,26)}
+      <span class="chev">${I.chev}</span>
+    </div>
+    ${open?`<div class="rr-detail">
+      <div class="blk"><div class="lab">意味</div><div>${esc(r.mean)||'<span style="color:var(--ink-3)">（未登録）</span>'}</div></div>
+      ${r.exEn?`<div class="blk"><div class="lab">例文</div><div class="en">${esc(r.exEn)} ${spkBtn(r.exEn,24)}</div>${r.exJa?`<div style="color:var(--ink-2)">${esc(r.exJa)}</div>`:''}</div>`:''}
+      ${(r.pos&&r.pos.length)?`<div class="blk">${r.pos.map(p=>`<span class="pos-chip">${esc(p)}</span>`).join('')}</div>`:''}
+      ${r.other?`<div class="blk"><div class="lab">その他</div><div style="white-space:pre-wrap;line-height:1.6">${esc(r.other)}</div></div>`:''}
+    </div>`:''}
+  </div>`;
 }
 function updateStreak(){
   const t=todayStr();
@@ -2405,18 +2683,6 @@ function updateStreak(){
   if(state.stats.lastStudy===y) state.stats.streak++;
   else state.stats.streak=1;
   state.stats.lastStudy=t;
-}
-function finishSession(){
-  const wasSrs=session.mode==='srs';
-  const cnt = wasSrs ? session.total : (session.done?session.done.size:session.total);
-  session=null;
-  document.getElementById('view-study').innerHTML=`
-    <div class="session-done">
-      ${I.check.replace('stroke-width="2.5"','stroke-width="2"')}
-      <div class="big">おつかれさま！</div>
-      <p style="color:var(--ink-2)">${cnt}枚を学習しました。<br>連続 ${state.stats.streak}日 🔥</p>
-      <button class="btn btn-primary full" style="margin-top:18px;padding:15px" onclick="renderStudy()">学習に戻る</button>
-    </div>`;
 }
 function endSessionEarly(){ session=null; renderStudy(); }
 
@@ -2503,10 +2769,10 @@ function toggleDictation(inputId, btn, autoSubmit){
     if(_recogBtn) _recogBtn.classList.remove('listening');
     const c2=document.getElementById('micCap'); if(c2) c2.textContent='タップして話す';
     _recog=null; _recogBtn=null;
-    // auto-grade as soon as speech finishes
-    if(autoSubmit && got && compo && !compo.answered && !compo.checking){
+    // 音声認識が終わっても自動では答えを表示しない（ユーザーが「答えを表示」を押す）
+    if(autoSubmit && got && compo && !compo.revealed && !compo.checking){
       const i2=document.getElementById('compoInput');
-      if(i2 && i2.value.trim()) checkCompo();
+      if(i2 && i2.value.trim()) revealCompo();
     }
   };
   try{ r.start(); }catch(_){ clearTimeout(_recogTimer); toast('音声入力を開始できませんでした'); if(btn) btn.classList.remove('listening'); _recog=null; }
@@ -2549,7 +2815,7 @@ function startCompo(fid){
   const items=shuffle(compoItemsFrom(list)).slice(0,10);
   if(items.length===0){ toast('日本語と英語が両方入ったカードが必要です'); return; }
   closeModal();
-  compo={ items, idx:0, answered:false, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:'card' };
+  compo={ items, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:'card' };
   renderCompo();
 }
 
@@ -2580,7 +2846,7 @@ async function genTheme(theme){
   if(!aiReady()){ toast('テーマ出題にはAIが必要です'); return; }
   const level=(document.getElementById('thLevel')&&document.getElementById('thLevel').value)||'中級';
   closeModal();
-  compo={ loading:true, theme, items:[], idx:0, answered:false, checking:false, fb:null, userAns:'', results:[], source:'theme' };
+  compo={ loading:true, theme, items:[], idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], source:'theme' };
   renderCompo();
   try{
     const sys='You create instant-composition (瞬間英作文) practice for a Japanese learner. Output ONLY a JSON object: {"items":[{"jp":"日本語の文","en":"natural English translation"}]} with exactly 8 items. Sentences must be short, practical and natural to say aloud, and must match the given theme and level. The "jp" is Japanese, "en" is its natural English. No markdown, no code fences.';
@@ -2590,7 +2856,7 @@ async function genTheme(theme){
     let arr=[]; try{ const j=JSON.parse(content); arr=Array.isArray(j)?j:(j.items||[]); }catch(e){ arr=[]; }
     const items=arr.filter(x=>x&&x.jp&&x.en).map(x=>({jp:String(x.jp),en:String(x.en),kind:'テーマ：'+theme}));
     if(items.length===0){ toast('問題を生成できませんでした。もう一度お試しください'); compo=null; renderStudy(); return; }
-    compo={ items, idx:0, answered:false, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:'theme', theme };
+    compo={ items, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:'theme', theme };
     renderCompo();
   }catch(err){
     if(!compo) return;
@@ -2600,7 +2866,20 @@ async function genTheme(theme){
   }
 }
 function exitCompo(){ stopDictation(); compo=null; renderStudy(); }
-function nextCompo(){ stopDictation(); compo.idx++; compo.answered=false; compo.fb=null; compo.userAns=''; renderCompo(); }
+function nextCompo(){
+  // finalize current item into log before advancing
+  if(compo && compo.revealed){
+    const it=compo.items[compo.idx];
+    const fb=compo.fb||{};
+    const verdict=compo.verdict||'△';
+    compo.log=compo.log||[];
+    compo.log.push({ jp:it.jp, en:it.en, userAns:compo.userAns||'', kind:it.kind, fb:{verdict, comment:fb.comment||'', fixed:fb.fixed||'', alts:fb.alts||[]} });
+  }
+  stopDictation();
+  compo.idx++; compo.revealed=false; compo.verdict=null; compo.fb=null; compo.checking=false; compo.userAns='';
+  renderCompo();
+}
+function setCompoVerdict(v){ if(!compo||!compo.revealed) return; compo.verdict=v; renderCompo(); }
 
 function renderCompo(){
   const v=document.getElementById('view-study');
@@ -2616,7 +2895,7 @@ function renderCompo(){
     if(!compo.saved){ compo.saved=true; pushCompoHistory(); }
     v.innerHTML=`
       <div class="study-top"><button class="icon-btn x-btn" onclick="compo=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:100%"></div></div><div class="study-count">結果</div></div>
-      <div class="compo-result-head">${I.trophy}<div class="big">${good} / ${logs.length}</div><div class="sub2">「○」と判定された数</div></div>
+      <div class="compo-result-head">${I.trophy}<div class="big">${good} / ${logs.length}</div><div class="sub2">正解の数</div></div>
       <div class="section-title">解答一覧（タップで解説）</div>
       <div class="list">${logs.map((r,i)=>compoResultRow(r,i,compo.openIdx===i)).join('')}</div>
       <button class="btn btn-primary full" style="padding:15px;margin-top:16px" onclick="compo=null;renderStudy()">学習に戻る</button>`;
@@ -2624,28 +2903,38 @@ function renderCompo(){
   }
   const it=compo.items[compo.idx];
   let answerArea;
-  if(!compo.answered){
+  if(!compo.revealed){
     answerArea=`
-      <div class="compo-speak">
+      <div class="compo-speak" style="margin-top:9vh">
         ${speechSupported()
-          ? `<button class="mic-big" id="compoMic" onclick="toggleDictation('compoInput',this,true)" aria-label="音声入力">${I.mic}</button>
+          ? `<button class="mic-big" id="compoMic" onclick="toggleDictation('compoInput',this,false)" aria-label="音声入力">${I.mic}</button>
              <div class="mic-cap" id="micCap">タップして話す</div>`
           : `<div class="mic-cap">この端末は音声入力に非対応です。下に英語を入力してください。</div>`}
-        <input id="compoInput" class="compo-edit" placeholder="${speechSupported()?'認識結果がここに表示（編集できます）':'英語で入力'}" value="${esc(compo.userAns||'')}" onkeydown="if(event.key==='Enter'){event.preventDefault();checkCompo();}" />
+        <input id="compoInput" class="compo-edit" placeholder="${speechSupported()?'認識結果がここに表示（編集できます）':'英語で入力'}" value="${esc(compo.userAns||'')}" onkeydown="if(event.key==='Enter'){event.preventDefault();revealCompo();}" />
       </div>
-      <button class="btn btn-primary full" style="padding:15px;margin-top:18px" id="compoCheck" onclick="checkCompo()" ${compo.checking?'disabled':''}>${compo.checking?'採点中…':'答え合わせ'}</button>`;
+      <button class="btn btn-primary full" style="padding:15px;margin-top:20px" onclick="revealCompo()">答えを表示</button>`;
   } else {
     const fb=compo.fb||{};
-    const vc = fb.verdict==='○'?'o':(fb.verdict==='×'?'x':'t');
+    const vc = compo.verdict==='○'?'o':(compo.verdict==='×'?'x':'t');
     answerArea=`
-      <div class="compo-ref"><div class="lab">あなたの解答</div><div class="en">${esc(compo.userAns)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:30px;height:30px" onclick="speak('${esc(compo.userAns).replace(/'/g,"\\'")}')">${I.speaker}</button></div></div>
-      <div class="compo-ref" style="border-color:var(--amber)"><div class="lab">お手本</div><div class="en">${esc(it.en)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:30px;height:30px" onclick="speak('${esc(it.en).replace(/'/g,"\\'")}')">${I.speaker}</button></div></div>
-      <div class="compo-fb">
-        <div class="fb-head">${fb.verdict?`<span class="verdict ${vc}">${esc(fb.verdict)}</span>`:''}<span>${esc(fb.comment||'')}</span></div>
-        ${fb.fixed?`<div class="fixed">${esc(fb.fixed)}</div>`:''}
-        ${(fb.alts&&fb.alts.length)?`<div class="alts">言い換え：<ul>${fb.alts.map(a=>`<li>${esc(a)}</li>`).join('')}</ul></div>`:''}
+      ${compo.userAns?`<div class="compo-ref"><div class="lab">あなたの解答</div><div class="en">${esc(compo.userAns)} ${spkBtn(compo.userAns,30)}</div></div>`:`<div class="compo-ref" style="border-left-color:var(--ink-3)"><div class="lab">あなたの解答</div><div style="color:var(--ink-3)">（入力なし）</div></div>`}
+      <div class="compo-ref" style="border-left-color:var(--amber)"><div class="lab">お手本</div><div class="en">${esc(it.en)} ${spkBtn(it.en,30)}</div></div>
+      ${compo.checking
+        ? `<div class="compo-fb"><div class="spinner" style="width:24px;height:24px;margin:2px auto"></div><div style="text-align:center;color:var(--ink-3);font-size:.85rem;margin-top:6px">AIが添削中…</div></div>`
+        : (fb.comment||fb.fixed||(fb.alts&&fb.alts.length))
+          ? `<div class="compo-fb">
+              <div class="fb-head"><span style="font-size:.72rem;color:var(--ink-3);font-weight:700">AIの添削（参考）</span></div>
+              ${fb.comment?`<div>${esc(fb.comment)}</div>`:''}
+              ${fb.fixed?`<div class="fixed">${esc(fb.fixed)}</div>`:''}
+              ${(fb.alts&&fb.alts.length)?`<div class="alts">言い換え：<ul>${fb.alts.map(a=>`<li>${esc(a)}</li>`).join('')}</ul></div>`:''}
+            </div>`
+          : ''}
+      <div class="grade-hint">自己採点（${aiReady()?'AIの判定は修正できます':'お手本と見比べて選んでください'}）</div>
+      <div class="compo-grade">
+        <button class="gb ${compo.verdict==='○'?'sel-o':''}" onclick="setCompoVerdict('○')"><span class="verdict o" style="font-size:1.3rem">○</span>正解</button>
+        <button class="gb ${compo.verdict==='×'?'sel-x':''}" onclick="setCompoVerdict('×')"><span class="verdict x" style="font-size:1.3rem">×</span>不正解</button>
       </div>
-      <button class="btn btn-primary full" style="padding:14px;margin-top:14px" onclick="nextCompo()">${compo.idx+1>=compo.items.length?'結果を見る':'次へ'}</button>`;
+      <button class="btn btn-primary full" style="padding:14px;margin-top:16px" onclick="nextCompo()">${compo.idx+1>=compo.items.length?'結果を見る':'次へ'}</button>`;
   }
   v.innerHTML=`
     <div class="study-top">
@@ -2653,7 +2942,7 @@ function renderCompo(){
       <div class="progress"><div style="width:${Math.round(compo.idx/compo.items.length*100)}%"></div></div>
       <div class="study-count">${compo.idx+1}/${compo.items.length}</div>
     </div>
-    <div class="compo-kind">日本語を英語に（${it.kind}）</div>
+    <div class="compo-kind"${compo.revealed?'':' style="margin-top:4vh"'}>日本語を英語に（${it.kind}）</div>
     <div class="compo-jp">${esc(it.jp)}</div>
     ${answerArea}`;
 }
@@ -2725,40 +3014,40 @@ function renderHistory(){
       ${(fb.richer&&fb.richer.length)?`<div class="compo-fb" style="background:var(--green-soft)"><div class="lab" style="font-size:.72rem;color:var(--ink-3);font-weight:700;margin-bottom:6px">より自然で豊かな別表現</div>${fb.richer.map(rr=>`<div class="ex-item" style="margin-bottom:8px"><div class="ex-en">${esc(rr)} ${spkBtn(rr,26)}</div></div>`).join('')}</div>`:''}`;
   }
 }
-async function checkCompo(){
-  if(!compo || compo.checking || compo.answered) return;
-  const myIdx=compo.idx;
+function revealCompo(){
+  if(!compo || compo.revealed) return;
   const it=compo.items[compo.idx];
   const inp=document.getElementById('compoInput');
   const user=(inp?inp.value:'').trim();
-  if(!user){ toast('英文を入力（または音声入力）してください'); return; }
   stopDictation();
   compo.userAns=user;
-  if(aiReady()){
-    compo.checking=true; renderCompo();
-    let fb;
-    try{
-      const sys='You are a supportive English teacher grading 瞬間英作文 (instant composition) by a Japanese learner. Output ONLY JSON: {"verdict":"○"|"△"|"×","comment":"short Japanese feedback (1-2 sentences)","fixed":"a natural corrected English version of the learner sentence","alts":["up to 2 alternative natural English expressions"]}. ○ = correct & natural, △ = understandable but unnatural/minor errors, × = wrong meaning. Judge by meaning vs the Japanese, not exact match with the reference. Be encouraging. comment MUST be Japanese. No markdown.';
-      const u=`日本語: ${it.jp}\n参考の英語: ${it.en}\n学習者の英語: ${user}`;
-      const content=await callAI([{role:'system',content:sys},{role:'user',content:u}],{json:true,temp:0.3});
-      let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
-      fb = (j&&j.verdict) ? j : {verdict:'△', comment:(content||'採点結果を取得できませんでした。お手本と見比べてください。'), fixed:'', alts:[]};
-    }catch(err){
-      const m=err.message||'';
-      fb={verdict:'', comment:'採点に失敗しました（'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')+'）。お手本と見比べてください。', fixed:'', alts:[]};
-    }
-    if(!compo || compo.idx!==myIdx || compo.answered) return; // user exited/advanced during await
-    compo.fb=fb; compo.checking=false;
-  } else {
-    const ok = normTxt(user)===normTxt(it.en);
-    compo.fb={ verdict: ok?'○':'△',
-      comment: ok?'お手本と一致しました！' : 'お手本と見比べて確認しましょう。設定でAIをオンにすると、添削や言い換えも表示されます。',
-      fixed:'', alts:[] };
+  compo.revealed=true;
+  compo.fb=null;
+  // オフラインでも即お手本を表示。入力があれば完全一致で○を仮判定（ニュアンスは無し）
+  compo.verdict = (user && normTxt(user)===normTxt(it.en)) ? '○' : null;
+  compo.checking=false;
+  renderCompo();
+  if(user && aiReady()) gradeCompoAI(compo.idx);
+}
+async function gradeCompoAI(myIdx){
+  if(!compo || compo.idx!==myIdx) return;
+  const it=compo.items[myIdx];
+  const user=compo.userAns||'';
+  compo.checking=true; renderCompo();
+  let fb;
+  try{
+    const sys='You are a supportive English teacher grading 瞬間英作文 (instant composition) by a Japanese learner. Output ONLY JSON: {"verdict":"○"|"△"|"×","comment":"short Japanese feedback (1-2 sentences)","fixed":"a natural corrected English version of the learner sentence","alts":["up to 2 alternative natural English expressions"]}. ○ = correct & natural, △ = understandable but minor errors, × = wrong meaning. Judge by meaning vs the Japanese, not exact match. Be encouraging. comment MUST be Japanese. No markdown.';
+    const u=`日本語: ${it.jp}\n参考の英語: ${it.en}\n学習者の英語: ${user}`;
+    const content=await callAI([{role:'system',content:sys},{role:'user',content:u}],{json:true,temp:0.3});
+    let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
+    fb = (j&&j.verdict) ? j : {verdict:'', comment:(content||''), fixed:'', alts:[]};
+  }catch(err){
+    const m=err.message||'';
+    fb={verdict:'', comment:'AI添削に失敗（'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')+'）。お手本と見比べて自己採点してください。', fixed:'', alts:[]};
   }
-  compo.answered=true;
-  compo.results.push(compo.fb.verdict||'△');
-  compo.log = compo.log || [];
-  compo.log.push({ jp:it.jp, en:it.en, userAns:user, fb:compo.fb, kind:it.kind });
+  if(!compo || compo.idx!==myIdx || !compo.revealed) return; // 離脱/進行した
+  compo.fb=fb; compo.checking=false;
+  if(fb.verdict && compo.verdict===null) compo.verdict=fb.verdict; // AIの判定を初期値に（ユーザーは修正可）
   renderCompo();
 }
 
