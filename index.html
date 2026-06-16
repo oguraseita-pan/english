@@ -366,6 +366,18 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 
 /* ---------- Settings ---------- */
 .set-group{margin-bottom:22px;}
+.sec-collapse{display:flex;align-items:center;gap:8px;width:100%;background:none;margin:24px 4px 10px;text-align:left;}
+.sec-collapse .section-title{margin:0;}
+.sec-collapse .sum{margin-left:auto;font-size:.78rem;color:var(--ink-3);font-weight:600;text-transform:none;letter-spacing:0;}
+.sec-collapse .chev{transition:transform .2s;color:var(--ink-3);}
+.sec-collapse .chev.open{transform:rotate(90deg);}
+.faq-item{background:var(--surface-2);border-radius:12px;margin-bottom:8px;overflow:hidden;}
+.faq-item summary{list-style:none;cursor:pointer;padding:13px 14px;font-weight:600;font-size:.95rem;display:flex;justify-content:space-between;align-items:center;gap:10px;}
+.faq-item summary::-webkit-details-marker{display:none;}
+.faq-item summary::after{content:'＋';color:var(--ink-3);font-weight:400;}
+.faq-item[open] summary::after{content:'－';}
+.faq-item .ans{padding:0 14px 14px;font-size:.9rem;line-height:1.7;color:var(--ink-2);white-space:pre-wrap;}
+.legal-body{font-size:.9rem;line-height:1.75;color:var(--ink-2);max-height:62vh;overflow:auto;white-space:pre-wrap;}
 .set-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);box-shadow:var(--shadow);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:9px;}
 .set-row .l{font-weight:500;}
 .set-row .d{font-size:.78rem;color:var(--ink-3);margin-top:2px;}
@@ -558,6 +570,8 @@ function save(opts){
        using (auth.uid() = user_id) with check (auth.uid() = user_id);
    =================================================================== */
 const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publishable_jhQ8QRqM6QuCWlEjOPok9A_62zFa10k' };
+const APP_VERSION = '1.0.0';
+const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 let _sb=null, account={ user:null }, _cloudTimer=null, _lastSync=0;
 function cloudConfigured(){ return !!(CLOUD.url && CLOUD.anonKey); }
 function loggedIn(){ return !!(account && account.user); }
@@ -3690,6 +3704,7 @@ async function aiFillCard(){
    SETTINGS
    ==================================================================== */
 let keyOpen=false;
+let aiSectionOpen=false;
 function renderSettings(){
   const s=state.settings;
   document.getElementById('view-settings').innerHTML=`
@@ -3709,7 +3724,8 @@ function renderSettings(){
           <div class="key-set"><span class="lbl">${I.check} ${esc(accountEmail())}</span><button class="btn btn-ghost" style="padding:7px 13px" onclick="authSignOut()">ログアウト</button></div>
           <div class="d">${_lastSync?('最終同期：'+new Date(_lastSync).toLocaleString('ja-JP')):'データは自動でクラウドに同期されます。'}</div>
         </div>
-        <button class="btn btn-primary full" style="padding:13px" onclick="cloudSyncNow()">${I.refresh} 今すぐ同期</button>`
+        <button class="btn btn-primary full" style="padding:13px" onclick="cloudSyncNow()">${I.refresh} 今すぐ同期</button>
+        <div class="d" style="text-align:center;margin-top:7px">通常は自動で同期されます。別の端末で編集した内容をすぐ取り込みたいときに使います。</div>`
       : `
         <div class="field">
           <label>メールアドレス</label>
@@ -3730,7 +3746,12 @@ function renderSettings(){
         <div class="d" style="margin-top:8px">登録すると単語・履歴がクラウドに保存され、別の端末でも同じデータで学習できます。</div>`)}
     </div>
 
-    <div class="section-title">AI連携</div>
+    <button class="sec-collapse" onclick="aiSectionOpen=!aiSectionOpen;renderSettings()">
+      <span class="section-title">AI連携</span>
+      <span class="sum">${managedAI()?'アプリのAIが有効':(s.aiProvider==='none'?'オフ':(aiProviderName()+(aiKey()?'・設定済み':'・未設定')))}</span>
+      <span class="chev ${aiSectionOpen?'open':''}">${I.chev}</span>
+    </button>
+    ${aiSectionOpen?`
     <div class="set-group">
       ${managedAI()?`
       <div class="field">
@@ -3785,7 +3806,7 @@ function renderSettings(){
       <button class="btn btn-primary full" style="padding:13px" onclick="saveSettings()">${I.check} 保存</button>
       `:''}
       ${s.aiProvider==='none'?`<div class="field" style="text-align:center;color:var(--ink-2)">AIはオフです。いつでもここからオンにできます。</div>`:''}
-    </div>
+    </div>`:''}
 
     <div class="section-title">学習</div>
     <div class="set-group">
@@ -3805,6 +3826,15 @@ function renderSettings(){
       <div class="set-row" style="cursor:pointer" onclick="document.getElementById('importFile').click()"><div><div class="l">バックアップを読み込む</div><div class="d">JSONから復元（上書き）</div></div><span class="chev">${I.chev}</span></div>
       <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(this)" />
       <button class="del-link" onclick="resetAll()">すべてのデータを消去</button>
+    </div>
+
+    <div class="section-title">情報</div>
+    <div class="set-group">
+      <div class="set-row" style="cursor:pointer" onclick="openFAQ()"><div><div class="l">よくある質問</div></div><span class="chev">${I.chev}</span></div>
+      <div class="set-row" style="cursor:pointer" onclick="openPrivacy()"><div><div class="l">プライバシーポリシー</div></div><span class="chev">${I.chev}</span></div>
+      <div class="set-row" style="cursor:pointer" onclick="openTerms()"><div><div class="l">利用規約</div></div><span class="chev">${I.chev}</span></div>
+      <div class="set-row" style="cursor:pointer" onclick="openContact()"><div><div class="l">お問い合わせ</div></div><span class="chev">${I.chev}</span></div>
+      <div class="set-row"><div><div class="l">バージョン</div></div><span style="color:var(--ink-3)">${APP_VERSION}</span></div>
     </div>
     <div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:10px">Sprout · データはこの端末に保存されます<br>定期的にバックアップの書き出しをおすすめします</div>
   `;
@@ -3840,8 +3870,69 @@ function importData(input){
   r.readAsText(file); input.value='';
 }
 function resetAll(){
-  if(!confirm('本当にすべてのデータ（カード・ノート・設定）を消去しますか？この操作は取り消せません。')) return;
+  if(!confirm('すべてのデータを消去します。\n・追加した単語／ノート／英語日記\n・学習履歴と進捗（暗記・テスト・日記）\n・設定（APIキーや好みも初期化）\nを消して、初期サンプルの状態に戻します。\nログイン中の場合は、次回の同期でクラウド側にも反映されます。\n\nこの操作は取り消せません。続けますか？')) return;
   localStorage.removeItem(STORE_KEY); load(); seed(); applyTheme(); toast('初期化しました'); setTab('home');
+}
+function openFAQ(){
+  const qa=[
+    ['データはどこに保存されますか？','ログインしていない場合は、この端末のブラウザ内だけに保存されます（他の端末からは見られません）。ログインすると、追加した単語・ノート・日記・学習進捗がクラウド（サーバー）にも保存され、別の端末でも同じデータで学習できます。'],
+    ['オフラインで使っても同期されますか？','はい。ログイン中なら、オフラインで学習した内容もまず端末に保存され、オンラインに戻った後（次の保存やアプリ起動時）に自動でクラウドへ同期されます。'],
+    ['「今すぐ同期」はいつ使う？','通常は自動で同期されるので使う必要はありません。別の端末で編集した内容を、待たずにこの端末へすぐ取り込みたいときだけ使います。'],
+    ['「1日の新規カード上限」とは？','忘却曲線（復習）モードで、1日に新しく出題する“初めて学ぶカード”の枚数の上限です。一度にたくさん新出単語を詰め込むと翌日以降の復習が雪だるま式に増え、定着しにくくなります。上限を設けることで、毎日こなせる量に復習を平準化し、無理なく続けられます。復習(期限が来たカード)はこの上限とは別にすべて出題されます。'],
+    ['「すべてのデータを消去」で何が消えますか？','あなたが追加した単語・ノート・英語日記、学習履歴と進捗、そして設定（APIキーや読み上げ速度などの好み）が消え、初期サンプルの状態に戻ります。アプリ自体やアカウント（ログイン情報）は削除されません。ただしログイン中の場合は、消去後の状態が次の同期でクラウドにも反映される点にご注意ください。'],
+    ['AI連携は必要ですか？お金はかかりますか？','AIは任意です。オフでも、単語・熟語学習、クイズ、ノート、読み上げなどキー不要の機能はすべて使えます。ログイン中はアプリ提供のAI（無料枠）が使えます。自分のAPIキー（Gemini）を使う場合も、無料枠内なら料金はかかりません。'],
+    ['学習スタイルの違いは？','「忘却曲線」は復習タイミングが来たもの＋新規を優先（最も定着しやすい）。「ランダム」はシャッフル出題。「習得していないものから」は苦手・未習得を優先します。いずれも1回10問です。'],
+    ['バックアップはできますか？','「データ」→「バックアップを書き出す」で全データをJSONファイルとして保存できます。「読み込む」で復元（上書き）できます。ログインしていない場合は特に、定期的な書き出しをおすすめします。']
+  ];
+  openModal(`
+    <h2>よくある質問</h2>
+    <div style="margin-top:8px">${qa.map(([q,a])=>`<details class="faq-item"><summary>${esc(q)}</summary><div class="ans">${esc(a)}</div></details>`).join('')}</div>
+    <div class="modal-actions" style="margin-top:12px"><button class="btn btn-ghost" onclick="closeModal()">閉じる</button></div>`);
+}
+function openPrivacy(){
+  openModal(`
+    <h2>プライバシーポリシー</h2>
+    <div class="legal-body">本アプリ「Sprout」における個人情報・データの取り扱いについて説明します。
+
+■ 保存されるデータ
+学習した単語・ノート・英語日記・学習履歴・設定は、まずご利用の端末内（ブラウザ）に保存されます。ログインした場合は、同じデータがクラウド（Supabase）にも保存され、端末間で同期されます。
+
+■ AI機能について
+AIによる採点・添削・例文生成などを利用すると、入力された文章がAI提供元（アプリ提供のAI＝Google Gemini、またはご自身で設定したOpenAI／Google）に送信されます。送信内容は各社のポリシーに従って処理されます。無料枠のAIでは、入力がサービス改善に利用される場合があります。
+
+■ 広告・第三者提供
+本アプリは広告を表示せず、学習データを広告目的で第三者に提供しません。
+
+■ データの削除
+「設定 → データ → すべてのデータを消去」でいつでも端末のデータを消去できます。アカウントとクラウド上のデータの削除をご希望の場合は、お問い合わせよりご連絡ください。
+
+※本文は雛形です。公開前に内容をご確認・調整ください。</div>
+    <div class="modal-actions" style="margin-top:12px"><button class="btn btn-ghost" onclick="closeModal()">閉じる</button></div>`);
+}
+function openTerms(){
+  openModal(`
+    <h2>利用規約</h2>
+    <div class="legal-body">本規約は、アプリ「Sprout」（以下「本アプリ」）の利用条件を定めるものです。
+
+1. 本アプリは英語学習を目的として提供されます。
+2. 本アプリおよびAIが生成する内容（添削・例文・翻訳など）は正確性を保証しません。最終的な判断はご自身の責任で行ってください。
+3. ご自身のAPIキーを設定して外部AIを利用する場合、その利用料金・規約は各提供元との契約に従います。
+4. 法令に違反する行為、他者の権利を侵害する行為、本アプリの運営を妨げる行為を禁止します。
+5. 本アプリは現状有姿で提供され、利用により生じた損害について運営者は責任を負いません。
+6. 本規約は予告なく変更される場合があります。
+
+※本文は雛形です。公開前に内容をご確認・調整ください。</div>
+    <div class="modal-actions" style="margin-top:12px"><button class="btn btn-ghost" onclick="closeModal()">閉じる</button></div>`);
+}
+function openContact(){
+  const mail=SUPPORT_EMAIL||'';
+  openModal(`
+    <h2>お問い合わせ</h2>
+    <div class="legal-body">ご意見・ご要望・不具合のご報告などは、下記の連絡先までお願いします。返信には数日いただく場合があります。${mail&&mail!=='support@example.com'?`
+
+連絡先：${esc(mail)}`:'\n\n※連絡先メールは未設定です。コード内の SUPPORT_EMAIL をご自身のアドレスに変更してください。'}</div>
+    ${mail?`<a class="btn btn-primary full" style="padding:13px;margin-top:12px;display:flex;justify-content:center" href="mailto:${esc(mail)}?subject=${encodeURIComponent('Sprout お問い合わせ')}">${I.send} メールを作成</a>`:''}
+    <div class="modal-actions" style="margin-top:10px"><button class="btn btn-ghost" onclick="closeModal()">閉じる</button></div>`);
 }
 
 /* ====================================================================
