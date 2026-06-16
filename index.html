@@ -234,7 +234,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .opt-btn .od{font-size:.8rem;color:var(--ink-3);margin-top:2px;}
 .deck-row .badge.zero{background:var(--line);color:var(--ink-3);}
 
-.study-wrap{display:flex;flex-direction:column;min-height:calc(100dvh - var(--safe-t) - var(--safe-b) - var(--tabbar-h) - 40px);margin-bottom:-18px;}
+.study-wrap{display:flex;flex-direction:column;min-height:calc(100dvh - var(--safe-t) - var(--safe-b) - var(--tabbar-h) - 24px);margin-bottom:-16px;}
 .study-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
 .progress{flex:1;height:7px;background:var(--line);border-radius:4px;margin:0 12px;overflow:hidden;}
 .progress > div{height:100%;background:var(--green);border-radius:4px;transition:width .3s;}
@@ -258,8 +258,8 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .face.back .b-ex .ja{color:var(--ink-2);font-size:.88rem;margin-top:5px;}
 .face.back .b-note{margin-top:14px;font-size:.88rem;color:var(--ink-2);text-align:left;width:100%;white-space:pre-wrap;}
 
-.rate-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px;}
-.rate-btn{padding:14px 4px 11px;border-radius:14px;color:#fff;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:3px;transition:transform .1s;box-shadow:var(--shadow);}
+.rate-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:16px;}
+.rate-btn{padding:12px 4px;border-radius:14px;color:#fff;font-weight:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-height:60px;transition:transform .1s;box-shadow:var(--shadow);}
 .rate-btn:active{transform:scale(.93);}
 .rate-btn .lab{font-size:.86rem;}
 .rate-btn .ivl{font-size:.66rem;opacity:.85;font-weight:600;}
@@ -972,7 +972,8 @@ function openAddMenu(){
     <h2>追加</h2>
     <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();editFolder()">${I.folderPlus} フォルダを追加</button>
     <button class="btn btn-primary full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();editCard()">${I.cardPlus} 単語カードを追加</button>
-    <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px" onclick="closeModal();editText()">${I.doc} 文章メモを追加</button>
+    <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();editText()">${I.doc} 文章メモを追加</button>
+    <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px" onclick="closeModal();editMemo()">${I.book} メモ（自由記述）を追加</button>
     <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>
   `);
 }
@@ -1003,11 +1004,49 @@ function saveText(id){
   toast('ノートに保存しました');
 }
 
+function editMemo(id, prefill){
+  const c=id?state.cards[id]:(prefill||{});
+  const folderOpts=folderSelectOptions(c.folderId||currentFolder);
+  openModal(`
+    <h2>${id?'メモを編集':'新しいメモ'}</h2>
+    <div class="mfield"><label>メモ</label><textarea id="mBody" rows="9" placeholder="自由に書けるメモです。買い物リスト、アイデア、覚え書きなど何でもどうぞ。">${esc(c.body||'')}</textarea></div>
+    <div class="mfield"><label>保存先フォルダ</label><select id="mFolder">${folderOpts}</select></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveMemo('${id||''}')">${id?'保存':'追加'}</button>
+    </div>
+    ${id?`<button class="del-link" onclick="deleteCard('${id}')">このメモを削除</button>`:''}
+  `);
+}
+function saveMemo(id){
+  const body=document.getElementById('mBody').value.trim();
+  if(!body){ toast('メモを入力してください'); return; }
+  const folderId=document.getElementById('mFolder').value;
+  if(id){ Object.assign(state.cards[id], {body, folderId, type:'text', memo:true, title:''}); }
+  else { const nid=uid(); state.cards[nid]={id:nid, type:'text', memo:true, title:'', body, folderId, createdAt:now()}; }
+  save(); closeModal();
+  if(currentTab==='notes'){ if(id && !noteEditMode) currentCardView=id; renderNotes(); } else renderHome();
+  toast('メモを保存しました');
+}
 function viewCard(id){ currentCardView=id; renderNotes(); }
 function closeCardView(){ currentCardView=null; renderNotes(); }
 
 function renderTextDetail(v,c){
-  const spk=t=>`<button class="spk" style="display:inline-grid;vertical-align:middle;width:32px;height:32px;margin-left:6px" onclick="speak('${esc(t).replace(/'/g,"\\'")}')" aria-label="読み上げ">${I.speaker}</button>`;
+  const spk=t=>`<button class="spk" style="display:inline-grid;vertical-align:middle;width:32px;height:32px;margin-left:6px" onclick="speak(${esc(JSON.stringify(String(t||'')))})" aria-label="読み上げ">${I.speaker}</button>`;
+  if(c.memo){
+    const bodyEn=/[A-Za-z]/.test(c.body||'');
+    v.innerHTML=`
+      <div class="topbar"><h1>ノート</h1></div>
+      <button class="cd-back" onclick="closeCardView()">${I.back} 一覧へ戻る</button>
+      <div class="cd-card">
+        <div class="cd-sec"><div class="lab">メモ</div><div class="val" style="white-space:pre-wrap;line-height:1.7">${esc(c.body)||'<span style="color:var(--ink-3)">空のメモ</span>'}${bodyEn?spk(c.body):''}</div></div>
+      </div>
+      <div class="cd-actions">
+        <button class="btn btn-ghost" style="flex:1;padding:14px" onclick="deleteCard('${c.id}')">削除</button>
+        <button class="btn btn-primary" style="flex:2;padding:14px" onclick="editMemo('${c.id}')">${I.gear} 編集する</button>
+      </div>`;
+    return;
+  }
   const titleEn=/[A-Za-z]/.test(c.title||'');
   const bodyEn=/[A-Za-z]/.test(c.body||'');
   v.innerHTML=`
@@ -1041,7 +1080,7 @@ function renderCardDetail(v){
       ${(c.pos&&c.pos.length)?`<div class="cd-pos">${c.pos.map(p=>`<span class="pos-chip">${esc(p)}</span>`).join('')}</div>`:''}
       <div class="cd-sec"><div class="lab">意味</div><div class="val">${esc(c.mean)||'<span style="color:var(--ink-3)">未入力</span>'}</div></div>
       ${c.exEn?`<div class="cd-sec"><div class="lab">例文</div><div class="cd-ex"><div class="en">${esc(c.exEn)} ${spk(c.exEn)}</div>${c.exJa?`<div class="ja">${esc(c.exJa)}</div>`:''}</div></div>`:''}
-      ${c.other?`<div class="cd-sec"><div class="lab">その他</div><div class="val">${esc(c.other)}</div></div>`:''}
+      ${c.other?`<div class="cd-sec"><div class="lab">その他</div><div class="val" style="white-space:pre-wrap;line-height:1.7">${esc(c.other)}</div></div>`:''}
     </div>
     <div class="cd-actions">
       <button class="btn btn-ghost" style="flex:1;padding:14px" onclick="deleteCard('${c.id}')">削除</button>
@@ -1059,6 +1098,17 @@ function folderRow(f){
 }
 function cardRow(c){
   if(c.type==='text'){
+    if(c.memo){
+      const mp=(c.body||'').replace(/\s+/g,' ').slice(0,80);
+      return `<div class="card-row">
+        <div class="ico-doc" style="background:var(--amber-soft);color:var(--amber-d)">${I.book}</div>
+        <div class="term-wrap" onclick="viewCard('${c.id}')">
+          <div class="term" style="font-family:var(--font-jp);font-size:1rem">${esc(mp)||'(空のメモ)'}</div>
+          <div class="mean">メモ</div>
+        </div>
+        <span class="chev" onclick="viewCard('${c.id}')">${I.chev}</span>
+      </div>`;
+    }
     const preview=(c.body||'').replace(/\s+/g,' ').slice(0,60);
     return `<div class="card-row">
       <div class="ico-doc">${I.doc}</div>
@@ -2688,7 +2738,8 @@ const AI_MODES={
   nuance:{label:'ニュアンス解説',convo:false,ph:'違いを知りたい語を入力（例：see / watch）',phs:'語を入力…',sys:'You explain nuance and usage differences of English words/phrases for Japanese learners, in Japanese, with examples.'},
   translate:{label:'翻訳',convo:false,ph:'日本語↔英語を翻訳します',phs:'文章を入力…',sys:'Translate between Japanese and English naturally. If the input is Japanese, give natural English; if English, give natural Japanese. Add a short note on nuance if helpful.'}
 };
-const CARD_SYS='You output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"term":string,"pron":IPA string,"mean":concise Japanese meaning,"exEn":natural English example,"exJa":Japanese translation of the example,"pos":array of ALL applicable Japanese parts of speech for this term (e.g. ["形容詞","名詞"]; if both a noun and adjective exist, include both. For phrases use ["フレーズ"] or ["句動詞"]),"other":a short Japanese note of extra info — for a phrase give similar expressions; for a word give other parts of speech/meanings or usage tips}. mean, exJa, pos and other MUST be in Japanese. No markdown, no code fences.';
+const OTHER_SPEC='The "other" field must be a multi-line Japanese study note (use real newlines) built ONLY from the sections below that genuinely apply to this term — omit any section that does not fit, and never invent fake words. Sections and exact headers:\n【派生語】\nthen one line per real derivative as "品詞：word（日本語の意味）", adding " ※あまり使われない" when rare (e.g. "名詞：cherishment（大切にすること）※あまり使われない").\n【類義語】\nthen a single line of comma-separated English synonyms.\n【反意語】\nthen a single line of comma-separated English antonyms.\n💡【ニュアンス】\ninclude ONLY when the word has a noteworthy nuance; give a short Japanese explanation of how it differs from simpler synonyms (like / love etc.).\n💡【よくある表現】\nthen 1-3 common collocations, each as TWO lines: the English collocation, then its Japanese meaning on the next line.\nFor phrases/idioms, skip 【派生語】 and give 類義語/反意語/よくある表現 instead. Separate the section blocks with a blank line.';
+const CARD_SYS='You output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"term":string,"pron":IPA string,"mean":concise Japanese meaning,"exEn":natural English example,"exJa":Japanese translation of the example,"pos":array of ALL applicable Japanese parts of speech for this term (e.g. ["形容詞","名詞"]; if both a noun and adjective exist, include both. For phrases use ["フレーズ"] or ["句動詞"]),"other":string}. '+OTHER_SPEC+' mean, exJa, pos and other MUST be in Japanese. No markdown, no code fences.';
 
 const EXAMPLE_SYS='You generate everyday English for a Japanese learner. First detect the input language. If the input is JAPANESE: output 3 natural English expressions that convey it, the kind commonly used in daily life. If the input is ENGLISH: output 3 natural everyday example sentences that CONTAIN the given English word/phrase. Output ONLY JSON: {"items":[{"en":"English expression or sentence","ja":"its natural Japanese translation"}]} with EXACTLY 3 items. Keep them short, common and useful in daily life. No markdown, no code fences.';
 
@@ -3035,7 +3086,7 @@ async function aiFillCard(){
   if(!term){ toast('先に単語を入力してください'); return; }
   const btn=document.getElementById('aiGenBtn'); btn.disabled=true; btn.innerHTML=I.sparkle+' 生成中…';
   try{
-    const sys='Output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"pron":IPA,"mean":concise Japanese meaning,"exEn":natural English example,"exJa":Japanese translation,"pos":array of ALL applicable Japanese parts of speech (e.g. ["形容詞","名詞"]),"other":short Japanese note of extra info (similar expressions for phrases, other parts of speech/meanings or usage tips for words)}. Japanese for mean/exJa/pos/other. No markdown.';
+    const sys='Output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"pron":IPA,"mean":concise Japanese meaning,"exEn":natural English example,"exJa":Japanese translation,"pos":array of ALL applicable Japanese parts of speech (e.g. ["形容詞","名詞"]),"other":string}. '+OTHER_SPEC+' Japanese for mean/exJa/pos/other. No markdown.';
     const content=await callAI([{role:'system',content:sys},{role:'user',content:term}],{json:true,temp:0.4});
     const c=JSON.parse(content);
     if(c.pron) document.getElementById('cPron').value=c.pron;
