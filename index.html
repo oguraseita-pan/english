@@ -130,6 +130,22 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .quickadd input::placeholder{color:var(--ink-3);}
 .qa-btn{background:var(--green);color:#fff;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;flex:none;transition:transform .12s;}
 .qa-btn:active{transform:scale(.9);}
+.qa-btn.alt{background:var(--amber-soft,#FBEBC9);color:var(--amber-d,#B07C26);}
+.qa-btn svg{width:22px;height:22px;}
+.trans-panel{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:13px 15px;animation:fadeIn .18s ease;}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+.trans-panel.trans-err{color:#b3402a;font-size:.88rem;}
+.trans-load{color:var(--ink-3);font-size:.9rem;}
+.trans-dir{font-size:.7rem;font-weight:700;color:var(--ink-3);letter-spacing:.02em;margin-bottom:6px;}
+.trans-src{font-size:.86rem;color:var(--ink-2);padding-bottom:8px;border-bottom:1px dashed var(--line);margin-bottom:8px;word-break:break-word;}
+.trans-out{display:flex;align-items:flex-start;gap:8px;font-size:1.06rem;font-weight:600;color:var(--ink);word-break:break-word;}
+.trans-out>span{flex:1;}
+.tp-ic{flex:none;width:30px;height:30px;border-radius:9px;background:var(--green-soft);color:var(--green);display:grid;place-items:center;}
+.tp-ic svg{width:17px;height:17px;}
+.trans-actions{display:flex;gap:8px;margin-top:12px;}
+.tp-btn{display:inline-flex;align-items:center;gap:5px;font-size:.8rem;font-weight:700;color:var(--ink-2);background:var(--surface-2,#F0ECDF);border-radius:999px;padding:7px 13px;}
+.tp-btn svg{width:15px;height:15px;}
+.tp-btn:active{transform:scale(.96);}
 
 .bar-chart{display:flex;align-items:flex-end;gap:6px;height:84px;padding:6px 2px 0;}
 .bar-chart .bar{flex:1;background:var(--green-soft);border-radius:6px 6px 3px 3px;min-height:4px;position:relative;display:flex;justify-content:center;}
@@ -507,6 +523,8 @@ const I = {
   book:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM19 3v18"/></svg>',
   movef:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 13h6M13 11l2 2-2 2"/></svg>',
   pen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  translate:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h7M9 3v2c0 4-2 7-6 8M5 9c0 3 3 5 7 6"/><path d="M12 20l4-9 4 9M14.5 16h5"/></svg>',
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
   flame:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c1 4-2 5-2 8a4 4 0 0 0 8 0c0-1-.5-2-1-3 2 1 3 3.5 3 6a8 8 0 1 1-16 0c0-4 3-6 4-9 1 1 1.5 2 2 3z"/></svg>',
   doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h6"/></svg>',
   speech:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-9 8.4 9 9 0 0 1-4-1l-4 1 1-3.5a8.38 8.38 0 0 1-1-4A8.5 8.5 0 0 1 12.5 3 8.38 8.38 0 0 1 21 11.5z"/></svg>',
@@ -866,12 +884,14 @@ function renderHome(){
       <div class="tile"><div class="v">${total}</div><div class="k">総カード</div></div>
     </div>
 
-    <div class="section-title">サッとメモ</div>
+    <div class="section-title">サッとメモ・翻訳</div>
     <div class="quickadd">
-      <input id="qaInput" placeholder="単語やフレーズを入力…" onkeydown="if(event.key==='Enter')quickAdd()" />
-      <button class="qa-btn" onclick="quickAdd()" aria-label="追加">${I.plus}</button>
+      <input id="qaInput" placeholder="単語・フレーズ・文を入力…" onkeydown="if(event.key==='Enter')quickAdd()" />
+      <button class="qa-btn alt" onclick="qaTranslate()" aria-label="翻訳" title="英⇄日に翻訳">${I.translate}</button>
+      <button class="qa-btn" onclick="quickAdd()" aria-label="メモに追加" title="メモに追加">${I.plus}</button>
     </div>
-    <div style="font-size:.74rem;color:var(--ink-3);margin:7px 4px 0">受信箱に保存されます。意味や例文はあとから追記できます。</div>
+    <div style="font-size:.74rem;color:var(--ink-3);margin:7px 4px 0">＋でメモに保存（受信箱）。訳ボタンで英⇄日をすばやく翻訳します。</div>
+    <div id="qaTrans">${transPanelHtml()}</div>
 
     <div class="section-title">この1週間</div>
     <div class="card">
@@ -3657,6 +3677,87 @@ async function callManaged(messages,opts){
   const data=await res.json();
   if(data && data.error) throw new Error(data.error);
   return ((data&&data.text)||'').trim();
+}
+/* ---------- かんたん翻訳（DeepL中継・アプリ共通キー・要ログイン） ---------- */
+function hasJP(s){ return /[\u3040-\u30ff\u3400-\u9fff\uff66-\uff9f]/.test(s||''); }
+function translateReady(){ return cloudConfigured() && loggedIn(); }
+let transCache={};
+try{ transCache=JSON.parse(localStorage.getItem('sprout_trans')||'{}')||{}; }catch(_){ transCache={}; }
+function setTransCache(k,v){ transCache[k]=v; const ks=Object.keys(transCache); if(ks.length>400) delete transCache[ks[0]]; try{ localStorage.setItem('sprout_trans', JSON.stringify(transCache)); }catch(_){ } }
+async function translateText(text, target){
+  text=(text||'').trim();
+  target = target || (hasJP(text)?'EN':'JA');
+  const key=target+'|'+text;
+  if(transCache[key]!=null) return { text:transCache[key], target, cached:true };
+  let token='';
+  try{ const { data }=await _sb.auth.getSession(); token=(data&&data.session)?data.session.access_token:''; }catch(e){}
+  if(!token) throw new Error('NO_SESSION');
+  const res=await fetch(CLOUD.url.replace(/\/$/,'')+'/functions/v1/translate',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':CLOUD.anonKey},
+    body:JSON.stringify({ text, target })
+  });
+  let data={}; try{ data=await res.json(); }catch(_){ }
+  if(!res.ok || (data&&data.error)) throw new Error((data&&data.error)||('http_'+res.status));
+  const out=(data&&data.text)||'';
+  if(out) setTransCache(key,out);
+  return { text:out, target };
+}
+/* ホームの翻訳パネル（サッとメモの下に表示） */
+let transState={status:'idle'};
+function transPanelHtml(){
+  const t=transState;
+  if(t.status==='loading') return '<div class="trans-panel"><div class="trans-load">翻訳中…</div></div>';
+  if(t.status==='error') return '<div class="trans-panel trans-err">'+esc(t.msg||'翻訳に失敗しました')+'</div>';
+  if(t.status==='done'){
+    const dir = t.target==='EN' ? '日本語 → 英語' : '英語 → 日本語';
+    const engText = t.target==='EN' ? t.out : t.src; // 英語側を読み上げ
+    return '<div class="trans-panel">'
+      +'<div class="trans-dir">'+dir+(t.cached?' ・ 履歴':'')+'</div>'
+      +'<div class="trans-src">'+esc(t.src)+'</div>'
+      +'<div class="trans-out"><span>'+esc(t.out)+'</span>'
+        +'<button class="tp-ic" onclick="speak('+JSON.stringify(engText).replace(/"/g,'&quot;')+')" aria-label="読み上げ">'+I.speaker+'</button></div>'
+      +'<div class="trans-actions">'
+        +'<button class="tp-btn" onclick="copyTrans()">'+I.copy+'コピー</button>'
+        +'<button class="tp-btn" onclick="transToCard()">'+I.plus+'カードに保存</button>'
+      +'</div></div>';
+  }
+  return '';
+}
+function paintTrans(){ const el=document.getElementById('qaTrans'); if(el) el.innerHTML=transPanelHtml(); }
+async function qaTranslate(){
+  const inp=document.getElementById('qaInput');
+  const text=(inp?inp.value:'').trim();
+  if(!text){ toast('翻訳する語や文を入力してください'); return; }
+  if(!translateReady()){ toast('翻訳を使うにはログインが必要です（設定）'); return; }
+  const target = hasJP(text)?'EN':'JA';
+  transState={status:'loading'}; paintTrans();
+  try{
+    const r=await translateText(text, target);
+    transState={status:'done', src:text, out:r.text, target, cached:!!r.cached};
+  }catch(e){
+    const m=(e&&e.message)||'';
+    let msg='翻訳に失敗しました。通信状況を確認してください。';
+    if(m==='NO_SESSION'||m==='auth_required'||m==='auth_invalid') msg='ログインが必要です（設定 → アカウント）。';
+    else if(/quota|429|rate_limited/i.test(m)) msg='今月の無料翻訳枠の上限に達した可能性があります。';
+    else if(m==='too_long') msg='長すぎます。1000文字以内で翻訳してください。';
+    else if(m==='server_not_configured'||m==='deepl_auth') msg='翻訳サーバーが未設定です。';
+    transState={status:'error', msg};
+  }
+  paintTrans();
+}
+function copyTrans(){
+  if(transState.status!=='done') return;
+  const txt=transState.out||'';
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(()=>toast('コピーしました'),()=>toast('コピーできませんでした'));
+  } else { toast('この環境ではコピーできません'); }
+}
+function transToCard(){
+  if(transState.status!=='done') return;
+  const eng = transState.target==='EN' ? transState.out : transState.src;
+  const jp  = transState.target==='EN' ? transState.src : transState.out;
+  editCard(null,{term:eng, mean:jp});
 }
 async function callGemini(messages,opts){
   const key=state.settings.geminiKey;
