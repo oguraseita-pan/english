@@ -431,6 +431,8 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 /* ---------- Settings ---------- */
 .set-group{margin-bottom:22px;}
 .auth-intro{font-size:.9rem;color:var(--ink-2);line-height:1.65;margin-bottom:16px;}
+.auth-sent-ic{width:54px;height:54px;border-radius:50%;background:var(--green-soft);color:var(--green);display:flex;align-items:center;justify-content:center;margin:0 0 12px;}
+.auth-sent-ic svg{width:26px;height:26px;}
 .auth-h{font-family:var(--font-en);font-size:1.5rem;font-weight:600;margin:0 0 2px;}
 .auth-step{font-size:.78rem;color:var(--ink-3);margin-bottom:14px;font-weight:600;letter-spacing:.02em;}
 .auth-back{display:inline-flex;align-items:center;gap:3px;color:var(--ink-2);font-size:.92rem;font-weight:600;margin-bottom:10px;background:none;padding:2px 0;}
@@ -467,6 +469,12 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .faq-item[open] summary::after{content:'－';}
 .faq-item .ans{padding:0 14px 14px;font-size:.9rem;line-height:1.7;color:var(--ink-2);white-space:pre-wrap;}
 .legal-body{font-size:.9rem;line-height:1.75;color:var(--ink-2);max-height:62vh;overflow:auto;white-space:pre-wrap;}
+.tk{white-space:normal;}
+.tk-row{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);}
+.tk-row:last-child{border-bottom:none;}
+.tk-k{flex:0 0 38%;font-weight:600;color:var(--ink);font-size:.84rem;}
+.tk-v{flex:1;font-size:.86rem;}
+.tk-note{font-size:.78rem;color:var(--ink-3);}
 .set-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--surface);box-shadow:var(--shadow);border-radius:var(--radius-sm);padding:14px 16px;margin-bottom:9px;}
 .set-row .l{font-weight:500;}
 .set-row .d{font-size:.78rem;color:var(--ink-3);margin-top:2px;}
@@ -665,6 +673,14 @@ function save(opts){
 const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publishable_jhQ8QRqM6QuCWlEjOPok9A_62zFa10k' };
 const APP_VERSION = '1.0.0';
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
+// 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
+const BIZ = {
+  seller: '〇〇〇〇（事業者名／屋号）',
+  operator: '小椋 誠太',           // 運営統括責任者
+  address: '〒000-0000 ○○県○○市○○ 0-0-0', // 請求があれば遅滞なく開示する旨でも可
+  phone: '000-0000-0000',          // 請求があれば遅滞なく開示、と記載も可
+  email: SUPPORT_EMAIL,
+};
 let _sb=null, account={ user:null }, _cloudTimer=null, _lastSync=0;
 function cloudConfigured(){ return !!(CLOUD.url && CLOUD.anonKey); }
 function loggedIn(){ return !!(account && account.user); }
@@ -686,6 +702,7 @@ async function cloudInit(){
     const { data } = await _sb.auth.getSession();
     if(data && data.session) account.user=data.session.user;
     _sb.auth.onAuthStateChange((_e,session)=>{
+      if(_e==='PASSWORD_RECOVERY'){ account.user=session?session.user:account.user; authRecovery=true; authView='recovery'; setTab('settings'); renderSettings(); return; }
       const was=loggedIn(); account.user=session?session.user:null;
       if(!was && loggedIn()){ cloudPull(); } else { renderSettings(); }
     });
@@ -743,16 +760,49 @@ async function authSignUp(){
   if(!em){ toast('メールアドレスを入力してください'); authView='signup1'; renderSettings(); return; }
   if(!pw || pw.length<6){ toast('パスワードは6文字以上にしてください'); return; }
   if(pw2!=null && pw!==pw2){ toast('パスワードが一致しません'); return; }
-  try{ const { error }=await _sb.auth.signUp({ email:em, password:pw }); if(error) throw error;
-    authView='menu'; authDraftEmail=''; renderSettings();
-    toast('確認メールを送信しました。メール内のリンクで認証を完了してください'); }
-  catch(e){ toast('登録に失敗：'+(e.message||'')); }
+  try{ const { data, error }=await _sb.auth.signUp({ email:em, password:pw }); if(error) throw error;
+    // 確認メール有効時、既存メールは identities が空配列で返る（列挙防止のためエラーにはならない）
+    if(data && data.user && Array.isArray(data.user.identities) && data.user.identities.length===0){
+      toast('このメールアドレスは既に登録されています'); authDraftEmail=em; authView='login'; renderSettings(); return;
+    }
+    authDraftEmail=em; authView='sent'; renderSettings(); }
+  catch(e){ const m=(e.message||''); toast(/registered|already/i.test(m)?'このメールアドレスは既に登録されています':('登録に失敗：'+m)); if(/registered|already/i.test(m)){ authView='login'; renderSettings(); } }
+}
+async function authResend(){
+  const em=authDraftEmail || ((document.getElementById('authEmail')||{}).value||'').trim();
+  if(!em){ toast('メールアドレスがわかりません'); return; }
+  if(!_sb){ toast('準備中です'); return; }
+  try{ const { error }=await _sb.auth.resend({ type:'signup', email:em, options:{ emailRedirectTo: location.origin + location.pathname } }); if(error) throw error;
+    toast('確認メールを再送しました'); }
+  catch(e){ toast('再送に失敗：'+(e.message||'')); }
+}
+async function authForgot(){
+  const em=((document.getElementById('authEmail')||{}).value||'').trim();
+  if(!em || !/^.+@.+\..+$/.test(em)){ toast('メールアドレスを正しく入力してください'); return; }
+  if(!_sb){ toast('準備中です。少し待って再度お試しください'); return; }
+  try{ const { error }=await _sb.auth.resetPasswordForEmail(em, { redirectTo: location.origin + location.pathname });
+    if(error) throw error;
+    authView='menu'; renderSettings();
+    toast('再設定メールを送信しました。メール内のリンクから新しいパスワードを設定してください'); }
+  catch(e){ toast('送信に失敗：'+(e.message||'')); }
+}
+async function authSetNewPw(){
+  const pw=(document.getElementById('authNewPw')||{}).value||'';
+  const pw2=(document.getElementById('authNewPw2')||{}).value;
+  if(!pw || pw.length<6){ toast('パスワードは6文字以上にしてください'); return; }
+  if(pw!==pw2){ toast('パスワードが一致しません'); return; }
+  try{ const { error }=await _sb.auth.updateUser({ password:pw }); if(error) throw error;
+    authRecovery=false; authView='menu'; renderSettings();
+    toast('パスワードを更新しました'); }
+  catch(e){ toast('更新に失敗：'+(e.message||'')); }
 }
 async function authSignIn(){
   const em=((document.getElementById('authEmail')||{}).value||'').trim(), pw=(document.getElementById('authPw')||{}).value||'';
   if(!em||!pw){ toast('メールとパスワードを入力してください'); return; }
   try{ const { error }=await _sb.auth.signInWithPassword({ email:em, password:pw }); if(error) throw error; authView='menu'; }
-  catch(e){ toast('ログインに失敗：'+(e.message||'')); }
+  catch(e){ const m=(e.message||'');
+    if(/confirm/i.test(m)){ authDraftEmail=em; authView='sent'; renderSettings(); toast('メール認証が未完了です。確認メールのリンクをタップしてください'); return; }
+    toast('ログインに失敗：'+m); }
 }
 async function authGoogle(){
   if(!_sb){ toast('準備中です。少し待って再度お試しください'); return; }
@@ -762,6 +812,34 @@ async function authGoogle(){
 async function authSignOut(){
   try{ await _sb.auth.signOut(); }catch(e){}
   account.user=null; authView='menu'; authDraftEmail=''; renderSettings(); toast('ログアウトしました');
+}
+async function deleteAccount(){
+  if(!loggedIn()){ toast('ログインが必要です'); return; }
+  if(!confirm('アカウントとクラウド上のデータを完全に削除します。\n・追加した単語／ノート／英語日記\n・学習履歴と進捗\n・ログイン情報\nこの操作は取り消せません。続けますか？')) return;
+  if(!confirm('本当に削除しますか？元に戻すことはできません。')) return;
+  toast('削除しています…');
+  let fullDeleted=false;
+  // ① ログイン情報まで完全削除するには delete-account 関数（service role）が必要
+  try{
+    let token=''; try{ const { data }=await _sb.auth.getSession(); token=(data&&data.session)?data.session.access_token:''; }catch(_){}
+    const r=await fetch(CLOUD.url+'/functions/v1/delete-account',{ method:'POST', headers:{ 'Authorization':'Bearer '+token, 'apikey':CLOUD.anonKey, 'Content-Type':'application/json' }, body:'{}' });
+    fullDeleted = r.ok;
+  }catch(_){}
+  // ② クラウド上の保存データを削除（関数が無くてもデータは消す）
+  try{ await _sb.from('sprout_state').delete().eq('user_id', account.user.id); }catch(_){}
+  try{ await _sb.auth.signOut(); }catch(_){}
+  account.user=null; authView='menu'; authDraftEmail='';
+  renderSettings();
+  toast(fullDeleted?'アカウントを削除しました':'データを削除してログアウトしました');
+}
+async function changeEmail(){
+  if(!loggedIn()){ toast('ログインが必要です'); return; }
+  const em=((document.getElementById('newEmail')||{}).value||'').trim();
+  if(!em || !/^.+@.+\..+$/.test(em)){ toast('メールアドレスを正しく入力してください'); return; }
+  try{ const { error }=await _sb.auth.updateUser({ email:em }); if(error) throw error;
+    authView='menu'; renderSettings();
+    toast('確認メールを送信しました。新旧のメールで承認すると変更が完了します'); }
+  catch(e){ toast('変更に失敗：'+(e.message||'')); }
 }
 async function cloudSyncNow(){ if(!loggedIn()){ toast('ログインが必要です'); return; } toast('同期中…'); await cloudPull(); }
 
@@ -3094,7 +3172,8 @@ async function aiFillCard(){
    ==================================================================== */
 let keyOpen=false;
 let aiSectionOpen=false;
-let authView='menu';        // 'menu' | 'login' | 'signup1' | 'signup2'
+let authView='menu';        // 'menu' | 'login' | 'signup1' | 'signup2' | 'forgot' | 'recovery'
+let authRecovery=false;
 let authDraftEmail='';
 let billingStep=null;       // null | 'plans' | 'checkout'
 let billingSel={plan:'light', term:'12m'};
@@ -3132,11 +3211,42 @@ function googleBtn(label){
     ${label}</button>`;
 }
 function authBoxHtml(){
+  if(authView==='sent'){
+    return `<div class="auth-sent-ic">${I.send||I.check}</div>
+      <div class="auth-h">確認メールを送信しました</div>
+      <div class="d" style="margin:6px 0 4px">下記アドレス宛に確認メールをお送りしました。メール内のリンクをタップすると登録が完了します。</div>
+      <div class="auth-email-fixed" style="margin:10px 0 4px">${esc(authDraftEmail||'')}</div>
+      <div class="d" style="margin:10px 0 16px">メールが届かない場合は、迷惑メールフォルダもご確認ください。数分待っても届かなければ再送できます。</div>
+      <button class="btn btn-primary full" style="padding:13px" onclick="authResend()">確認メールを再送する</button>
+      <button class="btn btn-ghost full" style="padding:13px;margin-top:10px" onclick="authGo('login')">ログイン画面へ</button>`;
+  }
+  if(authView==='changeEmail'){
+    return `<button class="auth-back" onclick="authGo('menu')">‹ 戻る</button>
+      <div class="auth-h">メールアドレスの変更</div>
+      <div class="d" style="margin:2px 0 12px">現在：<b>${esc(accountEmail())}</b><br>新しいメールアドレスを入力すると、確認メールをお送りします。新旧それぞれのメールで承認すると変更が完了します。</div>
+      <div class="field"><label>新しいメールアドレス</label><input type="email" id="newEmail" placeholder="new@example.com" autocomplete="email" /></div>
+      <button class="btn btn-primary full" style="padding:14px" onclick="changeEmail()">確認メールを送信</button>`;
+  }
+  if(authView==='recovery'){
+    return `<div class="auth-h">新しいパスワードを設定</div>
+      <div class="auth-step">パスワード再設定</div>
+      <div class="field"><label>新しいパスワード</label><input type="password" id="authNewPw" placeholder="6文字以上" autocomplete="new-password" /></div>
+      <div class="field"><label>新しいパスワード（確認）</label><input type="password" id="authNewPw2" placeholder="もう一度入力" autocomplete="new-password" /></div>
+      <button class="btn btn-primary full" style="padding:14px" onclick="authSetNewPw()">パスワードを更新する</button>`;
+  }
+  if(authView==='forgot'){
+    return `<button class="auth-back" onclick="authGo('login')">‹ 戻る</button>
+      <div class="auth-h">パスワード再設定</div>
+      <div class="d" style="margin:2px 0 14px">登録済みのメールアドレスを入力すると、パスワード再設定用のリンクをお送りします。</div>
+      <div class="field"><label>メールアドレス</label><input type="email" id="authEmail" value="${esc(authDraftEmail||'')}" placeholder="you@example.com" autocomplete="username" /></div>
+      <button class="btn btn-primary full" style="padding:14px" onclick="authForgot()">再設定メールを送信</button>`;
+  }
   if(authView==='login'){
-    return `<button class="auth-back" onclick="authGo('menu')">${I.chev?'‹':''} 戻る</button>
+    return `<button class="auth-back" onclick="authGo('menu')">‹ 戻る</button>
       <div class="auth-h">ログイン</div>
-      <div class="field"><label>メールアドレス</label><input type="email" id="authEmail" placeholder="you@example.com" autocomplete="username" /></div>
+      <div class="field"><label>メールアドレス</label><input type="email" id="authEmail" value="${esc(authDraftEmail||'')}" placeholder="you@example.com" autocomplete="username" /></div>
       <div class="field"><label>パスワード</label><input type="password" id="authPw" placeholder="パスワード" autocomplete="current-password" /></div>
+      <div style="text-align:right;margin:-4px 0 12px"><a style="color:var(--ink-3);font-size:.85rem;cursor:pointer" onclick="authGo('forgot')">パスワードをお忘れですか？</a></div>
       <button class="btn btn-primary full" style="padding:14px" onclick="authSignIn()">ログイン</button>
       <div class="auth-or"><span>または</span></div>
       ${googleBtn('Googleでログイン')}
@@ -3226,15 +3336,15 @@ function renderSettings(){
           <label>クラウド同期</label>
           <div class="d">現在は<b>この端末内のみ</b>に保存されています。複数端末での同期やバックアップを有効にするには、開発者がクラウド設定（Supabase）を行う必要があります。</div>
         </div>`
-      : (loggedIn() ? `
+      : (authRecovery ? authBoxHtml() : (loggedIn() ? (authView==='changeEmail' ? authBoxHtml() : `
         <div class="field">
           <label>ログイン中</label>
           <div class="key-set"><span class="lbl">${I.check} ${esc(accountEmail())}</span><button class="btn btn-ghost" style="padding:7px 13px" onclick="authSignOut()">ログアウト</button></div>
           <div class="d">${_lastSync?('最終同期：'+new Date(_lastSync).toLocaleString('ja-JP')):'データは自動でクラウドに同期されます。'}</div>
         </div>
-        <button class="btn btn-primary full" style="padding:13px" onclick="cloudSyncNow()">${I.refresh} 今すぐ同期</button>
-        <div class="d" style="text-align:center;margin-top:7px">通常は自動で同期されます。別の端末で編集した内容をすぐ取り込みたいときに使います。</div>`
-      : authBoxHtml() )}
+        <button class="btn btn-ghost full" style="padding:11px;margin-bottom:8px" onclick="authGo('changeEmail')">メールアドレスを変更</button>
+        <button class="btn btn-ghost full" style="padding:11px;color:var(--r-again);border:1px solid var(--line)" onclick="deleteAccount()">アカウントを削除</button>`)
+      : authBoxHtml()) )}
     </div>
 
     <div class="section-title">プラン・お支払い</div>
@@ -3333,6 +3443,7 @@ function renderSettings(){
       <div class="set-row" style="cursor:pointer" onclick="openFAQ()"><div><div class="l">よくある質問</div></div><span class="chev">${I.chev}</span></div>
       <div class="set-row" style="cursor:pointer" onclick="openPrivacy()"><div><div class="l">プライバシーポリシー</div></div><span class="chev">${I.chev}</span></div>
       <div class="set-row" style="cursor:pointer" onclick="openTerms()"><div><div class="l">利用規約</div></div><span class="chev">${I.chev}</span></div>
+      <div class="set-row" style="cursor:pointer" onclick="openTokushoho()"><div><div class="l">特定商取引法に基づく表記</div></div><span class="chev">${I.chev}</span></div>
       <div class="set-row" style="cursor:pointer" onclick="openContact()"><div><div class="l">お問い合わせ</div></div><span class="chev">${I.chev}</span></div>
       <div class="set-row"><div><div class="l">バージョン</div></div><span style="color:var(--ink-3)">${APP_VERSION}</span></div>
     </div>
@@ -3377,7 +3488,8 @@ function openFAQ(){
   const qa=[
     ['データはどこに保存されますか？','ログインしていない場合は、この端末のブラウザ内だけに保存されます（他の端末からは見られません）。ログインすると、追加した単語・ノート・日記・学習進捗がクラウド（サーバー）にも保存され、別の端末でも同じデータで学習できます。'],
     ['オフラインで使っても同期されますか？','はい。ログイン中なら、オフラインで学習した内容もまず端末に保存され、オンラインに戻った後（次の保存やアプリ起動時）に自動でクラウドへ同期されます。'],
-    ['「今すぐ同期」はいつ使う？','通常は自動で同期されるので使う必要はありません。別の端末で編集した内容を、待たずにこの端末へすぐ取り込みたいときだけ使います。'],
+    ['パスワードを忘れたら？','設定 → アカウントの「ログイン」画面で「パスワードをお忘れですか？」から、登録メールに再設定リンクを送れます。リンクを開くと新しいパスワードを設定できます。'],
+    ['アカウントを削除したい','ログイン中に、設定 → アカウントの「アカウントを削除」から削除できます。クラウド上のデータとログイン情報が消え、元には戻せません。'],
     ['「1日の新規カード上限」とは？','忘却曲線（復習）モードで、1日に新しく出題する“初めて学ぶカード”の枚数の上限です。一度にたくさん新出単語を詰め込むと翌日以降の復習が雪だるま式に増え、定着しにくくなります。上限を設けることで、毎日こなせる量に復習を平準化し、無理なく続けられます。復習(期限が来たカード)はこの上限とは別にすべて出題されます。'],
     ['「すべてのデータを消去」で何が消えますか？','あなたが追加した単語・ノート・英語日記、学習履歴と進捗、そして設定（APIキーや読み上げ速度などの好み）が消え、初期サンプルの状態に戻ります。アプリ自体やアカウント（ログイン情報）は削除されません。ただしログイン中の場合は、消去後の状態が次の同期でクラウドにも反映される点にご注意ください。'],
     ['AI連携は必要ですか？お金はかかりますか？','AIは任意です。オフでも、単語・熟語学習、クイズ、ノート、読み上げなどキー不要の機能はすべて使えます。ログイン中はアプリ提供のAI（無料枠）が使えます。自分のAPIキー（Gemini）を使う場合も、無料枠内なら料金はかかりません。'],
@@ -3403,6 +3515,9 @@ AIによる採点・添削・例文生成などを利用すると、入力され
 ■ 広告・第三者提供
 本アプリは広告を表示せず、学習データを広告目的で第三者に提供しません。
 
+■ お支払い情報
+有料プランのお支払いに用いるクレジットカード情報は、決済代行会社によって安全に処理され、運営者がカード番号そのものを保持することはありません。
+
 ■ データの削除
 「設定 → データ → すべてのデータを消去」でいつでも端末のデータを消去できます。アカウントとクラウド上のデータの削除をご希望の場合は、お問い合わせよりご連絡ください。
 
@@ -3418,10 +3533,37 @@ function openTerms(){
 2. 本アプリおよびAIが生成する内容（添削・例文・翻訳など）は正確性を保証しません。最終的な判断はご自身の責任で行ってください。
 3. ご自身のAPIキーを設定して外部AIを利用する場合、その利用料金・規約は各提供元との契約に従います。
 4. 法令に違反する行為、他者の権利を侵害する行為、本アプリの運営を妨げる行為を禁止します。
-5. 本アプリは現状有姿で提供され、利用により生じた損害について運営者は責任を負いません。
-6. 本規約は予告なく変更される場合があります。
+5. 有料プラン（サブスクリプション）について：
+　・有料プランはお申し込み時に課金され、契約期間ごとに自動で更新・課金されます。
+　・解約はいつでも可能で、解約後は次回更新日以降の課金は発生しません。すでにお支払いいただいた期間分の返金は、サービスの性質上承っておりません。
+　・料金・プラン内容は変更される場合があります。変更時は事前にお知らせします。
+6. 本アプリは現状有姿で提供され、利用により生じた損害について運営者は責任を負いません。
+7. 本規約は予告なく変更される場合があります。
 
 ※本文は雛形です。公開前に内容をご確認・調整ください。</div>
+    <div class="modal-actions" style="margin-top:12px"><button class="btn btn-ghost" onclick="closeModal()">閉じる</button></div>`);
+}
+function openTokushoho(){
+  const row=(k,v)=>`<div class="tk-row"><div class="tk-k">${esc(k)}</div><div class="tk-v">${v}</div></div>`;
+  openModal(`
+    <h2>特定商取引法に基づく表記</h2>
+    <div class="legal-body" style="padding:0">
+      <div class="tk">
+        ${row('販売事業者', esc(BIZ.seller))}
+        ${row('運営統括責任者', esc(BIZ.operator))}
+        ${row('所在地', esc(BIZ.address)+'<br><span class="tk-note">（ご請求があれば遅滞なく開示します）</span>')}
+        ${row('電話番号', esc(BIZ.phone)+'<br><span class="tk-note">（ご請求があれば遅滞なく開示します）</span>')}
+        ${row('連絡先', esc(BIZ.email))}
+        ${row('販売価格', 'ライトプラン：月額500円〜（契約期間により500円／800円／1,200円）<br>プレミアムプラン：月額1,500円〜（契約期間により1,500円／2,400円／3,600円）<br><span class="tk-note">表示価格は税込です。</span>')}
+        ${row('商品代金以外の必要料金', '通信料金はお客様のご負担となります。')}
+        ${row('お支払い方法', 'クレジットカード')}
+        ${row('お支払い時期', 'お申し込み時に課金され、以後は契約期間ごとに自動更新・課金されます。')}
+        ${row('サービス提供時期', 'お支払い手続き完了後、ただちにご利用いただけます。')}
+        ${row('解約について', 'いつでも解約できます。解約後は次回更新日以降の課金は発生しません。')}
+        ${row('返品・返金について', 'サービスの性質上、購入後のお客様都合による返金は承っておりません。')}
+      </div>
+      <div class="tk-note" style="margin-top:14px">※本表記は雛形です。有料プランを公開する前に、必ず実際の事業者情報・価格・条件に修正してください（コード内の BIZ 定数）。</div>
+    </div>
     <div class="modal-actions" style="margin-top:12px"><button class="btn btn-ghost" onclick="closeModal()">閉じる</button></div>`);
 }
 function openContact(){
