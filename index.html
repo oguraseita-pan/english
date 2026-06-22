@@ -430,6 +430,31 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 
 /* ---------- Settings ---------- */
 .set-group{margin-bottom:22px;}
+.auth-intro{font-size:.9rem;color:var(--ink-2);line-height:1.65;margin-bottom:16px;}
+.auth-h{font-family:var(--font-en);font-size:1.5rem;font-weight:600;margin:0 0 2px;}
+.auth-step{font-size:.78rem;color:var(--ink-3);margin-bottom:14px;font-weight:600;letter-spacing:.02em;}
+.auth-back{display:inline-flex;align-items:center;gap:3px;color:var(--ink-2);font-size:.92rem;font-weight:600;margin-bottom:10px;background:none;padding:2px 0;}
+.auth-or{display:flex;align-items:center;gap:12px;color:var(--ink-3);font-size:.8rem;margin:16px 0;}
+.auth-or::before,.auth-or::after{content:"";flex:1;height:1px;background:var(--line);}
+.auth-email-fixed{background:var(--green-soft);border-radius:11px;padding:12px 14px;font-weight:600;color:var(--green-d);word-break:break-all;}
+.gbtn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;padding:13px;border:1.5px solid var(--line);border-radius:13px;background:var(--surface);font-weight:600;font-size:.95rem;color:var(--ink);}
+.plan-card{position:relative;width:100%;border:2px solid var(--line);border-radius:16px;padding:16px;margin-bottom:12px;background:var(--surface);cursor:pointer;}
+.plan-card.sel{border-color:var(--green);box-shadow:0 0 0 3px var(--green-soft);}
+.plan-card-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;}
+.plan-name{font-weight:700;font-size:1.15rem;}
+.plan-price{font-family:var(--font-en);font-weight:700;font-size:1.35rem;}
+.plan-price small{font-size:.72rem;color:var(--ink-3);font-weight:500;}
+.plan-feats{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;}
+.plan-feats li{display:flex;gap:7px;align-items:flex-start;font-size:.86rem;color:var(--ink-2);}
+.plan-feats li svg{width:15px;height:15px;color:var(--green);flex:none;margin-top:2px;}
+.plan-badge{position:absolute;top:-9px;right:14px;background:var(--amber);color:#fff;font-size:.7rem;font-weight:700;padding:3px 10px;border-radius:999px;}
+.bill-terms{display:flex;gap:8px;margin:14px 0 18px;}
+.bill-term{flex:1;border:1.5px solid var(--line);border-radius:12px;padding:9px 4px;background:var(--surface);font-weight:600;font-size:.9rem;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--ink);}
+.bill-term small{font-size:.66rem;color:var(--ink-3);font-weight:500;}
+.bill-term.sel{border-color:var(--green);background:var(--green-soft);color:var(--green-d);}
+.bill-cur{font-size:.9rem;color:var(--ink-2);margin:4px 2px 0;}
+.bill-sum{background:var(--green-soft);border-radius:14px;padding:14px 16px;margin:14px 0 4px;display:flex;flex-direction:column;gap:8px;}
+.bill-sum-row{display:flex;justify-content:space-between;font-size:.95rem;}
 .sec-collapse{display:flex;align-items:center;gap:8px;width:100%;background:none;margin:24px 4px 10px;text-align:left;}
 .sec-collapse .section-title{margin:0;}
 .sec-collapse .sum{margin-left:auto;font-size:.78rem;color:var(--ink-3);font-weight:600;text-transform:none;letter-spacing:0;}
@@ -598,6 +623,7 @@ function normalizeState(){
   if(!state.stats) state.stats = defaultState().stats;
   if(!state.progress || typeof state.progress!=='object') state.progress = {}; // preset/idiom 学習進捗（永続SRS）
   if(!state.history || typeof state.history!=='object') state.history = {compo:[],speech:[]};
+  if(!state.billing || typeof state.billing!=='object') state.billing = {plan:'free', term:null, since:null, card:null};
   if(!Array.isArray(state.history.compo)) state.history.compo=[];
   if(!Array.isArray(state.history.speech)) state.history.speech=[];
   if(!Array.isArray(state.threads)) state.threads = [];
@@ -711,17 +737,21 @@ function scheduleCloudPush(){
   _cloudTimer=setTimeout(()=>cloudPush(), 1500);
 }
 async function authSignUp(){
-  const em=(document.getElementById('authEmail')||{}).value, pw=(document.getElementById('authPw')||{}).value;
-  if(!em||!pw){ toast('メールとパスワードを入力してください'); return; }
-  if(pw.length<6){ toast('パスワードは6文字以上にしてください'); return; }
+  const em=authDraftEmail || ((document.getElementById('authEmail')||{}).value||'').trim();
+  const pw=(document.getElementById('authPw')||{}).value||'';
+  const pw2=(document.getElementById('authPw2')||{}).value;
+  if(!em){ toast('メールアドレスを入力してください'); authView='signup1'; renderSettings(); return; }
+  if(!pw || pw.length<6){ toast('パスワードは6文字以上にしてください'); return; }
+  if(pw2!=null && pw!==pw2){ toast('パスワードが一致しません'); return; }
   try{ const { error }=await _sb.auth.signUp({ email:em, password:pw }); if(error) throw error;
-    toast('確認メールを送信しました。リンクで認証してください'); }
+    authView='menu'; authDraftEmail=''; renderSettings();
+    toast('確認メールを送信しました。メール内のリンクで認証を完了してください'); }
   catch(e){ toast('登録に失敗：'+(e.message||'')); }
 }
 async function authSignIn(){
-  const em=(document.getElementById('authEmail')||{}).value, pw=(document.getElementById('authPw')||{}).value;
+  const em=((document.getElementById('authEmail')||{}).value||'').trim(), pw=(document.getElementById('authPw')||{}).value||'';
   if(!em||!pw){ toast('メールとパスワードを入力してください'); return; }
-  try{ const { error }=await _sb.auth.signInWithPassword({ email:em, password:pw }); if(error) throw error; }
+  try{ const { error }=await _sb.auth.signInWithPassword({ email:em, password:pw }); if(error) throw error; authView='menu'; }
   catch(e){ toast('ログインに失敗：'+(e.message||'')); }
 }
 async function authGoogle(){
@@ -731,7 +761,7 @@ async function authGoogle(){
 }
 async function authSignOut(){
   try{ await _sb.auth.signOut(); }catch(e){}
-  account.user=null; renderSettings(); toast('ログアウトしました');
+  account.user=null; authView='menu'; authDraftEmail=''; renderSettings(); toast('ログアウトしました');
 }
 async function cloudSyncNow(){ if(!loggedIn()){ toast('ログインが必要です'); return; } toast('同期中…'); await cloudPull(); }
 
@@ -3064,7 +3094,126 @@ async function aiFillCard(){
    ==================================================================== */
 let keyOpen=false;
 let aiSectionOpen=false;
+let authView='menu';        // 'menu' | 'login' | 'signup1' | 'signup2'
+let authDraftEmail='';
+let billingStep=null;       // null | 'plans' | 'checkout'
+let billingSel={plan:'light', term:'12m'};
+const PLAN_INFO={
+  free:{name:'無料プラン'},
+  light:{name:'ライト', price:{'12m':500,'3m':800,'1m':1200}, feats:['単語・熟語・リーディング','瞬間英作文・英語日記','AI添削・翻訳（標準モデル）']},
+  premium:{name:'プレミアム', price:{'12m':1500,'3m':2400,'1m':3600}, feats:['ライトの全機能','最新モデルAIに無制限アクセス','添削・日記をより高精度に']}
+};
+const TERM_INFO={'12m':{label:'12ヶ月',sub:'年間プラン（最安）'},'3m':{label:'3ヶ月',sub:''},'1m':{label:'1ヶ月',sub:''}};
+function authGo(v){ authView=v; renderSettings(); }
+function authNextSignup(){
+  const em=((document.getElementById('authEmail')||{}).value||'').trim();
+  if(!em || !/^.+@.+\..+$/.test(em)){ toast('メールアドレスを正しく入力してください'); return; }
+  authDraftEmail=em; authView='signup2'; renderSettings();
+}
+function planLabel(){ const b=state.billing||{}; const p=PLAN_INFO[b.plan]||PLAN_INFO.free; return b.plan==='free'?p.name:(p.name+'（'+(TERM_INFO[b.term]?TERM_INFO[b.term].label:'')+'）'); }
+function openBilling(){ billingStep='plans'; billingSel={plan:(state.billing&&state.billing.plan!=='free'?state.billing.plan:'light'), term:(state.billing&&state.billing.term)||'12m'}; renderSettings(); }
+function closeBilling(){ billingStep=null; renderSettings(); }
+function billingPickPlan(p){ billingSel.plan=p; renderSettings(); }
+function billingPickTerm(t){ billingSel.term=t; renderSettings(); }
+function billingToCheckout(){ billingStep='checkout'; renderSettings(); }
+function billingConfirm(){
+  state.billing={plan:billingSel.plan, term:billingSel.term, since:Date.now(), card:'•••• 4242'};
+  save(); billingStep=null; renderSettings();
+  toast('プランを変更しました（デモ）');
+}
+function billingDowngrade(){
+  if(!confirm('無料プランに変更しますか？（デモ）')) return;
+  state.billing={plan:'free', term:null, since:null, card:null};
+  save(); billingStep=null; renderSettings(); toast('無料プランに変更しました（デモ）');
+}
+function googleBtn(label){
+  return `<button class="gbtn" onclick="authGoogle()">
+    <svg viewBox="0 0 24 24" width="18" height="18"><path fill="#4285F4" d="M21.6 12.2c0-.6-.1-1.2-.2-1.8H12v3.5h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.2z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.7-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1A10 10 0 0 0 2 12c0 1.6.4 3.2 1.1 4.6L6.4 14z"/><path fill="#EA4335" d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 12 2 10 10 0 0 0 3.1 7.4L6.4 10c.8-2.4 3-4.1 5.6-4.1z"/></svg>
+    ${label}</button>`;
+}
+function authBoxHtml(){
+  if(authView==='login'){
+    return `<button class="auth-back" onclick="authGo('menu')">${I.chev?'‹':''} 戻る</button>
+      <div class="auth-h">ログイン</div>
+      <div class="field"><label>メールアドレス</label><input type="email" id="authEmail" placeholder="you@example.com" autocomplete="username" /></div>
+      <div class="field"><label>パスワード</label><input type="password" id="authPw" placeholder="パスワード" autocomplete="current-password" /></div>
+      <button class="btn btn-primary full" style="padding:14px" onclick="authSignIn()">ログイン</button>
+      <div class="auth-or"><span>または</span></div>
+      ${googleBtn('Googleでログイン')}
+      <div class="d" style="text-align:center;margin-top:12px">アカウントがない方は <a style="color:var(--green-d);font-weight:600;cursor:pointer" onclick="authGo('signup1')">新規登録</a></div>`;
+  }
+  if(authView==='signup1'){
+    return `<button class="auth-back" onclick="authGo('menu')">‹ 戻る</button>
+      <div class="auth-h">新規登録</div>
+      <div class="auth-step">ステップ 1 / 2 ・ メールアドレス</div>
+      <div class="field"><label>メールアドレス</label><input type="email" id="authEmail" value="${esc(authDraftEmail)}" placeholder="you@example.com" autocomplete="username" /></div>
+      <button class="btn btn-primary full" style="padding:14px" onclick="authNextSignup()">次へ</button>
+      <div class="auth-or"><span>または</span></div>
+      ${googleBtn('Googleで登録')}
+      <div class="d" style="text-align:center;margin-top:12px">すでにアカウントをお持ちの方は <a style="color:var(--green-d);font-weight:600;cursor:pointer" onclick="authGo('login')">ログイン</a></div>`;
+  }
+  if(authView==='signup2'){
+    return `<button class="auth-back" onclick="authGo('signup1')">‹ 戻る</button>
+      <div class="auth-h">新規登録</div>
+      <div class="auth-step">ステップ 2 / 2 ・ パスワード設定</div>
+      <div class="field"><label>メールアドレス</label><div class="auth-email-fixed">${esc(authDraftEmail||'')}</div></div>
+      <div class="field"><label>パスワード</label><input type="password" id="authPw" placeholder="6文字以上" autocomplete="new-password" /></div>
+      <div class="field"><label>パスワード（確認）</label><input type="password" id="authPw2" placeholder="もう一度入力" autocomplete="new-password" /></div>
+      <button class="btn btn-primary full" style="padding:14px" onclick="authSignUp()">この内容で登録する</button>
+      <div class="d" style="margin-top:10px">登録後、確認メールが届きます。メール内のリンクをタップして認証を完了してください。</div>`;
+  }
+  // menu (default)
+  return `<div class="auth-intro">ログインすると、追加した単語・ノート・英語日記・学習履歴がクラウドに保存され、別の端末でも同じデータで続けられます。</div>
+    <button class="btn btn-primary full" style="padding:14px" onclick="authGo('login')">ログイン</button>
+    <button class="btn btn-ghost full" style="padding:14px;margin-top:10px" onclick="authGo('signup1')">新規登録</button>
+    <div class="auth-or"><span>または</span></div>
+    ${googleBtn('Googleで続ける')}`;
+}
+function planCardHtml(p){
+  const info=PLAN_INFO[p]; const sel=billingSel.plan===p; const price=info.price[billingSel.term];
+  return `<div class="plan-card${sel?' sel':''}" onclick="billingPickPlan('${p}')">
+    ${p==='premium'?`<div class="plan-badge">おすすめ</div>`:''}
+    <div class="plan-card-top"><div class="plan-name">${info.name}</div><div class="plan-price">¥${price.toLocaleString()}<small>/月</small></div></div>
+    <ul class="plan-feats">${info.feats.map(f=>`<li>${I.check} <span>${f}</span></li>`).join('')}</ul>
+  </div>`;
+}
+function renderBilling(){
+  const v=document.getElementById('view-settings');
+  const cur=state.billing||{plan:'free'};
+  if(billingStep==='checkout'){
+    const price=PLAN_INFO[billingSel.plan].price[billingSel.term];
+    v.innerHTML=`
+      <div class="topbar"><h1>お支払い</h1><button class="icon-btn x-btn" onclick="billingToPlans()" style="box-shadow:none;background:transparent">✕</button></div>
+      <div class="bill-sum">
+        <div class="bill-sum-row"><span>プラン</span><b>${PLAN_INFO[billingSel.plan].name} ・ ${TERM_INFO[billingSel.term].label}</b></div>
+        <div class="bill-sum-row"><span>お支払い</span><b>¥${price.toLocaleString()} / 月</b></div>
+      </div>
+      <div class="section-title">カード情報（デモ）</div>
+      <div class="set-group">
+        <div class="field"><label>カード番号</label><input id="ccNum" inputmode="numeric" placeholder="4242 4242 4242 4242" value="4242 4242 4242 4242" /></div>
+        <div style="display:flex;gap:10px">
+          <div class="field" style="flex:1"><label>有効期限</label><input id="ccExp" placeholder="12 / 30" value="12 / 30" /></div>
+          <div class="field" style="flex:1"><label>CVC</label><input id="ccCvc" inputmode="numeric" placeholder="123" value="123" /></div>
+        </div>
+        <div class="field"><label>カード名義</label><input id="ccName" placeholder="TARO YAMADA" /></div>
+      </div>
+      <button class="btn btn-primary full" style="padding:15px" onclick="billingConfirm()">¥${price.toLocaleString()}/月で登録する</button>
+      <div class="d" style="text-align:center;margin-top:12px">※これはデモの支払い画面です。実際の決済・課金は行われず、入力情報は保存されません。</div>`;
+    return;
+  }
+  // plans
+  v.innerHTML=`
+    <div class="topbar"><h1>プラン</h1><button class="icon-btn x-btn" onclick="closeBilling()" style="box-shadow:none;background:transparent">✕</button></div>
+    <div class="bill-cur">現在のプラン：<b>${planLabel()}</b></div>
+    <div class="bill-terms">${['12m','3m','1m'].map(t=>`<button class="bill-term${billingSel.term===t?' sel':''}" onclick="billingPickTerm('${t}')">${TERM_INFO[t].label}${TERM_INFO[t].sub?`<small>${TERM_INFO[t].sub}</small>`:''}</button>`).join('')}</div>
+    ${['light','premium'].map(planCardHtml).join('')}
+    <button class="btn btn-primary full" style="padding:15px;margin-top:4px" onclick="billingToCheckout()">${PLAN_INFO[billingSel.plan].name}にする（¥${PLAN_INFO[billingSel.plan].price[billingSel.term].toLocaleString()}/月）</button>
+    ${cur.plan!=='free'?`<button class="btn btn-ghost full" style="padding:13px;margin-top:10px" onclick="billingDowngrade()">無料プランに戻す</button>`:''}
+    <div class="d" style="text-align:center;margin-top:14px">※これはデモの支払い画面です。実際の請求は発生しません。</div>`;
+}
+function billingToPlans(){ billingStep='plans'; renderSettings(); }
 function renderSettings(){
+  if(billingStep){ renderBilling(); return; }
   const s=state.settings;
   document.getElementById('view-settings').innerHTML=`
     <div class="topbar"><h1>設定</h1>
@@ -3085,24 +3234,15 @@ function renderSettings(){
         </div>
         <button class="btn btn-primary full" style="padding:13px" onclick="cloudSyncNow()">${I.refresh} 今すぐ同期</button>
         <div class="d" style="text-align:center;margin-top:7px">通常は自動で同期されます。別の端末で編集した内容をすぐ取り込みたいときに使います。</div>`
-      : `
-        <div class="field">
-          <label>メールアドレス</label>
-          <input type="email" id="authEmail" placeholder="you@example.com" autocomplete="username" />
-        </div>
-        <div class="field">
-          <label>パスワード</label>
-          <input type="password" id="authPw" placeholder="6文字以上" autocomplete="current-password" />
-        </div>
-        <div style="display:flex;gap:10px">
-          <button class="btn btn-primary" style="flex:1;padding:13px" onclick="authSignIn()">ログイン</button>
-          <button class="btn btn-ghost" style="flex:1;padding:13px" onclick="authSignUp()">新規登録</button>
-        </div>
-        <button class="btn btn-ghost full" style="padding:13px;margin-top:10px;gap:10px" onclick="authGoogle()">
-          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="#4285F4" d="M21.6 12.2c0-.6-.1-1.2-.2-1.8H12v3.5h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.2z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.7-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1A10 10 0 0 0 2 12c0 1.6.4 3.2 1.1 4.6L6.4 14z"/><path fill="#EA4335" d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 12 2 10 10 0 0 0 3.1 7.4L6.4 10c.8-2.4 3-4.1 5.6-4.1z"/></svg>
-          Googleでログイン
-        </button>
-        <div class="d" style="margin-top:8px">登録すると単語・履歴がクラウドに保存され、別の端末でも同じデータで学習できます。</div>`)}
+      : authBoxHtml() )}
+    </div>
+
+    <div class="section-title">プラン・お支払い</div>
+    <div class="set-group">
+      <div class="set-row" style="cursor:pointer" onclick="openBilling()">
+        <div><div class="l">現在のプラン</div><div class="d">${planLabel()}</div></div>
+        <span class="chev">${I.chev}</span>
+      </div>
     </div>
 
     <div class="section-title">AI連携</div>
