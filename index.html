@@ -79,6 +79,10 @@ body{
   font-size:16px;line-height:1.5;
   -webkit-font-smoothing:antialiased;
   overscroll-behavior-y:none;
+  /* Frauncesの合字（ﬀ ﬁ など）を無効化して、f/fi/ff を通常の字形で表示 */
+  font-variant-ligatures:none;
+  -webkit-font-feature-settings:"liga" 0,"clig" 0,"dlig" 0,"calt" 0;
+  font-feature-settings:"liga" 0,"clig" 0,"dlig" 0,"calt" 0;
 }
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
 input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
@@ -311,9 +315,14 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 @keyframes pulse{0%,100%{opacity:.5;transform:scale(.95)}50%{opacity:1;transform:scale(1.05)}}
 .read-title{font-family:var(--font-en);font-size:1.4rem;font-weight:600;margin:6px 2px 4px;line-height:1.35;}
 .read-hint{font-size:.74rem;color:var(--ink-3);margin:0 2px 12px;}
-.read-pass{font-family:var(--font-en);font-size:1.18rem;line-height:2.05;letter-spacing:.005em;padding:2px;}
+.read-pass{font-family:var(--font-en);font-size:1.18rem;line-height:2.05;letter-spacing:.005em;padding:2px;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
 .rw{cursor:pointer;border-radius:4px;padding:0 .5px;transition:background .1s;}
 .rw:active,.rw.tapped{background:var(--amber-soft);box-shadow:0 0 0 2px var(--amber-soft);}
+.rw.psel{background:var(--green-soft);box-shadow:0 0 0 2px var(--green-soft);}
+.rd-custom{width:100%;margin-top:10px;background:var(--surface);box-shadow:var(--shadow);border-radius:13px;padding:13px 15px;font-size:1rem;border:1.5px solid var(--line);outline:none;font-family:var(--font-en);}
+.rd-custom:focus{border-color:var(--green);}
+.read-back{display:inline-flex;align-items:center;gap:4px;color:var(--green-d);font-weight:700;font-size:.86rem;margin-bottom:14px;background:var(--green-soft);padding:8px 14px;border-radius:999px;}
+.rd-btn.speaking{background:var(--green);color:#fff;}
 .read-actions{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;}
 .rd-btn{flex:1;min-width:88px;display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--surface-2);border-radius:13px;padding:11px 6px;font-size:.78rem;font-weight:700;color:var(--ink-2);}
 .rd-btn svg{width:19px;height:19px;}
@@ -2841,18 +2850,19 @@ function endSessionEarly(){ session=null; renderStudy(); }
 /* ====================================================================
    READING (AIが記事を生成・タップで訳/カード化)
    ==================================================================== */
-const READ_GENRES=[['news','ニュース'],['business','ビジネス'],['novel','小説'],['daily','日常会話'],['essay','エッセイ'],['science','科学・技術']];
-const READ_LEVELS=[['beginner','初級'],['intermediate','中級'],['advanced','上級']];
+const READ_GENRES=[['news','ニュース'],['business','ビジネス'],['novel','小説'],['daily','日常会話'],['essay','エッセイ'],['science','科学・技術'],['custom','自由に指定']];
+const READ_LEVELS=[['A2','A2','初級'],['B1','B1','中級'],['B2','B2','中上級'],['C1','C1','上級']];
 const READ_LENGTHS=[[100,'短い'],[200,'普通'],[400,'長い']];
 const READ_GENRE_DESC={news:'a short news article',business:'a business / workplace scenario text',novel:'a short fictional story excerpt',daily:'an everyday conversation or diary-style text',essay:'a short opinion essay',science:'an accessible science / technology explainer'};
-const READ_LEVEL_DESC={beginner:'CEFR A2 (around Eiken grade 3 to pre-2). Use simple, common vocabulary and short sentences.',intermediate:'CEFR B1 (around Eiken grade 2 / TOEIC 600). Everyday vocabulary with some variety.',advanced:'CEFR B2+ (around Eiken pre-1 and up). Richer vocabulary and more complex sentences.'};
+const READ_LEVEL_DESC={A2:'CEFR A2 (elementary). Use simple, high-frequency vocabulary and short, clear sentences.',B1:'CEFR B1 (intermediate). Everyday vocabulary with some variety and moderate sentence length.',B2:'CEFR B2 (upper-intermediate). Varied vocabulary, some abstract ideas and more complex sentences.',C1:'CEFR C1 (advanced). Rich, precise and idiomatic vocabulary with complex, nuanced sentences.'};
 
 function readingSetup(){
-  reading={stage:'setup', genre:(reading&&reading.genre)||'news', level:(reading&&reading.level)||'intermediate', length:(reading&&reading.length)||200};
+  reading={stage:'setup', genre:(reading&&reading.genre)||'news', level:(reading&&reading.level)||'B1', length:(reading&&reading.length)||200, custom:(reading&&reading.custom)||''};
   renderReading();
 }
 function readPick(field,val){ if(reading){ reading[field]=val; renderReading(); } }
 function readLabel(field){
+  if(field==='genre' && reading.genre==='custom') return '自由';
   const map={genre:READ_GENRES,level:READ_LEVELS,length:READ_LENGTHS};
   const o=(map[field]||[]).find(x=>String(x[0])===String(reading[field]));
   return o?(field==='length'?('約'+o[0]+'語'):o[1]):'';
@@ -2861,62 +2871,80 @@ function readPills(field,opts){
   return '<div class="opt-pills">'+opts.map(o=>{
     const val=(typeof o[0]==='number')?o[0]:`'${o[0]}'`;
     const sel=String(reading[field])===String(o[0])?' sel':'';
-    const sub=field==='length'?`<small>約${o[0]}語</small>`:'';
+    const sub=(field==='length')?`<small>約${o[0]}語</small>`:(o[2]?`<small>${o[2]}</small>`:'');
     return `<button class="opt-pill${sel}" onclick="readPick('${field}',${val})">${o[1]}${sub}</button>`;
   }).join('')+'</div>';
 }
+let _passSpeaking=false;
+let _rdStartIdx=null,_rdLong=false,_rdStartX=0,_rdStartY=0,_rdTimer=null,_rdPhraseStart=null;
 function readingPassageHtml(en){
   const parts=String(en||'').split(/([A-Za-z][A-Za-z'’\-]*)/);
-  return parts.map((p,i)=> (i%2===1)
-    ? `<span class="rw" data-w="${esc(p)}" onclick="readingTapWord(this)">${esc(p)}</span>`
-    : esc(p)).join('');
+  let wi=-1; const toks=[];
+  const out=parts.map((p,i)=>{
+    if(i%2===1){ wi++; toks.push(p); return `<span class="rw" data-w="${esc(p)}" data-i="${wi}">${esc(p)}</span>`; }
+    return esc(p);
+  }).join('');
+  if(reading) reading.tokens=toks;
+  return out;
 }
 function renderReading(){
   const v=document.getElementById('view-study');
   if(reading.stage==='loading'){
-    v.innerHTML=`<div class="study-top"><button class="icon-btn x-btn" onclick="reading=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button><div class="read-tags">リーディング</div><div class="study-count"></div></div>
+    v.innerHTML=`<div class="study-top"><button class="icon-btn x-btn" onclick="readingExit()" style="box-shadow:none;background:transparent">✕</button><div class="read-tags">リーディング</div><div class="study-count"></div></div>
       <div class="read-loading">${I.sparkle}<div class="big">記事を生成中…</div><p style="color:var(--ink-2)">少し待ってね</p></div>`;
     return;
   }
   if(reading.stage==='read'){
     v.innerHTML=`
     <div class="study-top">
-      <button class="icon-btn x-btn" onclick="reading=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button>
+      <button class="icon-btn x-btn" onclick="readingExit()" style="box-shadow:none;background:transparent">✕</button>
       <div class="read-tags">${readLabel('genre')} ・ ${readLabel('level')} ・ ${readLabel('length')}</div>
-      <button class="icon-btn" onclick="readingSetup()" aria-label="条件を変える">${I.gear}</button>
+      <button class="icon-btn" onclick="readingToSetup()" aria-label="条件を変える">${I.gear}</button>
     </div>
     <h2 class="read-title">${esc(reading.title||'Reading')}</h2>
-    <div class="read-hint">単語をタップ → 意味＆カード保存。文を選択して「選択を翻訳」もできます。</div>
+    <div class="read-hint">単語をタップ → 意味＆カード保存。熟語は<b>最初の語を長押し → 最後の語をタップ</b>。</div>
     <div class="read-pass" id="readPass">${readingPassageHtml(reading.en)}</div>
     <div class="read-actions">
       <button class="rd-btn" onclick="toggleReadJa()">${I.translate}<span>${reading.showJa?'訳を隠す':'日本語訳'}</span></button>
-      <button class="rd-btn" onclick="translateSelection()">${I.copy}<span>選択を翻訳</span></button>
-      <button class="rd-btn" onclick="speakPassage()">${I.speaker}<span>読み上げ</span></button>
+      <button class="rd-btn" id="readSpkBtn" onclick="speakPassage()">${I.speaker}<span id="readSpkLbl">${_passSpeaking?'停止':'読み上げ'}</span></button>
     </div>
     ${reading.showJa?`<div class="read-ja"><div class="read-ja-lab">日本語訳</div>${esc(reading.ja||'（訳がありません）')}</div>`:''}
     <button class="btn btn-ghost full" style="margin-top:16px" onclick="startReading()">${I.refresh} 別の記事を生成</button>
     <div class="read-pop" id="readPop"></div>`;
+    bindReadPass();
     return;
   }
   // setup
+  const isCustom=reading.genre==='custom';
   v.innerHTML=`
-    <div class="study-top"><button class="icon-btn x-btn" onclick="reading=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button><div class="read-tags">リーディング</div><div class="study-count"></div></div>
+    <div class="study-top"><button class="icon-btn x-btn" onclick="readingSetupBack()" style="box-shadow:none;background:transparent">✕</button><div class="read-tags">リーディング</div><div class="study-count"></div></div>
     <div class="read-setup">
+      ${reading.en?`<button class="read-back" onclick="reading.stage='read';renderReading()">${I.chevL||'‹'} 今の記事に戻る</button>`:''}
       <div class="rs-q">内容</div>${readPills('genre',READ_GENRES)}
-      <div class="rs-q">難易度</div>${readPills('level',READ_LEVELS)}
+      ${isCustom?`<input class="rd-custom" id="rdCustom" maxlength="120" placeholder="例：宇宙旅行、面接でよく聞かれる質問、好きな映画について…" value="${esc(reading.custom||'')}" oninput="reading.custom=this.value" />`:''}
+      <div class="rs-q">難易度（CEFR）</div>${readPills('level',READ_LEVELS)}
       <div class="rs-q">文字数</div>${readPills('length',READ_LENGTHS)}
       <button class="btn btn-primary full" style="margin-top:24px;padding:15px" onclick="startReading()">${I.sparkle} この条件で生成</button>
       ${!aiReady()?`<div class="d" style="text-align:center;margin-top:12px;color:var(--r-again)">記事の生成にはAIが必要です。ログイン（または設定でAIをオン）してください。</div>`:''}
     </div>`;
 }
+function readingExit(){ try{ speechSynthesis.cancel(); }catch(_){}; _passSpeaking=false; reading=null; renderStudy(); }
+function readingToSetup(){ if(!reading) return; try{ speechSynthesis.cancel(); }catch(_){}; _passSpeaking=false; reading.stage='setup'; renderReading(); }
+function readingSetupBack(){ if(reading&&reading.en){ reading.stage='read'; renderReading(); } else { readingExit(); } }
 async function startReading(){
   if(!aiReady()){ toast(aiEnabled()?'設定でAPIキーを入力してください':'リーディングにはログイン（またはAI設定）が必要です'); return; }
+  let topicDesc;
+  if(reading.genre==='custom'){
+    const c=(reading.custom||'').trim();
+    if(!c){ toast('内容を入力してください'); return; }
+    topicDesc=`a passage on this specific topic / request: "${c}"`;
+  } else { topicDesc=READ_GENRE_DESC[reading.genre]||'a short article'; }
+  try{ speechSynthesis.cancel(); }catch(_){}; _passSpeaking=false;
   reading.stage='loading'; reading.showJa=false; reading.lookup=null; renderReading();
   try{
-    const gd=READ_GENRE_DESC[reading.genre]||'a short article';
     const ld=READ_LEVEL_DESC[reading.level]||'';
     const n=reading.length||200;
-    const sys=`You create English reading practice for Japanese learners. Output ONLY JSON, no markdown, no code fences. Schema: {"title": a short English title, "en": the reading passage in English only, "ja": a full natural Japanese translation of the passage, "words": an array of up to 8 of the more difficult words or idioms that actually appear in the passage, each {"term": the word or idiom (base/dictionary form is fine), "mean": a concise Japanese meaning}}. Write ${gd}. Difficulty: ${ld} Length: about ${n} words. Make it coherent, self-contained and engaging, in natural English.`;
+    const sys=`You create English reading practice for Japanese learners. Output ONLY JSON, no markdown, no code fences. Schema: {"title": a short English title, "en": the reading passage in English only, "ja": a full natural Japanese translation of the passage, "words": an array of up to 8 of the more difficult words or idioms that actually appear in the passage, each {"term": the word or idiom (base/dictionary form is fine), "mean": a concise Japanese meaning}}. Write ${topicDesc}. Difficulty: ${ld} Length: about ${n} words. Make it coherent, self-contained and engaging, in natural English.`;
     const content=await callAI([{role:'system',content:sys},{role:'user',content:'Generate one passage now as JSON.'}],{json:true,temp:0.85});
     const o=JSON.parse(content);
     if(!o || !o.en) throw new Error('empty');
@@ -2926,12 +2954,55 @@ async function startReading(){
   }catch(err){
     const m=(err&&err.message)||'';
     toast('生成に失敗: '+(/NO_SESSION|auth/i.test(m)?'ログインが必要':/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑（再試行を）':/empty|JSON/i.test(m)?'もう一度お試しを':'通信エラー'));
-    reading.stage='setup';
+    reading.stage=reading.en?'read':'setup';
   }
   renderReading();
 }
 function toggleReadJa(){ if(reading){ reading.showJa=!reading.showJa; renderReading(); } }
-function speakPassage(){ if(reading&&reading.en) speak(reading.en); }
+function speakPassage(){
+  if(!('speechSynthesis' in window)){ toast('この端末は読み上げに非対応です'); return; }
+  if(!reading||!reading.en) return;
+  if(speechSynthesis.speaking||speechSynthesis.pending){ try{ speechSynthesis.cancel(); }catch(_){}; _passSpeaking=false; updateReadSpk(); return; }
+  try{ speechSynthesis.cancel(); }catch(_){}
+  const u=new SpeechSynthesisUtterance(reading.en);
+  u.lang='en-US'; u.rate=state.settings.ttsRate||0.9;
+  const vc=voices.find(v=>/en-US/i.test(v.lang))||voices.find(v=>/^en/i.test(v.lang)); if(vc) u.voice=vc;
+  u.onend=()=>{ _passSpeaking=false; updateReadSpk(); };
+  u.onerror=()=>{ _passSpeaking=false; updateReadSpk(); };
+  _passSpeaking=true; updateReadSpk();
+  speechSynthesis.speak(u);
+}
+function updateReadSpk(){ const l=document.getElementById('readSpkLbl'); if(l) l.textContent=_passSpeaking?'停止':'読み上げ'; const b=document.getElementById('readSpkBtn'); if(b) b.classList.toggle('speaking',_passSpeaking); }
+/* タップ＝単語 / 長押し→タップ＝熟語（連続する語） */
+function bindReadPass(){
+  const pass=document.getElementById('readPass'); if(!pass) return;
+  pass.onpointerdown=(e)=>{
+    const sp=e.target.closest&&e.target.closest('.rw'); if(!sp) return;
+    _rdStartIdx=+sp.dataset.i; _rdLong=false; _rdStartX=e.clientX; _rdStartY=e.clientY;
+    clearTimeout(_rdTimer);
+    _rdTimer=setTimeout(()=>{ if(_rdStartIdx==null) return; _rdLong=true; _rdPhraseStart=_rdStartIdx; highlightRange(_rdPhraseStart,_rdPhraseStart); toast('熟語の最後の語をタップ'); }, 400);
+  };
+  pass.onpointermove=(e)=>{
+    if(_rdStartIdx==null) return;
+    if(Math.abs(e.clientX-_rdStartX)>12||Math.abs(e.clientY-_rdStartY)>12){ clearTimeout(_rdTimer); if(!_rdLong) _rdStartIdx=null; }
+  };
+  pass.onpointerup=(e)=>{
+    clearTimeout(_rdTimer);
+    const wasLong=_rdLong; _rdLong=false; _rdStartIdx=null;
+    if(wasLong) return; // 長押しで始点を設定。終点のタップを待つ
+    const sp=e.target.closest&&e.target.closest('.rw'); if(!sp) return;
+    if(_rdPhraseStart!=null){
+      const i=+sp.dataset.i, a=Math.min(_rdPhraseStart,i), b=Math.max(_rdPhraseStart,i);
+      _rdPhraseStart=null; clearRangeHighlight();
+      lookupPhrase((reading.tokens||[]).slice(a,b+1).join(' '));
+    } else {
+      readingTapWord(sp);
+    }
+  };
+  pass.onpointercancel=()=>{ clearTimeout(_rdTimer); _rdStartIdx=null; _rdLong=false; };
+}
+function highlightRange(a,b){ document.querySelectorAll('#readPass .rw').forEach(s=>{ const i=+s.dataset.i; s.classList.toggle('psel', i>=a&&i<=b); }); }
+function clearRangeHighlight(){ document.querySelectorAll('#readPass .rw.psel').forEach(s=>s.classList.remove('psel')); }
 async function readingTapWord(el){
   const word=(el&&el.dataset.w)||''; if(!word) return;
   let known=null;
@@ -2946,13 +3017,15 @@ async function readingTapWord(el){
   }
   paintReadPop();
 }
-async function translateSelection(){
-  const sel=((window.getSelection&&window.getSelection().toString())||'').trim();
-  if(!sel){ toast('翻訳したい部分を選択してください'); return; }
-  if(!translateReady()){ toast('翻訳にはログインが必要です'); return; }
-  reading.lookup={word:sel, mean:'', loading:true}; paintReadPop();
-  try{ const r=await translateText(sel); reading.lookup={word:sel, mean:r.text, loading:false}; }
-  catch(e){ reading.lookup={word:sel, mean:'(翻訳できませんでした)', loading:false}; }
+async function lookupPhrase(phrase){
+  phrase=(phrase||'').trim(); if(!phrase) return;
+  let known=reading.words&&reading.words.find(w=>w.term && w.term.toLowerCase()===phrase.toLowerCase());
+  reading.lookup={word:phrase, mean:known?known.mean:'', loading:!known}; paintReadPop();
+  if(known) return;
+  if(translateReady()){
+    try{ const r=await translateText(phrase,'JA'); reading.lookup={word:phrase, mean:r.text, loading:false}; }
+    catch(e){ reading.lookup={word:phrase, mean:'(翻訳できませんでした)', loading:false}; }
+  } else { reading.lookup={word:phrase, mean:'(翻訳にはログインが必要です)', loading:false}; }
   paintReadPop();
 }
 function paintReadPop(){
