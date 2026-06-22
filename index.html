@@ -124,19 +124,25 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;}
 .quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
 .today-card{display:flex;flex-direction:column;gap:1px;background:var(--surface);border-radius:18px;box-shadow:var(--shadow);overflow:hidden;}
-.today-row{display:flex;align-items:center;gap:13px;padding:15px 16px;background:var(--surface);text-align:left;border-bottom:1px solid var(--line);}
+.today-row{display:flex;align-items:center;gap:13px;padding:16px;background:var(--surface);text-align:left;border-bottom:1px solid var(--line);position:relative;transition:background .15s;}
 .today-row:last-child{border-bottom:none;}
 .today-row:active{background:var(--surface-2);}
-.today-ic{width:38px;height:38px;border-radius:11px;background:var(--green-soft);color:var(--green-d);display:flex;align-items:center;justify-content:center;flex:none;}
-.today-ic svg{width:20px;height:20px;}
-.today-row.done .today-ic{background:var(--green);color:#fff;}
+/* 未学習：左に緑のアクセントバー＋わずかに強調 */
+.today-row:not(.done)::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--green);border-radius:0 3px 3px 0;}
+.today-ic{width:40px;height:40px;border-radius:12px;background:var(--green-soft);color:var(--green-d);display:flex;align-items:center;justify-content:center;flex:none;transition:.2s;}
+.today-ic svg{width:21px;height:21px;}
+/* 完了：背景を薄緑、アイコンを塗り、文字を控えめ＋取り消し線 */
+.today-row.done{background:linear-gradient(90deg,var(--green-soft),var(--surface));}
+.today-row.done .today-ic{background:var(--green);color:#fff;box-shadow:0 2px 8px rgba(47,111,94,.35);}
 .today-tx{flex:1;}
-.today-t{font-weight:700;font-size:.98rem;}
-.today-row.done .today-t{color:var(--ink-3);}
-.today-s{font-size:.75rem;color:var(--ink-3);margin-top:1px;}
+.today-t{font-weight:700;font-size:1rem;}
+.today-row.done .today-t{color:var(--ink-3);text-decoration:line-through;text-decoration-color:var(--ink-3);}
+.today-s{font-size:.75rem;color:var(--ink-3);margin-top:2px;}
+.today-row.done .today-s{opacity:.7;}
 .today-state{flex:none;}
-.td-done{color:var(--green);font-weight:700;font-size:.85rem;}
-.td-go{color:var(--green-d);font-weight:700;font-size:.88rem;}
+.td-done{display:inline-flex;align-items:center;gap:4px;color:var(--green);font-weight:800;font-size:.82rem;background:rgba(47,111,94,.12);padding:5px 11px;border-radius:999px;}
+.td-done svg{width:14px;height:14px;}
+.td-go{display:inline-flex;align-items:center;color:#fff;background:var(--green);font-weight:700;font-size:.84rem;padding:6px 13px;border-radius:999px;box-shadow:0 2px 8px rgba(47,111,94,.3);}
 .td-none{color:var(--ink-3);font-size:.82rem;}
 .qa-tile{display:flex;align-items:center;gap:11px;background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:14px;text-align:left;}
 .qa-tile:active{transform:scale(.98);}
@@ -682,6 +688,7 @@ function normalizeState(){
   if(!state.history || typeof state.history!=='object') state.history = {compo:[],speech:[]};
   if(!state.billing || typeof state.billing!=='object') state.billing = {plan:'free', term:null, since:null, card:null};
   if(!state.referral || typeof state.referral!=='object') state.referral = {myCode:null, usedCode:null, referredCount:0};
+  if(!state.compoSrs || typeof state.compoSrs!=='object') state.compoSrs = {}; // 瞬間英作文の忘却曲線（誤答プール）
   if(!Array.isArray(state.history.compo)) state.history.compo=[];
   if(!Array.isArray(state.history.speech)) state.history.speech=[];
   if(!Array.isArray(state.threads)) state.threads = [];
@@ -1104,8 +1111,33 @@ function markDaily(kind){ ensureDaily(); state.stats.dailyDone[kind]=true; save(
 // ===== 本日の復習：期限到来の単語（カード＋プリセット）を集計 =====
 function dueCardItems(){ const t=now(); return reviewablePool().filter(c=>c.srs.state!=='new'&&c.srs.due<=t); }
 function duePresetItems(){ const t=now(); const out=[]; PRESET_LIB.forEach(cat=>cat.levels.forEach(l=>l.words.forEach(w=>{ const s=state.progress&&state.progress[presetKey(cat.id,l.id,w[0])]; if(s&&s.state!=='new'&&s.due<=t){ const c=presetWord(w); c.srs=s; out.push(c); } }))); return out; }
-function dueReviewItems(){ return dueCardItems().concat(duePresetItems()).sort((a,b)=>a.srs.due-b.srs.due); }
+function dueIdiomItems(){ const t=now(); const out=[]; IDIOM_LIB.forEach(cat=>cat.levels.forEach(l=>l.items.forEach(raw=>{ const sig=cat.fmt==='choice'?raw[0]:raw[1]; const s=state.progress&&state.progress[idiomKeySig(cat.id,l.id,sig)]; if(s&&s.state!=='new'&&s.due<=t){ const o=idiomItem(raw,cat.fmt==='choice'?'choice':'fill'); out.push({ term:o.answer, pron:'', mean:o.mean, exEn:(o.q||'').replace('____',o.answer), exJa:'', pos:['熟語'], other:'', srs:s }); } }))); return out; }
+function dueReviewItems(){ return dueCardItems().concat(duePresetItems()).concat(dueIdiomItems()).sort((a,b)=>a.srs.due-b.srs.due); }
 function dueReviewCount(){ return dueReviewItems().length; }
+
+// ===== 瞬間英作文の忘却曲線（誤答を復習） =====
+function compoSig(jp,en){ return 'c|'+String(jp||'').trim()+'|'+String(en||'').trim().toLowerCase(); }
+function recordCompoSrs(it, verdict){
+  if(!it) return;
+  if(!state.compoSrs) state.compoSrs={};
+  const key=compoSig(it.jp,it.en);
+  const existing=state.compoSrs[key];
+  if(verdict==='×'){ const e=existing||{jp:it.jp,en:it.en,srs:newSrs()}; scheduleSrs(e.srs,0); state.compoSrs[key]=e; }
+  else if(verdict==='○' && existing){ scheduleSrs(existing.srs,2); if(existing.srs.interval>=30){ delete state.compoSrs[key]; } } // 十分定着したら卒業
+}
+function compoSrsAll(){ return Object.values(state.compoSrs||{}); }
+function compoSrsDueCount(){ const t=now(); return compoSrsAll().filter(e=>e.srs.state!=='review'||e.srs.due<=t).length; }
+function startCompoSrs(){
+  const all=compoSrsAll();
+  if(all.length===0){ toast('まだ復習対象がありません。瞬間英作文で間違えた問題がここに貯まります'); return; }
+  const t=now();
+  const due=all.filter(e=>e.srs.state!=='review'||e.srs.due<=t).sort((a,b)=>a.srs.due-b.srs.due);
+  const rest=all.filter(e=>e.srs.state==='review'&&e.srs.due>t).sort((a,b)=>a.srs.due-b.srs.due);
+  const items=[...due,...rest].slice(0,10).map(e=>({jp:e.jp,en:e.en}));
+  closeModal(); setTab('study'); startTimer();
+  compo={ items, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:'srs', fromHome:false };
+  renderCompo();
+}
 
 // ===== 学習時間トラッキング =====
 let _sessionStart=0;
@@ -1199,8 +1231,8 @@ function renderHome(){
 
     <div class="section-title">本日の学習</div>
     <div class="today-card">
-      ${todayRow(I.cards||I.book||I.check,'本日の単語',`${goalLabel()}・${goalLevelLabel()}`,wDone,'quickStudy10()', wDone?`<span class="td-done">完了</span>`:`<span class="td-go">10問 ›</span>`)}
-      ${todayRow(I.pencil||I.edit||I.plus,'瞬間英作文',`${goalLabel()}・3文`,cDone,'quickCompo3()', cDone?`<span class="td-done">完了</span>`:`<span class="td-go">3問 ›</span>`)}
+      ${todayRow(I.cards||I.book||I.check,'本日の単語',`${goalLabel()}・${goalLevelLabel()}`,wDone,'quickStudy10()', wDone?`<span class="td-done">${I.check}完了</span>`:`<span class="td-go">10問 ›</span>`)}
+      ${todayRow(I.pencil||I.edit||I.plus,'瞬間英作文',`${goalLabel()}・3文`,cDone,'quickCompo3()', cDone?`<span class="td-done">${I.check}完了</span>`:`<span class="td-go">3問 ›</span>`)}
       ${todayRow(I.flame||I.refresh,'本日の復習','忘却曲線で復習（最大10問）',false,dueN>0?'quickReview()':'reviewNone()', dueN>0?`<span class="td-go">${dueN}問 ›</span>`:`<span class="td-none">なし</span>`)}
     </div>
 
@@ -2458,6 +2490,7 @@ function startCompoMenu(){
     <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();startCompoPick()">${I.cardPlus} カードの例文から出題</button>
     <button class="btn btn-primary full" style="padding:15px;justify-content:flex-start;gap:12px" onclick="${aiReady()?"closeModal();startCompoThemePick()":"toast('テーマ出題にはAIが必要です。設定でオンにしてください')"}">${I.sparkle} テーマを選んで出題（AI生成）</button>
     ${!aiReady()?`<div class="compo-hint" style="margin-top:8px">※テーマ出題は、設定でAI（OpenAI/Gemini）をオンにすると使えます。</div>`:''}
+    <button class="btn btn-ghost full" style="padding:13px;justify-content:flex-start;gap:12px;margin-top:10px" onclick="closeModal();startCompoSrs()">${I.flame} 忘却曲線で学習${compoSrsDueCount()>0?`（${compoSrsDueCount()}問）`:(compoSrsAll().length>0?`（${compoSrsAll().length}問）`:'')}</button>
     <button class="btn btn-ghost full" style="padding:13px;justify-content:flex-start;gap:12px;margin-top:10px" onclick="openHistory('compo')">${I.refresh} これまでの履歴を見る</button>
     <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>
   `);
@@ -2538,6 +2571,7 @@ function nextCompo(){
     const verdict=compo.verdict||'△';
     compo.log=compo.log||[];
     compo.log.push({ jp:it.jp, en:it.en, userAns:compo.userAns||'', kind:it.kind, fb:{verdict, comment:fb.comment||'', fixed:fb.fixed||'', alts:fb.alts||[]} });
+    recordCompoSrs(it, verdict);
   }
   stopDictation();
   compo.idx++; compo.revealed=false; compo.verdict=null; compo.fb=null; compo.checking=false; compo.userAns='';
@@ -3385,21 +3419,35 @@ function authNextSignup(){
 }
 function planLabel(){ const b=state.billing||{}; const p=PLAN_INFO[b.plan]||PLAN_INFO.free; return b.plan==='free'?p.name:(p.name+'（'+(TERM_INFO[b.term]?TERM_INFO[b.term].label:'')+'）'); }
 // ===== 紹介システム =====
-function referralDiscountPct(){ const r=state.referral||{}; return Math.min(50,(r.usedCode?10:0)+(r.referredCount||0)*10); }
+function referralDiscountPct(){ const r=state.referral||{}; return Math.min(50,((r.usedCode&&r.usedCodeReferrerPaid)?10:0)+(r.referredPaidCount||0)*10); }
 function referralActive(){ const paid=(state.billing&&state.billing.plan&&state.billing.plan!=='free'); return !!paid && studyDaysThisMonth()>=STREAK_GOAL_DAYS; }
 function effectiveDiscountPct(){ return referralActive()?referralDiscountPct():0; }
 function discountedPrice(base){ return Math.round(base*(1-effectiveDiscountPct()/100)); }
 function normCode(s){ return (s||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,''); }
+async function upsertPlanStatus(){
+  if(!loggedIn()||!_sb) return;
+  try{ await _sb.from('plan_status').upsert({ user_id:account.user.id, plan:(state.billing&&state.billing.plan)||'free', updated_at:new Date().toISOString() }); }catch(e){}
+}
 async function refreshReferral(){
   if(!loggedIn()||!_sb) return;
   try{
     const me=account.user.id;
+    await upsertPlanStatus(); // 自分のプラン状態をサーバーに反映
     const mc=await _sb.from('referral_codes').select('code').eq('user_id',me).maybeSingle();
-    const used=await _sb.from('referrals').select('referrer_code').eq('referee_user_id',me).maybeSingle();
-    const cnt=await _sb.from('referrals').select('referee_user_id',{count:'exact',head:true}).eq('referrer_user_id',me);
+    const used=await _sb.from('referrals').select('referrer_code,referrer_user_id').eq('referee_user_id',me).maybeSingle();
+    const refs=await _sb.from('referrals').select('referee_user_id').eq('referrer_user_id',me);
     state.referral.myCode=(mc&&mc.data&&mc.data.code)||null;
     state.referral.usedCode=(used&&used.data&&used.data.referrer_code)||null;
-    if(cnt&&typeof cnt.count==='number') state.referral.referredCount=cnt.count;
+    const referrerId=used&&used.data&&used.data.referrer_user_id;
+    const refRows=(refs&&refs.data)||[];
+    state.referral.referredCount=refRows.length;
+    // 相手の課金状態を plan_status で突き合わせ（両者有料が条件）
+    let paidIds=new Set();
+    const ids=refRows.map(r=>r.referee_user_id);
+    if(ids.length){ const ps=await _sb.from('plan_status').select('user_id,plan').in('user_id',ids); ((ps&&ps.data)||[]).forEach(p=>{ if(p.plan&&p.plan!=='free') paidIds.add(p.user_id); }); }
+    state.referral.referredPaidCount=paidIds.size;
+    state.referral.usedCodeReferrerPaid=false;
+    if(referrerId){ const rp=await _sb.from('plan_status').select('plan').eq('user_id',referrerId).maybeSingle(); state.referral.usedCodeReferrerPaid=!!(rp&&rp.data&&rp.data.plan&&rp.data.plan!=='free'); }
     save();
   }catch(e){}
 }
@@ -3451,7 +3499,7 @@ function referralBoxHtml(){
       ${r.usedCode?`<div class="d">適用済み：<b>${esc(r.usedCode)}</b>（10%割引）</div>`
       :`<div style="display:flex;gap:8px"><input id="useCodeInput" placeholder="友達のコードを入力" style="flex:1" /><button class="btn btn-primary" style="padding:10px 16px" onclick="applyReferralCode()">適用</button></div>`}
     </div>
-    <div class="d" style="margin-top:4px">紹介された人数：${r.referredCount||0}人 ・ 割引は上記2条件を満たす月のみ有効です。</div>`;
+    <div class="d" style="margin-top:4px">紹介された人数：${r.referredCount||0}人（うち有料：${r.referredPaidCount||0}人）。割引は<b>あなたと相手の双方が有料プラン</b>で、かつ上記2条件を満たす月のみ有効です。</div>`;
 }
 function openBilling(){ billingStep='plans'; billingSel={plan:(state.billing&&state.billing.plan!=='free'?state.billing.plan:'light'), term:(state.billing&&state.billing.term)||'12m'}; refreshReferral(); renderSettings(); }
 function closeBilling(){ billingStep=null; renderSettings(); }
@@ -3460,13 +3508,13 @@ function billingPickTerm(t){ billingSel.term=t; renderSettings(); }
 function billingToCheckout(){ billingStep='checkout'; renderSettings(); }
 function billingConfirm(){
   state.billing={plan:billingSel.plan, term:billingSel.term, since:Date.now(), card:'•••• 4242'};
-  save(); billingStep=null; renderSettings();
+  save(); upsertPlanStatus(); billingStep=null; renderSettings();
   toast('プランを変更しました（デモ）');
 }
 function billingDowngrade(){
   if(!confirm('無料プランに変更しますか？（デモ）')) return;
   state.billing={plan:'free', term:null, since:null, card:null};
-  save(); billingStep=null; renderSettings(); toast('無料プランに変更しました（デモ）');
+  save(); upsertPlanStatus(); billingStep=null; renderSettings(); toast('無料プランに変更しました（デモ）');
 }
 function googleBtn(label){
   return `<button class="gbtn" onclick="authGoogle()">
