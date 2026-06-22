@@ -122,6 +122,28 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .hero .cta.muted{background:rgba(255,255,255,.16);color:#F4F1E8;}
 
 .stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;}
+.quick-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;}
+.qa-tile{display:flex;align-items:center;gap:11px;background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:14px;text-align:left;}
+.qa-tile:active{transform:scale(.98);}
+.qa-ic{width:38px;height:38px;border-radius:11px;background:var(--green-soft);color:var(--green-d);display:flex;align-items:center;justify-content:center;flex:none;}
+.qa-ic svg{width:20px;height:20px;}
+.qa-t{font-weight:700;font-size:.95rem;}
+.qa-s{font-size:.74rem;color:var(--ink-3);margin-top:1px;}
+.streak-card{background:var(--surface);border-radius:18px;box-shadow:var(--shadow);padding:16px 17px;margin-top:14px;border:1.5px solid transparent;}
+.streak-card.done{border-color:var(--amber);background:linear-gradient(180deg,var(--amber-soft),var(--surface));}
+.streak-top{display:flex;align-items:center;gap:13px;}
+.streak-flame{font-size:30px;filter:grayscale(1);opacity:.45;transition:.3s;}
+.streak-flame.lit{filter:none;opacity:1;animation:flamePulse 2.4s ease-in-out infinite;}
+@keyframes flamePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
+.streak-n{font-family:var(--font-en);font-weight:700;font-size:1.7rem;line-height:1;}
+.streak-n small{font-size:.7rem;color:var(--ink-3);font-weight:600;margin-left:4px;}
+.streak-sub{font-size:.82rem;color:var(--ink-2);margin-top:3px;}
+.streak-bar{height:8px;border-radius:999px;background:var(--line);overflow:hidden;margin:13px 0 8px;}
+.streak-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--amber));border-radius:999px;transition:width .5s cubic-bezier(.2,.8,.2,1);}
+.streak-note{font-size:.78rem;color:var(--ink-3);}
+.streak-pop{text-align:center;animation:streakPop .5s cubic-bezier(.2,1.3,.4,1);}
+.streak-pop .big-flame{font-size:54px;animation:flamePulse 1.4s ease-in-out infinite;}
+@keyframes streakPop{0%{transform:scale(.4);opacity:0}60%{transform:scale(1.1)}100%{transform:scale(1);opacity:1}}
 .stat-row .tile{align-items:flex-start;padding:14px 12px;}
 .stat-row .v{font-family:var(--font-en);font-size:1.6rem;font-weight:600;line-height:1;}
 .stat-row .k{color:var(--ink-2);font-size:.74rem;margin-top:6px;}
@@ -456,6 +478,16 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .bill-term.sel{border-color:var(--green);background:var(--green-soft);color:var(--green-d);}
 .bill-cur{font-size:.9rem;color:var(--ink-2);margin:4px 2px 0;}
 .bill-sum{background:var(--green-soft);border-radius:14px;padding:14px 16px;margin:14px 0 4px;display:flex;flex-direction:column;gap:8px;}
+.bill-disc-banner{background:var(--green-soft);color:var(--green-d);font-weight:700;font-size:.86rem;border-radius:12px;padding:10px 14px;margin:10px 0 4px;text-align:center;}
+.bill-disc-banner.muted{background:var(--surface-2);color:var(--ink-3);font-weight:600;}
+.ref-disc{display:flex;align-items:baseline;gap:10px;padding:6px 2px 2px;}
+.ref-disc-n{font-family:var(--font-en);font-weight:700;font-size:2rem;line-height:1;color:var(--ink-3);}
+.ref-disc-n small{font-size:.8rem;margin-left:3px;}
+.ref-disc.on .ref-disc-n{color:var(--green-d);}
+.ref-disc-s{font-size:.82rem;font-weight:700;color:var(--ink-3);}
+.ref-disc.on .ref-disc-s{color:var(--green-d);}
+.ref-cond{background:var(--surface-2);border-radius:12px;padding:11px 14px;margin:4px 0 4px;}
+.ref-cond-row{font-size:.85rem;color:var(--ink-2);padding:3px 0;}
 .bill-sum-row{display:flex;justify-content:space-between;font-size:.95rem;}
 .sec-collapse{display:flex;align-items:center;gap:8px;width:100%;background:none;margin:24px 4px 10px;text-align:left;}
 .sec-collapse .section-title{margin:0;}
@@ -620,7 +652,7 @@ function defaultState(){
   return {
     folders:{}, cards:{},
     threads:[], aiThreadSeed:false,
-    settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:0.9, newPerDay:20 },
+    settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:0.9, newPerDay:20, goal:'daily', goalLevel:'B1' },
     stats:{ reviews:{}, streak:0, lastStudy:null },
     history:{ compo:[], speech:[] },
     seeded:false
@@ -632,6 +664,7 @@ function normalizeState(){
   if(!state.progress || typeof state.progress!=='object') state.progress = {}; // preset/idiom 学習進捗（永続SRS）
   if(!state.history || typeof state.history!=='object') state.history = {compo:[],speech:[]};
   if(!state.billing || typeof state.billing!=='object') state.billing = {plan:'free', term:null, since:null, card:null};
+  if(!state.referral || typeof state.referral!=='object') state.referral = {myCode:null, usedCode:null, referredCount:0};
   if(!Array.isArray(state.history.compo)) state.history.compo=[];
   if(!Array.isArray(state.history.speech)) state.history.speech=[];
   if(!Array.isArray(state.threads)) state.threads = [];
@@ -838,7 +871,18 @@ async function changeEmail(){
   if(!em || !/^.+@.+\..+$/.test(em)){ toast('メールアドレスを正しく入力してください'); return; }
   try{ const { error }=await _sb.auth.updateUser({ email:em }); if(error) throw error;
     authView='menu'; renderSettings();
-    toast('確認メールを送信しました。新旧のメールで承認すると変更が完了します'); }
+    toast('確認メールを送信しました。メール内のリンクで変更を完了してください'); }
+  catch(e){ toast('変更に失敗：'+(e.message||'')); }
+}
+async function changePw(){
+  if(!loggedIn()){ toast('ログインが必要です'); return; }
+  const pw=(document.getElementById('cpwNew')||{}).value||'';
+  const pw2=(document.getElementById('cpwNew2')||{}).value;
+  if(!pw || pw.length<6){ toast('パスワードは6文字以上にしてください'); return; }
+  if(pw!==pw2){ toast('パスワードが一致しません'); return; }
+  try{ const { error }=await _sb.auth.updateUser({ password:pw }); if(error) throw error;
+    authView='menu'; renderSettings();
+    toast('パスワードを変更しました'); }
   catch(e){ toast('変更に失敗：'+(e.message||'')); }
 }
 async function cloudSyncNow(){ if(!loggedIn()){ toast('ログインが必要です'); return; } toast('同期中…'); await cloudPull(); }
@@ -1004,6 +1048,53 @@ function setTab(name){
 /* ====================================================================
    HOME
    ==================================================================== */
+const GOALS=[['daily','日常会話'],['business','ビジネス'],['toeic','TOEIC'],['eiken','英検'],['toefl','TOEFL']];
+const GOAL_LEVELS={
+  daily:[['A2','A2 初級'],['B1','B1 中級'],['B2','B2 中上級'],['C1','C1 上級']],
+  business:[['A2','A2 初級'],['B1','B1 中級'],['B2','B2 中上級'],['C1','C1 上級']],
+  toeic:[['t1','〜500点'],['t2','600点'],['t3','730点'],['t4','860点〜']],
+  eiken:[['e1','3級'],['e2','準2級'],['e3','2級'],['e4','準1級']],
+  toefl:[['f1','iBT 40〜'],['f2','iBT 60〜'],['f3','iBT 80〜'],['f4','iBT 100〜']],
+};
+function goalLabel(){ return (GOALS.find(x=>x[0]===state.settings.goal)||GOALS[0])[1]; }
+function goalLevelLabel(){ const lv=(GOAL_LEVELS[state.settings.goal]||[]).find(x=>x[0]===state.settings.goalLevel); return lv?lv[1]:''; }
+function goalContext(){
+  const map={daily:'everyday English conversation',business:'business / workplace English',toeic:'TOEIC-style English',eiken:'Eiken (英検) exam English',toefl:'TOEFL iBT academic English'};
+  return `The learner's goal is ${map[state.settings.goal]||'general English'} at about the ${goalLevelLabel()||'intermediate'} level. Tailor the topic, vocabulary and difficulty accordingly.`;
+}
+function studyDaysThisMonth(){
+  const ym=new Date().toISOString().slice(0,7);
+  return Object.keys(state.stats.reviews||{}).filter(d=>d.slice(0,7)===ym && (state.stats.reviews[d]||0)>0).length;
+}
+const STREAK_GOAL_DAYS=20;
+let _streakJustUp=false;
+// ホームのワンタッチ学習
+function reviewablePool(){ return Object.values(state.cards).filter(c=>c.type!=='text' && c.srs); }
+function setGoal(g){
+  state.settings.goal=g;
+  const lv=GOAL_LEVELS[g]||[];
+  if(!lv.find(x=>x[0]===state.settings.goalLevel)) state.settings.goalLevel=lv[1]?lv[1][0]:(lv[0]&&lv[0][0]);
+  save(); renderSettings();
+}
+function quickStudy10(){
+  const c=goalCat(), lv=goalLevelObj();
+  if(c&&lv){ setTab('study'); startPreset(c.id, lv.id, 'srs'); return; }
+  const pool=reviewablePool();
+  if(!selectItems(pool,'srs').length){ toast('学習できるカードがありません。まず単語を追加しましょう'); return; }
+  setTab('study'); startStudy(pool,'srs','本日の単語');
+}
+function goalCat(){ return PRESET_LIB.find(c=>c.id===state.settings.goal); }
+function goalLevelObj(){ const c=goalCat(); return c&&c.levels.find(l=>l.id===state.settings.goalLevel); }
+function quickCompo3(){
+  const lv=goalLevelObj();
+  let items=[];
+  if(lv) items=shuffle(lv.words.filter(w=>w[3]&&w[4]).map(w=>({jp:w[4],en:w[3]}))).slice(0,3);
+  if(items.length<3){ const extra=shuffle(compoItemsFrom(Object.values(state.cards))).slice(0,3-items.length); items=items.concat(extra); }
+  if(items.length===0){ toast('日本語と英語が両方ある教材がありません'); return; }
+  setTab('study');
+  compo={ items, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:'card' };
+  renderCompo();
+}
 function renderHome(){
   const all = Object.values(state.cards).filter(c=>c.type!=='text' && c.srs);
   const due = all.filter(c=>c.srs.state!=='new' && c.srs.due<=now()).length;
@@ -1035,10 +1126,34 @@ function renderHome(){
       </button>
     </div>
 
+    <div class="quick-actions">
+      <button class="qa-tile" onclick="quickStudy10()">
+        <div class="qa-ic">${I.cards||I.book||I.check}</div>
+        <div class="qa-tx"><div class="qa-t">本日の単語</div><div class="qa-s">${goalLabel()}・${goalLevelLabel()}</div></div>
+      </button>
+      <button class="qa-tile" onclick="quickCompo3()">
+        <div class="qa-ic">${I.pencil||I.edit||I.plus}</div>
+        <div class="qa-tx"><div class="qa-t">瞬間英作文</div><div class="qa-s">${goalLabel()}・3文</div></div>
+      </button>
+    </div>
+
+    ${(()=>{ const sd=studyDaysThisMonth(); const pct=Math.min(100,Math.round(sd/STREAK_GOAL_DAYS*100)); const done=sd>=STREAK_GOAL_DAYS; return `
+    <div class="streak-card ${done?'done':''}">
+      <div class="streak-top">
+        <div class="streak-flame ${state.stats.streak>0?'lit':''}">🔥</div>
+        <div>
+          <div class="streak-n">${state.stats.streak}<small>日連続</small></div>
+          <div class="streak-sub">${done?'今月の継続条件を達成！🎉':`今月の学習 ${sd} / ${STREAK_GOAL_DAYS}日`}</div>
+        </div>
+      </div>
+      <div class="streak-bar"><div class="streak-fill" style="width:${pct}%"></div></div>
+      <div class="streak-note">${done?'割引の継続条件（月20日以上）を満たしています':`割引の継続条件まであと <b>${STREAK_GOAL_DAYS-sd}</b> 日`}</div>
+    </div>`; })()}
+
     <div class="stat-row">
-      <div class="tile"><div class="v flame">${state.stats.streak} ${state.stats.streak>0?'🔥':''}</div><div class="k">連続日数</div></div>
       <div class="tile"><div class="v">${learned}</div><div class="k">習得中</div></div>
       <div class="tile"><div class="v">${total}</div><div class="k">総カード</div></div>
+      <div class="tile"><div class="v">${counts.reduce((a,b)=>a+b,0)}</div><div class="k">今週の復習</div></div>
     </div>
 
     <div class="section-title">サッとメモ・翻訳</div>
@@ -1974,9 +2089,15 @@ function gradeStudy(r){
 function renderStudyResult(){
   const v=document.getElementById('view-study');
   const total=session.results.length, good=session.results.filter(r=>r.ok).length;
+  const popped=_streakJustUp; _streakJustUp=false;
+  const sd=studyDaysThisMonth(); const remain=Math.max(0,STREAK_GOAL_DAYS-sd);
+  const streakBlock = popped
+    ? `<div class="streak-pop"><div class="big-flame">🔥</div><div class="big">${state.stats.streak}日連続！</div><div class="sub2">${remain>0?`今月 ${sd}/${STREAK_GOAL_DAYS}日 ・ 継続条件まであと ${remain}日`:'今月の継続条件を達成！🎉'}</div></div>`
+    : `<div class="compo-result-head">${I.trophy}<div class="big">できた ${good} / ${total}</div><div class="sub2">${esc(session.catName)}<br>連続 ${state.stats.streak}日 🔥</div></div>`;
   v.innerHTML=`
     <div class="study-top"><button class="icon-btn x-btn" onclick="endSessionEarly()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:100%"></div></div><div class="study-count">結果</div></div>
-    <div class="compo-result-head">${I.trophy}<div class="big">できた ${good} / ${total}</div><div class="sub2">${esc(session.catName)}<br>連続 ${state.stats.streak}日 🔥</div></div>
+    ${streakBlock}
+    ${popped?`<div class="compo-result-head" style="padding-top:0"><div class="big" style="font-size:1.15rem">できた ${good} / ${total}</div><div class="sub2">${esc(session.catName)}</div></div>`:''}
     <div class="section-title">学習した単語（タップで意味）</div>
     <div class="list">${session.results.map((r,i)=>studyResultRow(r,i,session.openIdx===i)).join('')}</div>
     <button class="btn btn-primary full" style="padding:15px;margin-top:16px" onclick="endSessionEarly()">学習に戻る</button>`;
@@ -2005,6 +2126,7 @@ function updateStreak(){
   if(state.stats.lastStudy===y) state.stats.streak++;
   else state.stats.streak=1;
   state.stats.lastStudy=t;
+  _streakJustUp=true;
 }
 function endSessionEarly(){ session=null; renderStudy(); }
 
@@ -3190,7 +3312,76 @@ function authNextSignup(){
   authDraftEmail=em; authView='signup2'; renderSettings();
 }
 function planLabel(){ const b=state.billing||{}; const p=PLAN_INFO[b.plan]||PLAN_INFO.free; return b.plan==='free'?p.name:(p.name+'（'+(TERM_INFO[b.term]?TERM_INFO[b.term].label:'')+'）'); }
-function openBilling(){ billingStep='plans'; billingSel={plan:(state.billing&&state.billing.plan!=='free'?state.billing.plan:'light'), term:(state.billing&&state.billing.term)||'12m'}; renderSettings(); }
+// ===== 紹介システム =====
+function referralDiscountPct(){ const r=state.referral||{}; return Math.min(50,(r.usedCode?10:0)+(r.referredCount||0)*10); }
+function referralActive(){ const paid=(state.billing&&state.billing.plan&&state.billing.plan!=='free'); return !!paid && studyDaysThisMonth()>=STREAK_GOAL_DAYS; }
+function effectiveDiscountPct(){ return referralActive()?referralDiscountPct():0; }
+function discountedPrice(base){ return Math.round(base*(1-effectiveDiscountPct()/100)); }
+function normCode(s){ return (s||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,''); }
+async function refreshReferral(){
+  if(!loggedIn()||!_sb) return;
+  try{
+    const me=account.user.id;
+    const mc=await _sb.from('referral_codes').select('code').eq('user_id',me).maybeSingle();
+    const used=await _sb.from('referrals').select('referrer_code').eq('referee_user_id',me).maybeSingle();
+    const cnt=await _sb.from('referrals').select('referee_user_id',{count:'exact',head:true}).eq('referrer_user_id',me);
+    state.referral.myCode=(mc&&mc.data&&mc.data.code)||null;
+    state.referral.usedCode=(used&&used.data&&used.data.referrer_code)||null;
+    if(cnt&&typeof cnt.count==='number') state.referral.referredCount=cnt.count;
+    save();
+  }catch(e){}
+}
+async function claimReferralCode(){
+  if(!loggedIn()){ toast('ログインが必要です'); return; }
+  const code=normCode((document.getElementById('myCodeInput')||{}).value);
+  if(code.length<4||code.length>20){ toast('コードは英数字4〜20文字にしてください'); return; }
+  try{
+    const { error }=await _sb.from('referral_codes').insert({ code, user_id:account.user.id });
+    if(error){ toast(/duplicate|unique|conflict|exists/i.test(error.message||'')?'そのコードは既に使われています':('発行に失敗：'+error.message)); return; }
+    state.referral.myCode=code; save(); toast('招待コードを発行しました'); renderSettings();
+  }catch(e){ toast('発行に失敗：'+(e.message||'')); }
+}
+async function applyReferralCode(){
+  if(!loggedIn()){ toast('ログインが必要です'); return; }
+  if(state.referral.usedCode){ toast('既に招待コードを使用済みです'); return; }
+  const code=normCode((document.getElementById('useCodeInput')||{}).value);
+  if(!code){ toast('コードを入力してください'); return; }
+  if(code===state.referral.myCode){ toast('自分のコードは使えません'); return; }
+  try{
+    const look=await _sb.from('referral_codes').select('user_id').eq('code',code).maybeSingle();
+    const refUser=look&&look.data&&look.data.user_id;
+    if(!refUser){ toast('そのコードは存在しません'); return; }
+    if(refUser===account.user.id){ toast('自分のコードは使えません'); return; }
+    const { error }=await _sb.from('referrals').insert({ referee_user_id:account.user.id, referrer_code:code, referrer_user_id:refUser });
+    if(error){ toast(/duplicate|unique/i.test(error.message||'')?'既にコードを使用済みです':('適用に失敗：'+error.message)); return; }
+    state.referral.usedCode=code; save(); toast('招待コードを適用しました（10%割引）'); renderSettings();
+  }catch(e){ toast('適用に失敗：'+(e.message||'')); }
+}
+function referralBoxHtml(){
+  const r=state.referral||{}; const pct=referralDiscountPct(); const active=referralActive();
+  const paid=(state.billing&&state.billing.plan!=='free'); const days=studyDaysThisMonth();
+  return `
+    <div class="ref-disc ${active?'on':''}">
+      <div class="ref-disc-n">${pct}%<small>割引</small></div>
+      <div class="ref-disc-s">${active?'適用中':'条件を満たすと適用'}</div>
+    </div>
+    <div class="ref-cond">
+      <div class="ref-cond-row">${paid?'✅':'⬜️'} 有料プランに加入している</div>
+      <div class="ref-cond-row">${days>=STREAK_GOAL_DAYS?'✅':'⬜️'} 今月の学習が20日以上（現在 ${days}日）</div>
+    </div>
+    <div class="field" style="margin-top:14px"><label>あなたの招待コード</label>
+      ${r.myCode?`<div class="key-set"><span class="lbl" style="font-family:var(--font-en);font-weight:700;letter-spacing:.05em">${esc(r.myCode)}</span><button class="btn btn-ghost" style="padding:7px 13px" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(r.myCode)}');toast('コピーしました')">コピー</button></div>
+      <div class="d">このコードを使ってもらうと、使った相手と<b>あなた</b>がそれぞれ10%割引（最大50%）。</div>`
+      :`<div style="display:flex;gap:8px"><input id="myCodeInput" placeholder="好きなコード（英数字4〜20）" style="flex:1" /><button class="btn btn-primary" style="padding:10px 16px" onclick="claimReferralCode()">発行</button></div>
+      <div class="d">重複していなければ、好きな文字列を設定できます。</div>`}
+    </div>
+    <div class="field"><label>招待コードを使う</label>
+      ${r.usedCode?`<div class="d">適用済み：<b>${esc(r.usedCode)}</b>（10%割引）</div>`
+      :`<div style="display:flex;gap:8px"><input id="useCodeInput" placeholder="友達のコードを入力" style="flex:1" /><button class="btn btn-primary" style="padding:10px 16px" onclick="applyReferralCode()">適用</button></div>`}
+    </div>
+    <div class="d" style="margin-top:4px">紹介された人数：${r.referredCount||0}人 ・ 割引は上記2条件を満たす月のみ有効です。</div>`;
+}
+function openBilling(){ billingStep='plans'; billingSel={plan:(state.billing&&state.billing.plan!=='free'?state.billing.plan:'light'), term:(state.billing&&state.billing.term)||'12m'}; refreshReferral(); renderSettings(); }
 function closeBilling(){ billingStep=null; renderSettings(); }
 function billingPickPlan(p){ billingSel.plan=p; renderSettings(); }
 function billingPickTerm(t){ billingSel.term=t; renderSettings(); }
@@ -3220,10 +3411,18 @@ function authBoxHtml(){
       <button class="btn btn-primary full" style="padding:13px" onclick="authResend()">確認メールを再送する</button>
       <button class="btn btn-ghost full" style="padding:13px;margin-top:10px" onclick="authGo('login')">ログイン画面へ</button>`;
   }
+  if(authView==='changePw'){
+    return `<button class="auth-back" onclick="authGo('menu')">‹ 戻る</button>
+      <div class="auth-h">パスワードの変更</div>
+      <div class="d" style="margin:2px 0 12px">新しいパスワードを入力してください。変更後は次回から新しいパスワードでログインします。</div>
+      <div class="field"><label>新しいパスワード</label><input type="password" id="cpwNew" placeholder="6文字以上" autocomplete="new-password" /></div>
+      <div class="field"><label>新しいパスワード（確認）</label><input type="password" id="cpwNew2" placeholder="もう一度入力" autocomplete="new-password" /></div>
+      <button class="btn btn-primary full" style="padding:14px" onclick="changePw()">パスワードを変更する</button>`;
+  }
   if(authView==='changeEmail'){
     return `<button class="auth-back" onclick="authGo('menu')">‹ 戻る</button>
       <div class="auth-h">メールアドレスの変更</div>
-      <div class="d" style="margin:2px 0 12px">現在：<b>${esc(accountEmail())}</b><br>新しいメールアドレスを入力すると、確認メールをお送りします。新旧それぞれのメールで承認すると変更が完了します。</div>
+      <div class="d" style="margin:2px 0 12px">現在：<b>${esc(accountEmail())}</b><br>新しいメールアドレス宛に確認メールをお送りします。メール内のリンクをタップすると変更が完了します。</div>
       <div class="field"><label>新しいメールアドレス</label><input type="email" id="newEmail" placeholder="new@example.com" autocomplete="email" /></div>
       <button class="btn btn-primary full" style="padding:14px" onclick="changeEmail()">確認メールを送信</button>`;
   }
@@ -3292,11 +3491,14 @@ function renderBilling(){
   const cur=state.billing||{plan:'free'};
   if(billingStep==='checkout'){
     const price=PLAN_INFO[billingSel.plan].price[billingSel.term];
+    const disc=effectiveDiscountPct(); const fin=discountedPrice(price);
     v.innerHTML=`
       <div class="topbar"><h1>お支払い</h1><button class="icon-btn x-btn" onclick="billingToPlans()" style="box-shadow:none;background:transparent">✕</button></div>
       <div class="bill-sum">
         <div class="bill-sum-row"><span>プラン</span><b>${PLAN_INFO[billingSel.plan].name} ・ ${TERM_INFO[billingSel.term].label}</b></div>
-        <div class="bill-sum-row"><span>お支払い</span><b>¥${price.toLocaleString()} / 月</b></div>
+        ${disc>0?`<div class="bill-sum-row"><span>通常料金</span><b style="text-decoration:line-through;color:var(--ink-3)">¥${price.toLocaleString()} / 月</b></div>
+        <div class="bill-sum-row"><span>紹介割引</span><b style="color:var(--green-d)">−${disc}%</b></div>`:''}
+        <div class="bill-sum-row"><span>お支払い</span><b>¥${fin.toLocaleString()} / 月</b></div>
       </div>
       <div class="section-title">カード情報（デモ）</div>
       <div class="set-group">
@@ -3307,17 +3509,19 @@ function renderBilling(){
         </div>
         <div class="field"><label>カード名義</label><input id="ccName" placeholder="TARO YAMADA" /></div>
       </div>
-      <button class="btn btn-primary full" style="padding:15px" onclick="billingConfirm()">¥${price.toLocaleString()}/月で登録する</button>
+      <button class="btn btn-primary full" style="padding:15px" onclick="billingConfirm()">¥${fin.toLocaleString()}/月で登録する</button>
       <div class="d" style="text-align:center;margin-top:12px">※これはデモの支払い画面です。実際の決済・課金は行われず、入力情報は保存されません。</div>`;
     return;
   }
   // plans
+  const baseSel=PLAN_INFO[billingSel.plan].price[billingSel.term]; const disc=effectiveDiscountPct();
   v.innerHTML=`
     <div class="topbar"><h1>プラン</h1><button class="icon-btn x-btn" onclick="closeBilling()" style="box-shadow:none;background:transparent">✕</button></div>
     <div class="bill-cur">現在のプラン：<b>${planLabel()}</b></div>
+    ${disc>0?`<div class="bill-disc-banner">🎉 紹介割引 −${disc}% が適用中です</div>`:(referralDiscountPct()>0?`<div class="bill-disc-banner muted">紹介割引 ${referralDiscountPct()}%（有料プラン＋月20日学習で有効）</div>`:'')}
     <div class="bill-terms">${['12m','3m','1m'].map(t=>`<button class="bill-term${billingSel.term===t?' sel':''}" onclick="billingPickTerm('${t}')">${TERM_INFO[t].label}${TERM_INFO[t].sub?`<small>${TERM_INFO[t].sub}</small>`:''}</button>`).join('')}</div>
     ${['light','premium'].map(planCardHtml).join('')}
-    <button class="btn btn-primary full" style="padding:15px;margin-top:4px" onclick="billingToCheckout()">${PLAN_INFO[billingSel.plan].name}にする（¥${PLAN_INFO[billingSel.plan].price[billingSel.term].toLocaleString()}/月）</button>
+    <button class="btn btn-primary full" style="padding:15px;margin-top:4px" onclick="billingToCheckout()">${PLAN_INFO[billingSel.plan].name}にする（¥${discountedPrice(baseSel).toLocaleString()}/月）</button>
     ${cur.plan!=='free'?`<button class="btn btn-ghost full" style="padding:13px;margin-top:10px" onclick="billingDowngrade()">無料プランに戻す</button>`:''}
     <div class="d" style="text-align:center;margin-top:14px">※これはデモの支払い画面です。実際の請求は発生しません。</div>`;
 }
@@ -3336,14 +3540,14 @@ function renderSettings(){
           <label>クラウド同期</label>
           <div class="d">現在は<b>この端末内のみ</b>に保存されています。複数端末での同期やバックアップを有効にするには、開発者がクラウド設定（Supabase）を行う必要があります。</div>
         </div>`
-      : (authRecovery ? authBoxHtml() : (loggedIn() ? (authView==='changeEmail' ? authBoxHtml() : `
+      : (authRecovery ? authBoxHtml() : (loggedIn() ? ((authView==='changeEmail'||authView==='changePw') ? authBoxHtml() : `
         <div class="field">
           <label>ログイン中</label>
           <div class="key-set"><span class="lbl">${I.check} ${esc(accountEmail())}</span><button class="btn btn-ghost" style="padding:7px 13px" onclick="authSignOut()">ログアウト</button></div>
           <div class="d">${_lastSync?('最終同期：'+new Date(_lastSync).toLocaleString('ja-JP')):'データは自動でクラウドに同期されます。'}</div>
         </div>
         <button class="btn btn-ghost full" style="padding:11px;margin-bottom:8px" onclick="authGo('changeEmail')">メールアドレスを変更</button>
-        <button class="btn btn-ghost full" style="padding:11px;color:var(--r-again);border:1px solid var(--line)" onclick="deleteAccount()">アカウントを削除</button>`)
+        <button class="btn btn-ghost full" style="padding:11px" onclick="authGo('changePw')">パスワードを変更</button>`)
       : authBoxHtml()) )}
     </div>
 
@@ -3354,6 +3558,9 @@ function renderSettings(){
         <span class="chev">${I.chev}</span>
       </div>
     </div>
+    ${(cloudConfigured()&&loggedIn()&&!authRecovery&&authView==='menu')?`
+    <div class="section-title">招待コード（紹介で割引）</div>
+    <div class="set-group">${referralBoxHtml()}</div>`:''}
 
     <div class="section-title">AI連携</div>
     <div class="set-group">
@@ -3418,6 +3625,18 @@ function renderSettings(){
     `:''}
     </div>
 
+    <div class="section-title">学習の目的</div>
+    <div class="set-group">
+      <div class="set-row"><div><div class="l">目標</div><div class="d">出題やAI生成の内容を、目的に合わせます</div></div>
+        <select id="setGoal" onchange="setGoal(this.value)">
+          ${GOALS.map(g=>`<option value="${g[0]}" ${s.goal===g[0]?'selected':''}>${g[1]}</option>`).join('')}
+        </select></div>
+      <div class="set-row"><div><div class="l">レベル</div></div>
+        <select id="setGoalLevel" onchange="state.settings.goalLevel=this.value;save()">
+          ${(GOAL_LEVELS[s.goal]||[]).map(l=>`<option value="${l[0]}" ${s.goalLevel===l[0]?'selected':''}>${l[1]}</option>`).join('')}
+        </select></div>
+    </div>
+
     <div class="section-title">学習</div>
     <div class="set-group">
       <div class="set-row"><div><div class="l">1日の新規カード上限</div></div>
@@ -3435,7 +3654,6 @@ function renderSettings(){
       <div class="set-row" style="cursor:pointer" onclick="exportData()"><div><div class="l">バックアップを書き出す</div><div class="d">全データをJSONファイルで保存</div></div><span class="chev">${I.chev}</span></div>
       <div class="set-row" style="cursor:pointer" onclick="document.getElementById('importFile').click()"><div><div class="l">バックアップを読み込む</div><div class="d">JSONから復元（上書き）</div></div><span class="chev">${I.chev}</span></div>
       <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(this)" />
-      <button class="del-link" onclick="resetAll()">すべてのデータを消去</button>
     </div>
 
     <div class="section-title">情報</div>
@@ -3448,6 +3666,12 @@ function renderSettings(){
       <div class="set-row"><div><div class="l">バージョン</div></div><span style="color:var(--ink-3)">${APP_VERSION}</span></div>
     </div>
     <div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:10px">Sprout · データはこの端末に保存されます<br>定期的にバックアップの書き出しをおすすめします</div>
+    ${(cloudConfigured()&&loggedIn()&&!authRecovery)?`
+    <div class="section-title" style="color:var(--r-again)">アカウント</div>
+    <div class="set-group">
+      <button class="btn btn-ghost full" style="padding:12px;color:var(--r-again);border:1px solid var(--line)" onclick="deleteAccount()">アカウントを削除</button>
+      <div class="d" style="margin-top:8px">クラウド上のデータとログイン情報が削除され、元に戻せません。</div>
+    </div>`:''}
   `;
 }
 function saveSettings(){
@@ -3491,7 +3715,7 @@ function openFAQ(){
     ['パスワードを忘れたら？','設定 → アカウントの「ログイン」画面で「パスワードをお忘れですか？」から、登録メールに再設定リンクを送れます。リンクを開くと新しいパスワードを設定できます。'],
     ['アカウントを削除したい','ログイン中に、設定 → アカウントの「アカウントを削除」から削除できます。クラウド上のデータとログイン情報が消え、元には戻せません。'],
     ['「1日の新規カード上限」とは？','忘却曲線（復習）モードで、1日に新しく出題する“初めて学ぶカード”の枚数の上限です。一度にたくさん新出単語を詰め込むと翌日以降の復習が雪だるま式に増え、定着しにくくなります。上限を設けることで、毎日こなせる量に復習を平準化し、無理なく続けられます。復習(期限が来たカード)はこの上限とは別にすべて出題されます。'],
-    ['「すべてのデータを消去」で何が消えますか？','あなたが追加した単語・ノート・英語日記、学習履歴と進捗、そして設定（APIキーや読み上げ速度などの好み）が消え、初期サンプルの状態に戻ります。アプリ自体やアカウント（ログイン情報）は削除されません。ただしログイン中の場合は、消去後の状態が次の同期でクラウドにも反映される点にご注意ください。'],
+    ['パスワードを変更したい','ログイン中に、設定 → アカウントの「パスワードを変更」から、いつでも新しいパスワードに変更できます。'],
     ['AI連携は必要ですか？お金はかかりますか？','AIは任意です。オフでも、単語・熟語学習、クイズ、ノート、読み上げなどキー不要の機能はすべて使えます。ログイン中はアプリ提供のAI（無料枠）が使えます。自分のAPIキー（Gemini）を使う場合も、無料枠内なら料金はかかりません。'],
     ['学習スタイルの違いは？','「忘却曲線」は復習タイミングが来たもの＋新規を優先（最も定着しやすい）。「ランダム」はシャッフル出題。「習得していないものから」は苦手・未習得を優先します。いずれも1回10問です。'],
     ['バックアップはできますか？','「データ」→「バックアップを書き出す」で全データをJSONファイルとして保存できます。「読み込む」で復元（上書き）できます。ログインしていない場合は特に、定期的な書き出しをおすすめします。']
