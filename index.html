@@ -295,6 +295,44 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .quiz-opt.wrong{border-color:var(--r-again);background:#FBE9E5;}
 html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 
+/* reading */
+.read-tags{flex:1;text-align:center;font-size:.8rem;font-weight:700;color:var(--ink-3);}
+.read-setup{padding:8px 2px;}
+.rs-q{font-weight:800;font-size:.92rem;margin:18px 0 10px;}
+.opt-pills{display:flex;flex-wrap:wrap;gap:9px;}
+.opt-pill{background:var(--surface);box-shadow:var(--shadow);border-radius:12px;padding:11px 16px;font-weight:600;font-size:.95rem;border:2px solid transparent;transition:transform .1s;display:flex;flex-direction:column;align-items:center;line-height:1.2;}
+.opt-pill small{font-size:.66rem;color:var(--ink-3);font-weight:500;margin-top:2px;}
+.opt-pill.sel small{color:rgba(255,255,255,.8);}
+.opt-pill:active{transform:scale(.96);}
+.opt-pill.sel{background:var(--green);color:#fff;border-color:var(--green);}
+.read-loading{text-align:center;padding:60px 20px;color:var(--green);}
+.read-loading svg{width:46px;height:46px;animation:pulse 1.3s ease-in-out infinite;}
+.read-loading .big{font-weight:800;font-size:1.2rem;color:var(--ink);margin-top:14px;}
+@keyframes pulse{0%,100%{opacity:.5;transform:scale(.95)}50%{opacity:1;transform:scale(1.05)}}
+.read-title{font-family:var(--font-en);font-size:1.4rem;font-weight:600;margin:6px 2px 4px;line-height:1.35;}
+.read-hint{font-size:.74rem;color:var(--ink-3);margin:0 2px 12px;}
+.read-pass{font-family:var(--font-en);font-size:1.18rem;line-height:2.05;letter-spacing:.005em;padding:2px;}
+.rw{cursor:pointer;border-radius:4px;padding:0 .5px;transition:background .1s;}
+.rw:active,.rw.tapped{background:var(--amber-soft);box-shadow:0 0 0 2px var(--amber-soft);}
+.read-actions{display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;}
+.rd-btn{flex:1;min-width:88px;display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--surface-2);border-radius:13px;padding:11px 6px;font-size:.78rem;font-weight:700;color:var(--ink-2);}
+.rd-btn svg{width:19px;height:19px;}
+.rd-btn:active{transform:scale(.97);}
+.read-ja{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 15px;margin-top:14px;line-height:1.85;font-size:.98rem;animation:fadeIn .18s ease;}
+.read-ja-lab{font-size:.7rem;font-weight:800;color:var(--ink-3);margin-bottom:6px;}
+.read-pop{position:fixed;left:0;right:0;bottom:calc(var(--tabbar-h) + var(--safe-b));background:var(--surface);border-top:1px solid var(--line);box-shadow:0 -8px 26px rgba(0,0,0,.14);padding:16px 18px calc(16px + var(--safe-b));border-radius:20px 20px 0 0;z-index:45;transform:translateY(130%);transition:transform .22s cubic-bezier(.2,.8,.2,1);max-width:680px;margin:0 auto;}
+.read-pop.open{transform:none;}
+.rp-head{display:flex;align-items:center;gap:10px;}
+.rp-word{flex:1;font-family:var(--font-en);font-weight:600;font-size:1.35rem;word-break:break-word;}
+.rp-x{width:32px;height:32px;border-radius:50%;background:var(--surface-2);color:var(--ink-2);font-size:1.1rem;flex:none;}
+.rp-mean{font-size:1.02rem;margin:8px 0 4px;min-height:1.4em;word-break:break-word;}
+.rp-load{color:var(--ink-3);font-size:.92rem;}
+.rp-actions{display:flex;gap:9px;margin-top:12px;}
+.rp-btn{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--surface-2);border-radius:11px;padding:11px;font-weight:700;font-size:.9rem;color:var(--ink-2);}
+.rp-btn svg{width:16px;height:16px;}
+.rp-btn.primary{background:var(--green);color:#fff;}
+.rp-btn:disabled{opacity:.5;}
+
 /* 瞬間英作文 (instant composition) */
 .mic-btn{width:48px;height:48px;border-radius:50%;background:var(--green-soft);color:var(--green);display:grid;place-items:center;flex:none;transition:transform .12s;}
 .mic-btn:active{transform:scale(.9);}
@@ -521,6 +559,7 @@ const I = {
   mic:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3"/></svg>',
   refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5"/></svg>',
   book:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zM19 3v18"/></svg>',
+  read:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7v14M12 7a4 4 0 0 0-4-4H3v14h5a4 4 0 0 1 4 4M12 7a4 4 0 0 1 4-4h5v14h-5a4 4 0 0 0-4 4"/></svg>',
   movef:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 13h6M13 11l2 2-2 2"/></svg>',
   pen:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
   translate:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h7M9 3v2c0 4-2 7-6 8M5 9c0 3 3 5 7 6"/><path d="M12 20l4-9 4 9M14.5 16h5"/></svg>',
@@ -1386,7 +1425,7 @@ function deleteCard(id){
 /* ====================================================================
    STUDY
    ==================================================================== */
-let session=null, quiz=null, idiom=null, compo=null, speech=null, histView=null, wordList=null;
+let session=null, reading=null, idiom=null, compo=null, speech=null, histView=null, wordList=null;
 const PRESET_LIB=[
   {id:"daily",name:"日常生活",levels:[
     {id:"beg",name:"初級",words:[
@@ -2343,7 +2382,7 @@ function idiomTotalCount(){ let n=0; IDIOM_LIB.forEach(c=>c.levels.forEach(l=>n+
 function renderStudy(){
   if(session){ renderStudySession(); return; }
   if(wordList){ renderWordList(); return; }
-  if(quiz){ renderQuiz(); return; }
+  if(reading){ renderReading(); return; }
   if(idiom){ renderIdiom(); return; }
   if(compo){ renderCompo(); return; }
   if(speech){ renderSpeech(); return; }
@@ -2371,9 +2410,10 @@ function renderStudy(){
       <div class="mc-body"><div class="mc-t">熟語学習</div><div class="mc-d">フラッシュカード＆穴埋め問題で熟語を習得</div></div>
       <span class="chev">${I.chev}</span>
     </div>
-    <div class="mode-card" onclick="startQuizPick()">
-      <div class="mc-ic" style="background:var(--amber-soft);color:var(--amber-d)">${I.trophy}</div>
-      <div class="mc-body"><div class="mc-t">4択クイズで腕試し</div><div class="mc-d">意味を4択で当てる</div></div>
+    <div class="section-title" style="margin-top:22px">リーディング</div>
+    <div class="mode-card" onclick="readingSetup()">
+      <div class="mc-ic" style="background:var(--amber-soft);color:var(--amber-d)">${I.read}</div>
+      <div class="mc-body"><div class="mc-t">リーディング</div><div class="mc-d">AIが記事を生成・タップで訳＆カード化</div></div>
       <span class="chev">${I.chev}</span>
     </div>
     <div class="section-title" style="margin-top:22px">スピーキング学習</div>
@@ -2798,57 +2838,143 @@ function updateStreak(){
 function endSessionEarly(){ session=null; renderStudy(); }
 
 /* ---------- Quiz ---------- */
-function startQuizPick(){
-  const decks=childFolders(null);
-  openModal(`
-    <h2>4択クイズ</h2>
-    <p style="color:var(--ink-2);font-size:.9rem;margin:0 0 14px">出題するデッキを選んでください（意味の入った最大10枚）。</p>
-    <div class="deck-pick">
-      <div class="deck-row" onclick="startQuiz(null)"><div class="meta"><div class="nm">すべてのカード</div></div><span class="chev">${I.chev}</span></div>
-      ${decks.map(f=>`<div class="deck-row" onclick="startQuiz('${f.id}')"><div class="meta"><div class="nm">${esc(f.name)}</div></div><span class="chev">${I.chev}</span></div>`).join('')}
-    </div>
-    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>`);
+/* ====================================================================
+   READING (AIが記事を生成・タップで訳/カード化)
+   ==================================================================== */
+const READ_GENRES=[['news','ニュース'],['business','ビジネス'],['novel','小説'],['daily','日常会話'],['essay','エッセイ'],['science','科学・技術']];
+const READ_LEVELS=[['beginner','初級'],['intermediate','中級'],['advanced','上級']];
+const READ_LENGTHS=[[100,'短い'],[200,'普通'],[400,'長い']];
+const READ_GENRE_DESC={news:'a short news article',business:'a business / workplace scenario text',novel:'a short fictional story excerpt',daily:'an everyday conversation or diary-style text',essay:'a short opinion essay',science:'an accessible science / technology explainer'};
+const READ_LEVEL_DESC={beginner:'CEFR A2 (around Eiken grade 3 to pre-2). Use simple, common vocabulary and short sentences.',intermediate:'CEFR B1 (around Eiken grade 2 / TOEIC 600). Everyday vocabulary with some variety.',advanced:'CEFR B2+ (around Eiken pre-1 and up). Richer vocabulary and more complex sentences.'};
+
+function readingSetup(){
+  reading={stage:'setup', genre:(reading&&reading.genre)||'news', level:(reading&&reading.level)||'intermediate', length:(reading&&reading.length)||200};
+  renderReading();
 }
-function startQuiz(fid){
-  closeModal();
-  const list=(fid===null?Object.values(state.cards):cardsInTree(fid)).filter(c=>c.mean);
-  if(list.length<4){ toast('意味の入ったカードが4枚以上必要です'); return; }
-  const picked=shuffle([...list]).slice(0,10);
-  quiz={items:picked,idx:0,score:0,answered:false,pool:list};
-  renderQuiz();
+function readPick(field,val){ if(reading){ reading[field]=val; renderReading(); } }
+function readLabel(field){
+  const map={genre:READ_GENRES,level:READ_LEVELS,length:READ_LENGTHS};
+  const o=(map[field]||[]).find(x=>String(x[0])===String(reading[field]));
+  return o?(field==='length'?('約'+o[0]+'語'):o[1]):'';
 }
-function renderQuiz(){
+function readPills(field,opts){
+  return '<div class="opt-pills">'+opts.map(o=>{
+    const val=(typeof o[0]==='number')?o[0]:`'${o[0]}'`;
+    const sel=String(reading[field])===String(o[0])?' sel':'';
+    const sub=field==='length'?`<small>約${o[0]}語</small>`:'';
+    return `<button class="opt-pill${sel}" onclick="readPick('${field}',${val})">${o[1]}${sub}</button>`;
+  }).join('')+'</div>';
+}
+function readingPassageHtml(en){
+  const parts=String(en||'').split(/([A-Za-z][A-Za-z'’\-]*)/);
+  return parts.map((p,i)=> (i%2===1)
+    ? `<span class="rw" data-w="${esc(p)}" onclick="readingTapWord(this)">${esc(p)}</span>`
+    : esc(p)).join('');
+}
+function renderReading(){
   const v=document.getElementById('view-study');
-  if(quiz.idx>=quiz.items.length){
-    const pct=Math.round(quiz.score/quiz.items.length*100);
-    v.innerHTML=`<div class="session-done">${I.trophy}<div class="big">${quiz.score} / ${quiz.items.length} 正解</div>
-      <p style="color:var(--ink-2)">正答率 ${pct}%</p>
-      <button class="btn btn-primary full" style="margin-top:18px;padding:15px" onclick="quiz=null;renderStudy()">学習に戻る</button></div>`;
-    quiz=null; return;
+  if(reading.stage==='loading'){
+    v.innerHTML=`<div class="study-top"><button class="icon-btn x-btn" onclick="reading=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button><div class="read-tags">リーディング</div><div class="study-count"></div></div>
+      <div class="read-loading">${I.sparkle}<div class="big">記事を生成中…</div><p style="color:var(--ink-2)">少し待ってね</p></div>`;
+    return;
   }
-  const c=quiz.items[quiz.idx];
-  const wrong=shuffle(quiz.pool.filter(x=>x.id!==c.id&&x.mean!==c.mean)).slice(0,3).map(x=>x.mean);
-  const opts=shuffle([c.mean,...wrong]);
-  quiz.correct=c.mean; quiz.answered=false;
-  v.innerHTML=`
+  if(reading.stage==='read'){
+    v.innerHTML=`
     <div class="study-top">
-      <button class="icon-btn x-btn" onclick="quiz=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button>
-      <div class="progress"><div style="width:${Math.round(quiz.idx/quiz.items.length*100)}%"></div></div>
-      <div class="study-count">${quiz.idx+1}/${quiz.items.length}</div>
+      <button class="icon-btn x-btn" onclick="reading=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button>
+      <div class="read-tags">${readLabel('genre')} ・ ${readLabel('level')} ・ ${readLabel('length')}</div>
+      <button class="icon-btn" onclick="readingSetup()" aria-label="条件を変える">${I.gear}</button>
     </div>
-    <div class="quiz-q">${esc(c.term)} <button class="spk" style="display:inline-grid;vertical-align:middle;width:32px;height:32px" onclick="speak('${esc(c.term).replace(/'/g,"\\'")}')">${I.speaker}</button></div>
-    <div class="quiz-opts" id="quizOpts">
-      ${opts.map(o=>`<button class="quiz-opt" onclick="answerQuiz(this,${JSON.stringify(o===c.mean)})" data-mean="${esc(o)}">${esc(o)}</button>`).join('')}
+    <h2 class="read-title">${esc(reading.title||'Reading')}</h2>
+    <div class="read-hint">単語をタップ → 意味＆カード保存。文を選択して「選択を翻訳」もできます。</div>
+    <div class="read-pass" id="readPass">${readingPassageHtml(reading.en)}</div>
+    <div class="read-actions">
+      <button class="rd-btn" onclick="toggleReadJa()">${I.translate}<span>${reading.showJa?'訳を隠す':'日本語訳'}</span></button>
+      <button class="rd-btn" onclick="translateSelection()">${I.copy}<span>選択を翻訳</span></button>
+      <button class="rd-btn" onclick="speakPassage()">${I.speaker}<span>読み上げ</span></button>
+    </div>
+    ${reading.showJa?`<div class="read-ja"><div class="read-ja-lab">日本語訳</div>${esc(reading.ja||'（訳がありません）')}</div>`:''}
+    <button class="btn btn-ghost full" style="margin-top:16px" onclick="startReading()">${I.refresh} 別の記事を生成</button>
+    <div class="read-pop" id="readPop"></div>`;
+    return;
+  }
+  // setup
+  v.innerHTML=`
+    <div class="study-top"><button class="icon-btn x-btn" onclick="reading=null;renderStudy()" style="box-shadow:none;background:transparent">✕</button><div class="read-tags">リーディング</div><div class="study-count"></div></div>
+    <div class="read-setup">
+      <div class="rs-q">内容</div>${readPills('genre',READ_GENRES)}
+      <div class="rs-q">難易度</div>${readPills('level',READ_LEVELS)}
+      <div class="rs-q">文字数</div>${readPills('length',READ_LENGTHS)}
+      <button class="btn btn-primary full" style="margin-top:24px;padding:15px" onclick="startReading()">${I.sparkle} この条件で生成</button>
+      ${!aiReady()?`<div class="d" style="text-align:center;margin-top:12px;color:var(--r-again)">記事の生成にはAIが必要です。ログイン（または設定でAIをオン）してください。</div>`:''}
     </div>`;
 }
-function answerQuiz(btn,isCorrect){
-  if(quiz.answered) return; quiz.answered=true;
-  document.querySelectorAll('#quizOpts .quiz-opt').forEach(b=>{
-    if(b.dataset.mean===quiz.correct) b.classList.add('correct');
-    b.style.pointerEvents='none';
-  });
-  if(isCorrect) quiz.score++; else btn.classList.add('wrong');
-  setTimeout(()=>{ if(quiz){ quiz.idx++; renderQuiz(); } }, 950);
+async function startReading(){
+  if(!aiReady()){ toast(aiEnabled()?'設定でAPIキーを入力してください':'リーディングにはログイン（またはAI設定）が必要です'); return; }
+  reading.stage='loading'; reading.showJa=false; reading.lookup=null; renderReading();
+  try{
+    const gd=READ_GENRE_DESC[reading.genre]||'a short article';
+    const ld=READ_LEVEL_DESC[reading.level]||'';
+    const n=reading.length||200;
+    const sys=`You create English reading practice for Japanese learners. Output ONLY JSON, no markdown, no code fences. Schema: {"title": a short English title, "en": the reading passage in English only, "ja": a full natural Japanese translation of the passage, "words": an array of up to 8 of the more difficult words or idioms that actually appear in the passage, each {"term": the word or idiom (base/dictionary form is fine), "mean": a concise Japanese meaning}}. Write ${gd}. Difficulty: ${ld} Length: about ${n} words. Make it coherent, self-contained and engaging, in natural English.`;
+    const content=await callAI([{role:'system',content:sys},{role:'user',content:'Generate one passage now as JSON.'}],{json:true,temp:0.85});
+    const o=JSON.parse(content);
+    if(!o || !o.en) throw new Error('empty');
+    reading.title=o.title||''; reading.en=String(o.en); reading.ja=o.ja||'';
+    reading.words=Array.isArray(o.words)?o.words.filter(w=>w&&w.term):[];
+    reading.stage='read';
+  }catch(err){
+    const m=(err&&err.message)||'';
+    toast('生成に失敗: '+(/NO_SESSION|auth/i.test(m)?'ログインが必要':/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑（再試行を）':/empty|JSON/i.test(m)?'もう一度お試しを':'通信エラー'));
+    reading.stage='setup';
+  }
+  renderReading();
+}
+function toggleReadJa(){ if(reading){ reading.showJa=!reading.showJa; renderReading(); } }
+function speakPassage(){ if(reading&&reading.en) speak(reading.en); }
+async function readingTapWord(el){
+  const word=(el&&el.dataset.w)||''; if(!word) return;
+  let known=null;
+  if(reading.words) known=reading.words.find(w=>w.term && w.term.toLowerCase()===word.toLowerCase());
+  reading.lookup={word, mean:known?known.mean:'', loading:!known}; paintReadPop();
+  if(known) return;
+  if(translateReady()){
+    try{ const r=await translateText(word,'JA'); reading.lookup={word, mean:r.text, loading:false}; }
+    catch(e){ reading.lookup={word, mean:'(意味を取得できませんでした)', loading:false}; }
+  } else {
+    reading.lookup={word, mean:'(意味の取得にはログインが必要です)', loading:false};
+  }
+  paintReadPop();
+}
+async function translateSelection(){
+  const sel=((window.getSelection&&window.getSelection().toString())||'').trim();
+  if(!sel){ toast('翻訳したい部分を選択してください'); return; }
+  if(!translateReady()){ toast('翻訳にはログインが必要です'); return; }
+  reading.lookup={word:sel, mean:'', loading:true}; paintReadPop();
+  try{ const r=await translateText(sel); reading.lookup={word:sel, mean:r.text, loading:false}; }
+  catch(e){ reading.lookup={word:sel, mean:'(翻訳できませんでした)', loading:false}; }
+  paintReadPop();
+}
+function paintReadPop(){
+  const el=document.getElementById('readPop'); if(!el) return;
+  const lk=reading.lookup;
+  if(!lk){ el.classList.remove('open'); el.innerHTML=''; return; }
+  const spk=JSON.stringify(lk.word).replace(/"/g,'&quot;');
+  el.innerHTML=`
+    <div class="rp-head"><div class="rp-word">${esc(lk.word)}</div>
+      <button class="rp-x" onclick="closeReadPop()" aria-label="閉じる">✕</button></div>
+    <div class="rp-mean">${lk.loading?'<span class="rp-load">調べています…</span>':esc(lk.mean||'')}</div>
+    <div class="rp-actions">
+      <button class="rp-btn" onclick="speak(${spk})">${I.speaker}読み上げ</button>
+      <button class="rp-btn primary" onclick="readToCard()" ${lk.loading?'disabled':''}>${I.plus}カードに保存</button>
+    </div>`;
+  el.classList.add('open');
+}
+function closeReadPop(){ if(reading){ reading.lookup=null; } paintReadPop(); }
+function readToCard(){
+  const lk=reading&&reading.lookup; if(!lk||lk.loading) return;
+  editCard(null,{term:lk.word, mean:(lk.mean||'').trim()});
+  closeReadPop();
 }
 
 /* ---------- voice input (Web Speech API) ---------- */
