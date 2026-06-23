@@ -148,7 +148,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .save-mini svg{width:15px;height:15px;}
 .save-mini:active{background:var(--green-soft);}
 .streak-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);}
-.streak-barlabel{font-size:.74rem;color:var(--ink-2);margin:12px 2px 5px;}
+.streak-barlabel{font-size:.74rem;color:var(--ink-2);margin:10px 2px 5px;}
 .streak-barlabel b{color:var(--green-d);}
 .th-head{font-weight:800;font-size:1.05rem;margin:2px 0 12px;}
 .th-tabs{display:flex;flex-wrap:wrap;gap:6px;}
@@ -172,12 +172,12 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .streak-flame{font-size:24px;filter:grayscale(1);opacity:.45;transition:.3s;}
 .streak-flame.lit{filter:none;opacity:1;animation:flamePulse 2.4s ease-in-out infinite;}
 @keyframes flamePulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}
-.streak-n{font-family:var(--font-en);font-weight:700;font-size:1.45rem;line-height:1;}
-.streak-n small{font-size:.66rem;color:var(--ink-3);font-weight:600;margin-left:4px;}
+.streak-n{font-family:var(--font-en);font-weight:700;font-size:1.85rem;line-height:1;}
+.streak-n small{font-size:.62rem;color:var(--ink-3);font-weight:600;margin-left:4px;}
 .streak-sub{font-size:.82rem;color:var(--ink-2);margin-top:3px;}
 .streak-today{font-size:.72rem;color:var(--ink-3);margin-top:3px;}
 .streak-today b,.streak-today .ok{color:var(--green-d);font-weight:700;}
-.streak-bar{height:8px;border-radius:999px;background:var(--line);overflow:hidden;margin:13px 0 8px;}
+.streak-bar{height:7px;border-radius:999px;background:var(--line);overflow:hidden;margin:0 0 4px;}
 .streak-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--amber));border-radius:999px;transition:width .5s cubic-bezier(.2,.8,.2,1);}
 .streak-note{font-size:.78rem;color:var(--ink-3);}
 .streak-pop{text-align:center;animation:streakPop .5s cubic-bezier(.2,1.3,.4,1);}
@@ -1372,7 +1372,8 @@ function renderHome(){
     <div id="qaTrans">${transPanelHtml()}</div>
 
     ${(()=>{ const lm=loyaltyMonths(); const lpct=loyaltyDiscountPct(); const nx=loyaltyNext(); const done=lpct>=25;
-      const startLabel = billingStart()? new Date(billingStart()).toLocaleDateString('ja-JP') : null;
+      const st=billingStart(); const sd=st?studyDaysThisCycle():studyDaysThisMonth(); const pct=Math.min(100,Math.round(sd/STREAK_GOAL_DAYS*100)); const cycleOk=sd>=STREAK_GOAL_DAYS;
+      const startLabel = st? new Date(st).toLocaleDateString('ja-JP') : null;
       const studiedToday=(state.stats.reviews[todayStr()]||0)>0; return `
     <div class="streak-card ${done?'done':''}" onclick="streakOpen=!streakOpen;renderHome()" style="cursor:pointer">
       <div class="streak-top">
@@ -1383,6 +1384,8 @@ function renderHome(){
         </div>
         <span class="chev ${streakOpen?'open':''}" style="align-self:center">${I.chev}</span>
       </div>
+      <div class="streak-barlabel">${cycleOk?`継続割引を達成！（${sd}/${STREAK_GOAL_DAYS}日）✅`:`継続割引まで あと<b>${Math.max(0,STREAK_GOAL_DAYS-sd)}日</b>（${sd}/${STREAK_GOAL_DAYS}日）`}</div>
+      <div class="streak-bar"><div class="streak-fill" style="width:${pct}%"></div></div>
       ${streakOpen?`<div class="streak-detail">
         <div class="streak-note">・30日で20日以上学習すると1回達成</div>
         <div class="streak-note" style="margin-top:4px">・${nx?`あと${Math.max(0,nx.months-lm)}回継続で<b style="color:var(--green-d)">${nx.pct}%</b>割引`:`最高ランク達成！🎉`}</div>
