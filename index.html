@@ -532,6 +532,17 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .bill-term small{font-size:.66rem;color:var(--ink-3);font-weight:500;}
 .bill-term.sel{border-color:var(--green);background:var(--green-soft);color:var(--green-d);}
 .bill-cur{font-size:.9rem;color:var(--ink-2);margin:4px 2px 0;}
+.cur-plan-card{background:linear-gradient(135deg,var(--green-soft),#fff);border:1.5px solid var(--green);border-radius:16px;padding:16px;margin:4px 0 6px;}
+.cur-plan-card .cpc-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;}
+.cur-plan-card .cpc-name{font-size:1.18rem;font-weight:700;color:var(--ink-1);}
+.cur-plan-card .cpc-sub{font-size:.8rem;color:var(--ink-3);margin-top:2px;}
+.cur-plan-card .cpc-badge{background:var(--green-d);color:#fff;font-size:.72rem;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;}
+.cur-plan-card .cpc-ai{font-size:.84rem;color:var(--ink-2);margin-top:10px;}
+.cur-plan-card .cpc-ai b{color:var(--green-d);}
+.pw-wrap{position:relative;}
+.pw-wrap input{width:100%;padding-right:46px;}
+.pw-eye{position:absolute;top:50%;right:6px;transform:translateY(-50%);border:none;background:transparent;color:var(--ink-3);cursor:pointer;padding:8px;display:flex;align-items:center;border-radius:8px;}
+.pw-eye:active{background:var(--paper-2,rgba(0,0,0,.05));}
 .bill-sum{background:var(--green-soft);border-radius:14px;padding:14px 16px;margin:14px 0 4px;display:flex;flex-direction:column;gap:8px;}
 .bill-disc-banner{background:var(--green-soft);color:var(--green-d);font-weight:700;font-size:.86rem;border-radius:12px;padding:10px 14px;margin:10px 0 4px;text-align:center;}
 .bill-disc-banner.muted{background:var(--surface-2);color:var(--ink-3);font-weight:600;}
@@ -866,7 +877,15 @@ async function authSignUp(){
       toast('このメールアドレスは既に登録されています'); authDraftEmail=em; authView='login'; renderSettings(); return;
     }
     authDraftEmail=em; authView='sent'; renderSettings(); }
-  catch(e){ const m=(e.message||''); toast(/registered|already/i.test(m)?'このメールアドレスは既に登録されています':('登録に失敗：'+m)); if(/registered|already/i.test(m)){ authView='login'; renderSettings(); } }
+  catch(e){ const m=(e.message||'')+''; let msg;
+    if(/registered|already/i.test(m)){ toast('このメールアドレスは既に登録されています'); authView='login'; renderSettings(); return; }
+    if(/rate|too many|429|sending|smtp|email/i.test(m)) msg='確認メールを送れませんでした。時間をおいて再度お試しください（メール送信の上限の可能性）';
+    else if(/weak|pwned|leaked|compromis|breach/i.test(m)) msg='このパスワードは安全性が低いと判定されました。別のパスワードでお試しください';
+    else if(/signups?\s*(are\s*)?(not\s*allowed|disabled)/i.test(m)) msg='現在、新規登録を受け付けていません';
+    else if(/valid email|invalid.*email|email.*invalid/i.test(m)) msg='メールアドレスの形式をご確認ください';
+    else if(/password/i.test(m)) msg='パスワードをご確認ください（6文字以上）';
+    else msg='登録に失敗しました：'+m;
+    toast(msg); }
 }
 async function authResend(){
   const em=authDraftEmail || ((document.getElementById('authEmail')||{}).value||'').trim();
@@ -2400,7 +2419,7 @@ function renderStudySession(){
             <div class="face-tag">答え</div>
             <div class="b-term">${esc(c.term)} ${spkBtn(c.term,30)}</div>
             <div class="b-mean">${esc(c.mean)||'<span style=color:var(--ink-3);font-weight:400>意味が未入力です</span>'}</div>
-            ${c.exEn?`<div class="b-ex"><div class="en">${esc(c.exEn)}</div>${c.exJa?`<div class="ja">${esc(c.exJa)}</div>`:''}</div>`:''}
+            ${c.exEn?`<div class="b-ex"><div class="en">${esc(c.exEn)} ${spkBtn(c.exEn,26)}</div>${c.exJa?`<div class="ja">${esc(c.exJa)}</div>`:''}</div>`:''}
             ${(c.pos&&c.pos.length)?`<div class="b-note">${c.pos.map(p=>`<span class="pos-chip">${esc(p)}</span>`).join('')}</div>`:''}
             ${c.other?`<div class="b-note">${esc(c.other)}</div>`:''}
             <button class="save-mini" onclick="event.stopPropagation();saveCurrentStudyCard()">${I.plus} カードに保存</button>
@@ -2821,6 +2840,7 @@ function exitCompoDone(){ recordTime(); const home=compo&&compo.fromHome; compo=
 function nextCompo(){
   // finalize current item into log before advancing
   if(compo && compo.revealed){
+    if(compo.verdict==null){ toast('「正解」か「不正解」を選んでください'); return; }
     const it=compo.items[compo.idx];
     const fb=compo.fb||{};
     const verdict=compo.verdict||'△';
@@ -2890,7 +2910,8 @@ function renderCompo(){
         <button class="gb ${compo.verdict==='○'?'sel-o':''}" onclick="setCompoVerdict('○')"><span class="verdict o" style="font-size:1.3rem">○</span>正解</button>
         <button class="gb ${compo.verdict==='×'?'sel-x':''}" onclick="setCompoVerdict('×')"><span class="verdict x" style="font-size:1.3rem">×</span>不正解</button>
       </div>
-      <button class="btn btn-primary full" style="padding:14px;margin-top:16px" onclick="nextCompo()">${compo.idx+1>=compo.items.length?'結果を見る':'次へ'}</button>`;
+      ${compo.verdict==null?`<div class="grade-hint" style="color:var(--amber-d);margin-top:8px">「正解」か「不正解」を選んでください</div>`:''}
+      <button class="btn btn-primary full" style="padding:14px;margin-top:12px${compo.verdict==null?';opacity:.45;pointer-events:none':''}" ${compo.verdict==null?'disabled':''} onclick="nextCompo()">${compo.idx+1>=compo.items.length?'結果を見る':'次へ'}</button>`;
   }
   v.innerHTML=`
     <div class="study-top">
@@ -3739,6 +3760,16 @@ const PLAN_INFO={
 };
 const TERM_INFO={'12m':{label:'12ヶ月',sub:'年間プラン（最安）'},'3m':{label:'3ヶ月',sub:''},'1m':{label:'1ヶ月',sub:''}};
 function authGo(v){ authView=v; renderSettings(); }
+const EYE_SVG='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF_SVG='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+function pwField(id, label, ph, ac){
+  return `<div class="field"><label>${label}</label>
+    <div class="pw-wrap">
+      <input type="password" id="${id}" placeholder="${esc(ph)}" autocomplete="${ac}" />
+      <button type="button" class="pw-eye" onclick="togglePw('${id}',this)" aria-label="パスワードを表示">${EYE_SVG}</button>
+    </div></div>`;
+}
+function togglePw(id, btn){ const el=document.getElementById(id); if(!el) return; const show=el.type==='password'; el.type=show?'text':'password'; btn.innerHTML=show?EYE_OFF_SVG:EYE_SVG; btn.setAttribute('aria-label', show?'パスワードを隠す':'パスワードを表示'); }
 function authNextSignup(){
   const em=((document.getElementById('authEmail')||{}).value||'').trim();
   if(!em || !/^.+@.+\..+$/.test(em)){ toast('メールアドレスを正しく入力してください'); return; }
@@ -3852,8 +3883,28 @@ function closeBilling(){ billingStep=null; renderSettings(); }
 function billingPickPlan(p){ billingSel.plan=p; renderSettings(); }
 function billingPickTerm(t){ billingSel.term=t; renderSettings(); }
 function billingToCheckout(){
-  if(STRIPE.enabled && managedAI()){ startStripeCheckout(); return; }
+  if(STRIPE.enabled && managedAI()){
+    if(selfPaid()){ openCustomerPortal(); return; }   // 既加入：変更・解約はポータルで（二重課金防止）
+    startStripeCheckout(); return;                     // 新規加入
+  }
   billingStep='checkout'; renderSettings();
+}
+/* ---- Stripe カスタマーポータル（プラン変更・解約・支払い方法）---- */
+async function openCustomerPortal(){
+  if(!loggedIn()){ toast('ログインが必要です（設定 → アカウント）'); return; }
+  toast('プラン管理ページを準備しています…');
+  let token=''; try{ const { data }=await _sb.auth.getSession(); token=(data&&data.session)?data.session.access_token:''; }catch(_){}
+  if(!token){ toast('ログインが必要です'); return; }
+  try{
+    const res=await fetch(CLOUD.url.replace(/\/$/,'')+'/functions/v1/create-portal',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':CLOUD.anonKey},
+      body:JSON.stringify({})
+    });
+    const data=await res.json().catch(()=>({}));
+    if(res.ok && data && data.url){ location.href=data.url; return; }
+    toast('管理ページを開けませんでした'+(data&&data.error?'（'+data.error+'）':''));
+  }catch(e){ toast('通信に失敗しました。接続を確認してください'); }
 }
 /* ---- Stripe Checkout（本番）: create-checkout 関数へ遷移 ---- */
 async function startStripeCheckout(){
@@ -3877,10 +3928,12 @@ function handleCheckoutReturn(search){
   try{
     const q=new URLSearchParams(typeof search==='string'?search:(location.search||''));
     const c=q.get('checkout');
-    if(!c) return false;
+    const pr=q.get('portal');
+    if(!c && !pr) return false;
     if(c==='success'){ toast('決済が完了しました。プランを反映しています…'); if(STRIPE.enabled){ showCheckoutPending(); pollPlanAfterCheckout(); } }
     else if(c==='cancel'){ toast('決済をキャンセルしました'); }
-    q.delete('checkout');
+    else if(pr==='return'){ if(STRIPE.enabled) refreshPlanAfterPortal(); }
+    q.delete('checkout'); q.delete('portal');
     if(typeof history!=='undefined' && history.replaceState){
       const url=location.pathname+(q.toString()?('?'+q.toString()):'')+location.hash;
       history.replaceState(null,'',url);
@@ -3925,6 +3978,19 @@ async function pollPlanAfterCheckout(){
   };
   tick();
 }
+async function refreshPlanAfterPortal(){
+  if(!STRIPE.enabled){ setCheckoutBanner(''); return; }
+  setCheckoutBanner('<span class="cb-spin"></span><span>プラン情報を更新しています…</span>');
+  let n=0;
+  const tick=async()=>{
+    n++;
+    if(_sb && loggedIn()){ try{ await syncPlanFromServer(); }catch(_){ } }
+    if(typeof renderSettings==='function') renderSettings();
+    if(n>=4){ setCheckoutBanner(''); return; }
+    setTimeout(tick, 2000);
+  };
+  tick();
+}
 /* ---- サーバー（plan_status, Webhookが書き込む）を正としてプランを反映 ---- */
 async function syncPlanFromServer(){
   if(!STRIPE.enabled || !loggedIn() || !_sb) return;
@@ -3934,7 +4000,7 @@ async function syncPlanFromServer(){
     const active = row.plan && row.plan!=='free' && (!row.status || row.status==='active' || row.status==='trialing');
     if(active){
       const keepStart=(state.billing&&state.billing.startedAt)||Date.now();
-      state.billing=Object.assign({}, state.billing||{}, { plan:row.plan, term:row.term||(state.billing&&state.billing.term)||'1m', startedAt:keepStart, since:Date.now() });
+      state.billing=Object.assign({}, state.billing||{}, { plan:row.plan, term:row.term||(state.billing&&state.billing.term)||'1m', status:row.status||'active', periodEnd:row.current_period_end||null, startedAt:keepStart, since:Date.now() });
     } else if(state.billing && state.billing.plan && state.billing.plan!=='free'){
       state.billing={plan:'free', term:null, since:null, startedAt:null, card:null};
     }
@@ -3971,8 +4037,8 @@ function authBoxHtml(){
     return `<button class="auth-back" onclick="authGo('menu')">‹ 戻る</button>
       <div class="auth-h">パスワードの変更</div>
       <div class="d" style="margin:2px 0 12px">新しいパスワードを入力してください。変更後は次回から新しいパスワードでログインします。</div>
-      <div class="field"><label>新しいパスワード</label><input type="password" id="cpwNew" placeholder="6文字以上" autocomplete="new-password" /></div>
-      <div class="field"><label>新しいパスワード（確認）</label><input type="password" id="cpwNew2" placeholder="もう一度入力" autocomplete="new-password" /></div>
+      ${pwField("cpwNew","新しいパスワード","6文字以上","new-password")}
+      ${pwField("cpwNew2","新しいパスワード（確認）","もう一度入力","new-password")}
       <button class="btn btn-primary full" style="padding:14px" onclick="changePw()">パスワードを変更する</button>`;
   }
   if(authView==='changeEmail'){
@@ -3985,8 +4051,8 @@ function authBoxHtml(){
   if(authView==='recovery'){
     return `<div class="auth-h">新しいパスワードを設定</div>
       <div class="auth-step">パスワード再設定</div>
-      <div class="field"><label>新しいパスワード</label><input type="password" id="authNewPw" placeholder="6文字以上" autocomplete="new-password" /></div>
-      <div class="field"><label>新しいパスワード（確認）</label><input type="password" id="authNewPw2" placeholder="もう一度入力" autocomplete="new-password" /></div>
+      ${pwField("authNewPw","新しいパスワード","6文字以上","new-password")}
+      ${pwField("authNewPw2","新しいパスワード（確認）","もう一度入力","new-password")}
       <button class="btn btn-primary full" style="padding:14px" onclick="authSetNewPw()">パスワードを更新する</button>`;
   }
   if(authView==='forgot'){
@@ -4000,7 +4066,7 @@ function authBoxHtml(){
     return `<button class="auth-back" onclick="authGo('menu')">‹ 戻る</button>
       <div class="auth-h">ログイン</div>
       <div class="field"><label>メールアドレス</label><input type="email" id="authEmail" value="${esc(authDraftEmail||'')}" placeholder="you@example.com" autocomplete="username" /></div>
-      <div class="field"><label>パスワード</label><input type="password" id="authPw" placeholder="パスワード" autocomplete="current-password" /></div>
+      ${pwField("authPw","パスワード","パスワード","current-password")}
       <div style="text-align:right;margin:-4px 0 12px"><a style="color:var(--ink-3);font-size:.85rem;cursor:pointer" onclick="authGo('forgot')">パスワードをお忘れですか？</a></div>
       <button class="btn btn-primary full" style="padding:14px" onclick="authSignIn()">ログイン</button>
       <div class="auth-or"><span>または</span></div>
@@ -4022,8 +4088,8 @@ function authBoxHtml(){
       <div class="auth-h">新規登録</div>
       <div class="auth-step">ステップ 2 / 2 ・ パスワード設定</div>
       <div class="field"><label>メールアドレス</label><div class="auth-email-fixed">${esc(authDraftEmail||'')}</div></div>
-      <div class="field"><label>パスワード</label><input type="password" id="authPw" placeholder="6文字以上" autocomplete="new-password" /></div>
-      <div class="field"><label>パスワード（確認）</label><input type="password" id="authPw2" placeholder="もう一度入力" autocomplete="new-password" /></div>
+      ${pwField("authPw","パスワード","6文字以上","new-password")}
+      ${pwField("authPw2","パスワード（確認）","もう一度入力","new-password")}
       <button class="btn btn-primary full" style="padding:14px" onclick="authSignUp()">この内容で登録する</button>
       <div class="d" style="margin-top:10px">登録後、確認メールが届きます。メール内のリンクをタップして認証を完了してください。</div>`;
   }
@@ -4037,9 +4103,10 @@ function authBoxHtml(){
 function planCardHtml(p){
   const info=PLAN_INFO[p]; const sel=billingSel.plan===p; const price=info.price[billingSel.term];
   const total=info.total?info.total[billingSel.term]:price;
+  const isCurrent = STRIPE.enabled && selfPaid() && (state.billing&&state.billing.plan)===p;
   const sub = billingSel.term==='1m' ? '' : `<div class="plan-sub">${TERM_INFO[billingSel.term].label}まとめて ¥${total.toLocaleString()}</div>`;
   return `<div class="plan-card${sel?' sel':''}" onclick="billingPickPlan('${p}')">
-    ${p==='premium'?`<div class="plan-badge">おすすめ</div>`:''}
+    ${isCurrent?`<div class="plan-badge" style="background:var(--green-d)">ご利用中</div>`:(p==='premium'?`<div class="plan-badge">おすすめ</div>`:'')}
     <div class="plan-card-top"><div class="plan-name">${info.name}</div><div class="plan-price-wrap"><div class="plan-price">¥${price.toLocaleString()}<small>/月</small></div>${sub}</div></div>
     <ul class="plan-feats">${info.feats.map(f=>`<li>${I.check} <span>${f}</span></li>`).join('')}</ul>
   </div>`;
@@ -4078,15 +4145,42 @@ function renderBilling(){
   }
   // plans
   const baseSel=PLAN_INFO[billingSel.plan].price[billingSel.term]; const disc=lockableDiscountPct(); const applied=appliedDiscountPct();
+  const b=state.billing||{}; const paid=STRIPE.enabled && selfPaid();
+  const isCur = paid && billingSel.plan===b.plan;
+  const mainBtn = !paid
+    ? `<button class="btn btn-primary full" style="padding:15px;margin-top:4px" onclick="billingToCheckout()">${PLAN_INFO[billingSel.plan].name}にする（¥${priceAt(baseSel, disc).toLocaleString()}/月）</button>`
+    : (isCur
+        ? `<button class="btn btn-ghost full" style="padding:15px;margin-top:4px" disabled>ご利用中のプランです</button>`
+        : `<button class="btn btn-primary full" style="padding:15px;margin-top:4px" onclick="openCustomerPortal()">${PLAN_INFO[billingSel.plan].name}に変更（管理ページ）</button>`);
+  const note = !STRIPE.enabled
+    ? '※これはデモの支払い画面です。実際の請求は発生しません。'
+    : (paid ? 'プランの変更・解約は「管理ページ」から行えます。アップグレードは日割り（差額）で即時反映されます。'
+            : '※現在はテスト環境です。テストカード 4242 4242 4242 4242 で動作確認できます。');
   v.innerHTML=`
     <div class="topbar"><h1>プラン</h1><button class="icon-btn x-btn" onclick="closeBilling()" style="box-shadow:none;background:transparent">✕</button></div>
-    <div class="bill-cur">現在のプラン：<b>${planLabel()}</b>${(state.billing&&state.billing.startedAt)?`<br><span style="font-size:.8rem;color:var(--ink-3)">課金開始日：${new Date(state.billing.startedAt).toLocaleDateString('ja-JP')}${applied>0?` ・ 適用中の割引 <b style="color:var(--green-d)">${applied}%</b>（${TERM_INFO[(state.billing.term)||'1m']?TERM_INFO[state.billing.term].label:''}の間は固定）`:''}</span>`:''}</div>
-    ${disc>0?`<div class="bill-disc-banner">🎉 今なら −${disc}%（継続 ${loyaltyDiscountPct()}% ＋ 紹介 ${referralDiscountPct()}%）・課金時点で確定</div>`:''}
+    ${paid ? currentPlanCardHtml() : `<div class="bill-cur">現在のプラン：<b>${planLabel()}</b></div>`}
+    ${disc>0&&!paid?`<div class="bill-disc-banner">🎉 今なら −${disc}%（継続 ${loyaltyDiscountPct()}% ＋ 紹介 ${referralDiscountPct()}%）・課金時点で確定</div>`:''}
+    <div class="section-title" style="margin-top:6px">${paid?'プランを変更':'プランを選ぶ'}</div>
     <div class="bill-terms">${['12m','3m','1m'].map(t=>`<button class="bill-term${billingSel.term===t?' sel':''}" onclick="billingPickTerm('${t}')">${TERM_INFO[t].label}${TERM_INFO[t].sub?`<small>${TERM_INFO[t].sub}</small>`:''}</button>`).join('')}</div>
     ${['light','premium'].map(planCardHtml).join('')}
-    <button class="btn btn-primary full" style="padding:15px;margin-top:4px" onclick="billingToCheckout()">${PLAN_INFO[billingSel.plan].name}にする（¥${priceAt(baseSel, disc).toLocaleString()}/月）</button>
-    ${cur.plan!=='free'?`<button class="btn btn-ghost full" style="padding:13px;margin-top:10px" onclick="billingDowngrade()">無料プランに戻す</button>`:''}
-    <div class="d" style="text-align:center;margin-top:14px">※これはデモの支払い画面です。実際の請求は発生しません。</div>`;
+    ${mainBtn}
+    ${(!STRIPE.enabled && cur.plan!=='free')?`<button class="btn btn-ghost full" style="padding:13px;margin-top:10px" onclick="billingDowngrade()">無料プランに戻す</button>`:''}
+    <div class="d" style="text-align:center;margin-top:14px">${note}</div>`;
+}
+function currentPlanCardHtml(){
+  const b=state.billing||{}; const info=PLAN_INFO[b.plan]||{};
+  const termLabel=TERM_INFO[b.term]?TERM_INFO[b.term].label:'';
+  const end=b.periodEnd?new Date(b.periodEnd):null;
+  const endStr=(end&&!isNaN(end.getTime()))?end.toLocaleDateString('ja-JP'):'';
+  const cap=aiDailyCap(), rem=aiRemaining();
+  return `<div class="cur-plan-card">
+    <div class="cpc-top">
+      <div><div class="cpc-name">${esc(info.name||b.plan||'')}</div><div class="cpc-sub">${esc(termLabel)}${endStr?` ・ 次回更新 ${endStr}`:''}</div></div>
+      <span class="cpc-badge">ご利用中</span>
+    </div>
+    <div class="cpc-ai">本日のAI 残り <b>${rem}</b> / ${cap} 回${aiCanAdReset()?'':''}</div>
+    <button class="btn btn-ghost full" style="padding:12px;margin-top:12px" onclick="openCustomerPortal()">プラン変更・解約（管理ページ）</button>
+  </div>`;
 }
 function billingToPlans(){ billingStep='plans'; renderSettings(); }
 function renderSettings(){
