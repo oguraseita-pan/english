@@ -945,28 +945,19 @@ const DAY = 86400000;
 /* ---------- sample seed (first run) ---------- */
 function seed(){
   if(state.seeded) return;
-  const f1 = uid(), f2 = uid(), f3 = uid();
-  state.folders[f1] = {id:f1,name:'デイリー英会話',parentId:null,createdAt:now()};
-  state.folders[f2] = {id:f2,name:'ビジネス',parentId:null,createdAt:now()};
-  state.folders[f3] = {id:f3,name:'熟語・フレーズ',parentId:f1,createdAt:now()};
+  const fMemo=uid(), fInbox=uid(), fDiary=uid();
+  state.folders[fMemo] = {id:fMemo,name:'メモ',parentId:null,createdAt:now()};
+  state.folders[fInbox]= {id:fInbox,name:'受信箱',parentId:null,createdAt:now()};
+  state.folders[fDiary]= {id:fDiary,name:'英語日記',parentId:null,createdAt:now()};
   const mk=(folderId,term,pron,mean,exEn,exJa,pos,other)=>{
     const id=uid();
     state.cards[id]={id,folderId,term,pron:pron||'',mean,exEn:exEn||'',exJa:exJa||'',other:other||'',pos:pos||[],
       srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now()};
   };
-  mk(f1,'reluctant','/rɪˈlʌktənt/','気が進まない、しぶしぶの','She was reluctant to leave.','彼女は帰りたがらなかった。',['形容詞'],'反意語：willing（乗り気な）');
-  mk(f1,'come up with','','〜を思いつく','I came up with a new idea.','新しいアイデアを思いついた。',['句動詞'],'類似表現：think of / devise');
-  mk(f3,'on the same page','','認識が一致して','Let\'s make sure we\'re on the same page.','認識を合わせておこう。',['フレーズ'],'類似表現：in agreement / aligned');
-  mk(f2,'leverage','/ˈlevərɪdʒ/','〜を活用する／てこ入れ','We can leverage our network.','人脈を活用できる。',['動詞','名詞'],'名詞では「てこ・影響力」の意味もある');
-  mk(f2,'on track','','順調で、軌道に乗って','The project is on track.','プロジェクトは順調だ。',['フレーズ'],'反対：off track（軌道を外れて）');
-  // 英語日記のサンプル（「英語日記」フォルダ内）
-  const diaryFid=uid(); state.folders[diaryFid]={id:diaryFid,name:'英語日記',parentId:null,createdAt:now()};
-  const diaryId=uid();
-  state.cards[diaryId]={id:diaryId, type:'text', diary:true, diaryDate:todayISO(), title:'My first diary',
-    en:'Today I start to study English everyday. I want speak English more better.',
-    enFixed:'Today I started studying English every day. I want to speak English better.',
-    ja:'今日から毎日英語を勉強し始めました。もっと上手に英語を話したいです。',
-    folderId:diaryFid, createdAt:now()};
+  // 受信箱に学習サンプル（＋で保存される場所）
+  mk(fInbox,'reluctant','/rɪˈlʌktənt/','気が進まない、しぶしぶの','She was reluctant to leave.','彼女は帰りたがらなかった。',['形容詞'],'反意語：willing（乗り気な）');
+  mk(fInbox,'come up with','','〜を思いつく','I came up with a new idea.','新しいアイデアを思いついた。',['句動詞'],'類似表現：think of / devise');
+  mk(fInbox,'leverage','/ˈlevərɪdʒ/','〜を活用する／てこ入れ','We can leverage our network.','人脈を活用できる。',['動詞','名詞'],'名詞では「てこ・影響力」の意味もある');
   state.seeded = true;
   save();
 }
@@ -3155,11 +3146,11 @@ let chatDrafts={};
 try{ chatDrafts=JSON.parse(localStorage.getItem('sprout_drafts')||'{}')||{}; }catch(_){ chatDrafts={}; }
 function setDraft(id,val){ if(!id) return; if(val) chatDrafts[id]=val; else delete chatDrafts[id]; try{ localStorage.setItem('sprout_drafts', JSON.stringify(chatDrafts)); }catch(_){ } }
 const AI_MODES={
-  chat:{label:'チューター',convo:true,ph:'英語について何でも質問できます',phs:'メッセージを入力…',sys:'You are a friendly, encouraging English tutor for a Japanese learner. Reply concisely in Japanese unless asked otherwise. Use simple explanations and give example sentences.'},
-  card:{label:'単語をカード化',convo:false,ph:'単語を送るとカード化できます',phs:'単語・フレーズ…',sys:'CARD'},
-  correct:{label:'英文添削',convo:false,ph:'添削したい英文を入力',phs:'英文を入力…',sys:'You are an English proofreader for a Japanese learner. Correct the English the user writes, show the corrected version, then briefly explain the key fixes in Japanese.'},
-  example:{label:'例文作成',convo:false,ph:'日本語または英語を入力（例：認識を合わせる / proceed）',phs:'日本語/英語を入力…',sys:'EXAMPLE'},
-  translate:{label:'翻訳',convo:false,ph:'日本語↔英語を翻訳します',phs:'文章を入力…',sys:'Translate between Japanese and English naturally. If the input is Japanese, give natural English; if English, give natural Japanese. Add a short note on nuance if helpful.'}
+  chat:{label:'チューター',desc:'英語の質問に何でも答えてくれるAI先生',convo:true,ph:'英語について何でも質問できます',phs:'メッセージを入力…',sys:'You are a friendly, encouraging English tutor for a Japanese learner. Reply concisely in Japanese unless asked otherwise. Use simple explanations and give example sentences.'},
+  card:{label:'Ankiカード化',desc:'英単語をカード化',convo:false,ph:'単語を送るとカード化できます',phs:'単語・フレーズ…',sys:'CARD'},
+  correct:{label:'英文添削',desc:'英文を添削してフィードバック',convo:false,ph:'添削したい英文を入力',phs:'英文を入力…',sys:'You are an English proofreader for a Japanese learner. Correct the English the user writes, show the corrected version, then briefly explain the key fixes in Japanese.'},
+  example:{label:'例文作成',desc:'指示した単語を使って例文を作成',convo:false,ph:'単語・フレーズを入力（例：proceed / 認識を合わせる）',phs:'単語・フレーズを入力…',sys:'EXAMPLE'},
+  translate:{label:'翻訳',desc:'日本語 ⇄ 英語を翻訳',convo:false,ph:'日本語↔英語を翻訳します',phs:'文章を入力…',sys:'Translate between Japanese and English naturally. If the input is Japanese, give natural English; if English, give natural Japanese. Add a short note on nuance if helpful.'}
 };
 const OTHER_SPEC='The "other" field must be a multi-line Japanese study note (use real newlines) built ONLY from the sections below that genuinely apply to this term — omit any section that does not fit, and never invent fake words. Sections and exact headers:\n【派生語】\nthen one line per real derivative as "品詞：word（日本語の意味）", adding " ※あまり使われない" when rare (e.g. "名詞：cherishment（大切にすること）※あまり使われない").\n【類義語】\nthen a single line of comma-separated English synonyms.\n【反意語】\nthen a single line of comma-separated English antonyms.\n💡【ニュアンス】\ninclude ONLY when the word has a noteworthy nuance; give a short Japanese explanation of how it differs from simpler synonyms (like / love etc.).\n💡【よくある表現】\nthen 1-3 common collocations, each as TWO lines: the English collocation, then its Japanese meaning on the next line.\nFor phrases/idioms, skip 【派生語】 and give 類義語/反意語/よくある表現 instead. Separate the section blocks with a blank line.';
 const CARD_SYS='You output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"term":string,"pron":IPA string,"mean":concise Japanese meaning,"exEn":natural English example,"exJa":Japanese translation of the example,"pos":array of ALL applicable Japanese parts of speech for this term (e.g. ["形容詞","名詞"]; if both a noun and adjective exist, include both. For phrases use ["フレーズ"] or ["句動詞"]),"other":string}. '+OTHER_SPEC+' mean, exJa, pos and other MUST be in Japanese. No markdown, no code fences.';
@@ -3188,6 +3179,7 @@ function migrateThreads(){
     }
   });
   // 旧AI英語日記スレッドはホームの「本日の英語日記」に移行したため、添削スレッドへ変換
+  state.threads.forEach(t=>{ if(t.mode==='card' && t.title==='単語をカード化'){ t.title='Ankiカード化'; changed=true; } });
   state.threads.forEach(t=>{ if(t.mode==='diary'){ t.mode='correct'; t.title='英文添削'; changed=true; } });
   // 英文添削スレッドの重複を1つに集約（中身があるものを優先して残す）
   const corrects=state.threads.filter(t=>t.mode==='correct');
@@ -3283,7 +3275,7 @@ function renderNewThread(){
       ? `<div class="mfield"><label>AIへの指示（プロンプト）</label>
           <textarea id="ntPrompt" placeholder="例：あなたはTOEIC講師です。私が送る英作文を採点し、改善案と理由を日本語で示してください。" oninput="ntPrompt=this.value">${esc(ntPrompt)}</textarea>
           <div class="d" style="font-size:.78rem">この指示に沿ってAIが応答します。</div></div>`
-      : `<div class="mfield"><div class="d" style="font-size:.82rem;color:var(--ink-2)">${esc(AI_MODES[ntFunc].ph)}</div></div>`}
+      : `<div class="mfield"><div class="d" style="font-size:.82rem;color:var(--ink-2)">${esc(AI_MODES[ntFunc].desc||AI_MODES[ntFunc].ph)}</div></div>`}
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="createThread()">作成</button>
