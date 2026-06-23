@@ -203,6 +203,9 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .tp-btn:active{transform:scale(.96);}
 
 .bar-chart{display:flex;align-items:flex-end;gap:6px;height:84px;padding:6px 2px 0;}
+.chart-wrap{display:flex;align-items:flex-start;gap:7px;}
+.chart-wrap .bar-chart{flex:1;}
+.y-axis{display:flex;flex-direction:column;justify-content:space-between;padding:6px 0 0;font-size:.58rem;color:var(--ink-3);text-align:right;min-width:34px;box-sizing:border-box;}
 .bar-chart.dense{gap:3px;}
 .bar-chart.dense .bar > span{font-size:.52rem;bottom:-16px;}
 .bar-chart .bar{flex:1;background:var(--green-soft);border-radius:6px 6px 3px 3px;min-height:4px;position:relative;display:flex;justify-content:center;}
@@ -1175,23 +1178,67 @@ async function aiGenWords(n){
   const sys=`Generate ${n} useful English vocabulary items for a Japanese learner. ${goalContext()} Output ONLY JSON: {"words":[{"term":"word","mean":"日本語の意味","exEn":"example sentence","exJa":"例文の和訳"}]}. No markdown, no code fences.`;
   try{ const c=await callAI([{role:'system',content:sys},{role:'user',content:'Generate now as JSON.'}],{json:true,temp:0.85}); const o=JSON.parse(c); return (o.words||[]).filter(w=>w.term).slice(0,n).map(w=>({term:w.term,pron:'',mean:w.mean||'',exEn:w.exEn||'',exJa:w.exJa||'',pos:[],other:'',srs:newSrs()})); }catch(e){ return []; }
 }
+async function aiGenIdioms(n){
+  if(!aiReady()||n<=0) return [];
+  const sys=`Generate ${n} common English idioms or phrasal verbs for a Japanese learner. ${goalContext()} Output ONLY JSON: {"items":[{"term":"phrase","mean":"日本語の意味","exEn":"example sentence using the phrase","exJa":"例文の和訳"}]}. No markdown, no code fences.`;
+  try{ const c=await callAI([{role:'system',content:sys},{role:'user',content:'Generate now as JSON.'}],{json:true,temp:0.85}); const o=JSON.parse(c); return (o.items||[]).filter(x=>x.term).slice(0,n).map(x=>({term:x.term,pron:'',mean:x.mean||'',exEn:x.exEn||'',exJa:x.exJa||'',pos:['熟語'],other:'',srs:newSrs()})); }catch(e){ return []; }
+}
 async function aiGenCompo(n){
   if(!aiReady()||n<=0) return [];
   const sys=`Create ${n} instant-composition (瞬間英作文) items for a Japanese learner. ${goalContext()} Output ONLY JSON {"items":[{"jp":"日本語の文","en":"natural English"}]}. Short, practical, natural to say aloud. No markdown.`;
   try{ const c=await callAI([{role:'system',content:sys},{role:'user',content:'Generate now as JSON.'}],{json:true,temp:0.7}); const o=JSON.parse(c); return (o.items||[]).filter(x=>x.jp&&x.en).slice(0,n); }catch(e){ return []; }
 }
 
-// ===== 本日の単語（10問）：未学習プリセット優先 → 不足分はAI生成 =====
+// 統一プール（熟語：choice/flash両対応）
+function idiomStudyPool(catId,lvlId){
+  const cat=IDIOM_LIB.find(c=>c.id===catId); if(!cat) return [];
+  const lv=cat.levels.find(l=>l.id===lvlId); if(!lv) return [];
+  return lv.items.map(raw=>{ const o=idiomItem(raw,cat.fmt==='choice'?'choice':'fill'); const sig=cat.fmt==='choice'?raw[0]:raw[1];
+    return { term:o.answer, pron:'', mean:o.mean, exEn:(o.q||'').replace('____',o.answer), exJa:'', pos:['熟語'], other:'', srs:getProg(idiomKeySig(catId,lvlId,sig)) }; });
+}
+// 設定レベルに近い順にレベルIDを並べる
+function nearestLevels(levels, cur){ const i=levels.indexOf(cur); if(i<0) return levels.slice(); return levels.slice().sort((a,b)=>Math.abs(levels.indexOf(a)-i)-Math.abs(levels.indexOf(b)-i)); }
+// 単語・熟語を「同時に終わる」比率で need 個取り出す
+function balancedPick(unW, unI, need){
+  const tw=unW.length, ti=unI.length, tot=tw+ti; if(tot===0||need<=0) return [];
+  let wantW = ti===0?need : tw===0?0 : Math.round(need*tw/tot);
+  wantW=Math.min(wantW,tw); let wantI=Math.min(need-wantW,ti);
+  if(wantW+wantI<need){ if(wantW<tw) wantW=Math.min(tw,need-wantI); else wantI=Math.min(ti,need-wantW); }
+  return shuffle(unW.slice()).slice(0,wantW).concat(shuffle(unI.slice()).slice(0,wantI));
+}
+// 単語と熟語を交互気味に並べる
+function interleaveWI(arr){ const w=arr.filter(x=>!(x.pos&&x.pos.indexOf('熟語')>=0)); const i=arr.filter(x=>x.pos&&x.pos.indexOf('熟語')>=0); const out=[]; const ratio=i.length?Math.max(1,Math.round(w.length/i.length)):Infinity; let wi=0,ii=0,c=0; while(wi<w.length||ii<i.length){ if(ii<i.length && (c>=ratio || wi>=w.length)){ out.push(i[ii++]); c=0; } else if(wi<w.length){ out.push(w[wi++]); c++; } } return out; }
+
+// ===== 本日の単語・熟語（10問）：設定の目標・レベル優先 → 近いレベル → 他カテゴリ → AI生成 =====
 async function quickStudy10(){
-  const c=goalCat(), lv=goalLevelObj();
+  const N=10;
+  // 優先順位：ユーザー設定の目標 → 日常会話 → ビジネス → TOEIC → TOEFL → 英検
+  const order=[state.settings.goal,'daily','business','toeic','toefl','eiken'].filter((g,i,a)=>a.indexOf(g)===i);
   let items=[];
-  if(c&&lv){ const pool=presetPool(c.id,lv.id); const unlearned=pool.filter(p=>p.srs.state==='new'); const due=pool.filter(p=>p.srs.state!=='new'&&p.srs.due<=now()); items=[...unlearned,...due].slice(0,10); }
-  if(items.length<10 && aiReady()){ toast('AIが単語を生成中…'); const gen=await aiGenWords(10-items.length); items=items.concat(gen); }
-  if(items.length<10 && c&&lv){ const pool=presetPool(c.id,lv.id); const more=shuffle(pool.filter(p=>items.indexOf(p)<0)); items=items.concat(more.slice(0,10-items.length)); }
-  if(items.length===0){ const p=reviewablePool(); if(!selectItems(p,'srs').length){ toast('学習できる単語がありません。設定で学習目的を選ぶか、単語を追加しましょう'); return; } items=selectItems(p,'srs'); }
-  items=items.slice(0,10);
+  for(const g of order){
+    if(items.length>=N) break;
+    const pcat=PRESET_LIB.find(c=>c.id===g), icat=IDIOM_LIB.find(c=>c.id===g);
+    const baseLevels = pcat?pcat.levels.map(l=>l.id):(icat?icat.levels.map(l=>l.id):[]);
+    const levels = (g===state.settings.goal)? nearestLevels(baseLevels, state.settings.goalLevel) : baseLevels.slice();
+    for(const lvId of levels){
+      if(items.length>=N) break;
+      const unW = pcat ? presetPool(g,lvId).filter(p=>p.srs.state==='new') : [];
+      const unI = icat ? idiomStudyPool(g,lvId).filter(p=>p.srs.state==='new') : [];
+      items=items.concat(balancedPick(unW, unI, N-items.length));
+    }
+  }
+  // すべてのプリセットが学習済み → AI生成（単語7：熟語3）
+  if(items.length<N && aiReady()){
+    const need=N-items.length; const wN=Math.round(need*0.7), iN=need-wN;
+    toast('AIが問題を生成中…');
+    const [gw,gi]=await Promise.all([aiGenWords(wN), aiGenIdioms(iN)]);
+    items=items.concat(gw,gi);
+  }
+  // 最終手段：復習可能カード
+  if(items.length===0){ const p=reviewablePool(); const sel=selectItems(p,'srs'); if(!sel.length){ toast('学習できる単語・熟語がありません。設定で学習目的を選ぶか、単語を追加しましょう'); return; } items=sel; }
+  items=interleaveWI(items).slice(0,N);
   setTab('study'); startTimer();
-  session={ items, qi:0, total:items.length, flipped:false, results:[], openIdx:null, catName:'本日の単語', style:'srs', fromHome:true, daily:'words' };
+  session={ items, qi:0, total:items.length, flipped:false, results:[], openIdx:null, catName:'本日の単語・熟語', style:'srs', fromHome:true, daily:'words' };
   renderStudySession();
 }
 
@@ -1243,8 +1290,8 @@ function renderHome(){
   const total = all.length;
   const hour = new Date().getHours();
   const greet = hour<5?'こんばんは':hour<11?'おはよう':hour<18?'こんにちは':'こんばんは';
-  const wDone=isDailyDone('words'), cDone=isDailyDone('compo');
-  const wN=dailyCount('words'), wG=dailyGoal('words');
+  const mixN=dailyCount('words')+dailyCount('idioms'), mixG=dailyGoal('words'); const wDone=mixN>=mixG;
+  const cDone=isDailyDone('compo');
   const cN=dailyCount('compo'), cG=dailyGoal('compo');
   const dueN=dueReviewCount();
   const rDone=reviewDone(), rCap=reviewCapN(), rToday=reviewsToday();
@@ -1274,7 +1321,7 @@ function renderHome(){
 
     <div class="section-title">本日の学習</div>
     <div class="today-card">
-      ${todayRow(I.cards||I.book||I.check,'本日の単語',`${goalLabel()}・${goalLevelLabel()}`,wDone,'quickStudy10()', badge(wDone,wN,wG))}
+      ${todayRow(I.cards||I.book||I.check,'本日の単語・熟語',`${goalLabel()}・${goalLevelLabel()}`,wDone,'quickStudy10()', badge(wDone,mixN,mixG))}
       ${todayRow(I.pencil||I.edit||I.plus,'瞬間英作文',`${goalLabel()}・1日${cG}問`,cDone,'quickCompo3()', badge(cDone,cN,cG))}
       ${todayRow(I.flame||I.refresh,'本日の復習',`単語・熟語を忘却曲線で復習${dueN>0?`（${dueN}問待ち）`:''}`,rDone,'quickReview()', rDone?`<span class="td-done">${I.check}完了</span>`:(rCap>0?`<span class="td-go">${rToday}/${rCap} ›</span>`:`<span class="td-go">${dueN}問 ›</span>`))}
     </div>
@@ -1288,21 +1335,24 @@ function renderHome(){
     <div style="font-size:.74rem;color:var(--ink-3);margin:7px 4px 0">＋でメモに保存（受信箱）。訳ボタンで英⇄日をすばやく翻訳します。</div>
     <div id="qaTrans">${transPanelHtml()}</div>
 
-    ${(()=>{ const sd=studyDaysThisMonth(); const pct=Math.min(100,Math.round(sd/STREAK_GOAL_DAYS*100)); const monthOk=sd>=STREAK_GOAL_DAYS;
-      const lm=loyaltyMonths(); const lpct=loyaltyDiscountPct(); const nx=loyaltyNext(); const done=lpct>=25; return `
+    ${(()=>{ const st=billingStart(); const sd=st?studyDaysThisCycle():studyDaysThisMonth(); const pct=Math.min(100,Math.round(sd/STREAK_GOAL_DAYS*100)); const cycleOk=sd>=STREAK_GOAL_DAYS;
+      const lm=loyaltyMonths(); const lpct=loyaltyDiscountPct(); const nx=loyaltyNext(); const done=lpct>=25;
+      const startLabel = st? new Date(st).toLocaleDateString('ja-JP') : null;
+      const unit = st?'今期':'今月'; return `
     <div class="streak-card ${done?'done':''}" onclick="streakOpen=!streakOpen;renderHome()" style="cursor:pointer">
       <div class="streak-top">
         <div class="streak-flame ${state.stats.streak>0?'lit':''}">🔥</div>
         <div style="flex:1">
           <div class="streak-n">${state.stats.streak}<small>日連続</small></div>
-          <div class="streak-sub">今月 ${sd} 日学習${monthOk?' ✅':''}</div>
+          <div class="streak-sub">${unit} ${sd} 日学習${cycleOk?' ✅':''}</div>
         </div>
         <span class="chev ${streakOpen?'open':''}" style="align-self:center">${I.chev}</span>
       </div>
       <div class="streak-bar"><div class="streak-fill" style="width:${pct}%"></div></div>
       ${streakOpen?`<div class="streak-detail">
-        <div class="streak-note" style="margin-bottom:6px">継続割引 <b style="color:var(--green-d)">${lpct}%</b>（連続 ${lm}ヶ月達成）</div>
-        <div class="streak-note">${monthOk?`今月は達成（${sd}/${STREAK_GOAL_DAYS}日）`:`今月の学習 ${sd}/${STREAK_GOAL_DAYS}日 — 月20日で「達成」`}${nx?` ・ あと${Math.max(0,nx.months-lm)}ヶ月継続で<b>${nx.pct}%</b>`:` ・ 最高ランク達成！🎉`}</div>
+        <div class="streak-note" style="margin-bottom:6px">継続割引 <b style="color:var(--green-d)">${lpct}%</b>（連続 ${lm}回（30日）達成）</div>
+        <div class="streak-note">${cycleOk?`${unit}は達成（${sd}/${STREAK_GOAL_DAYS}日）`:`${unit}の学習 ${sd}/${STREAK_GOAL_DAYS}日 — 30日で20日以上学習すると達成`}${nx?` ・ あと${Math.max(0,nx.months-lm)}回継続で<b>${nx.pct}%</b>`:` ・ 最高ランク達成！🎉`}</div>
+        ${startLabel?`<div class="streak-note" style="margin-top:6px;color:var(--ink-3)">課金開始日：${startLabel}（ここから30日ごとに判定）</div>`:`<div class="streak-note" style="margin-top:6px;color:var(--ink-3)">継続割引は課金開始日から30日ごとに集計します</div>`}
       </div>`:''}
     </div>`; })()}
 
@@ -1314,9 +1364,10 @@ function renderHome(){
 
     <div class="section-title">学習時間（今週）</div>
     <div class="card" onclick="openStudyTimeHistory()" style="cursor:pointer">
+      <div class="chart-wrap">${timeAxis(maxM,84)}
       <div class="bar-chart">
         ${mins.map((m,i)=>`<div class="bar"><div class="fill" style="height:${Math.round(m/maxM*72)}px"></div><span>${wkMon[i]}</span></div>`).join('')}
-      </div>
+      </div></div>
       <div style="text-align:center;color:var(--ink-2);font-size:.8rem;margin-top:24px">合計 ${totMin} 分（${Math.floor(totMin/60)}時間${totMin%60}分） ・ タップで履歴 ›</div>
     </div>`;
 }
@@ -3495,10 +3546,15 @@ function planLabel(){ const b=state.billing||{}; const p=PLAN_INFO[b.plan]||PLAN
 function selfPaid(){ return !!(state.billing && state.billing.plan && state.billing.plan!=='free'); }
 // 紹介割引：自分が紹介し、かつ有料プランの人数 × 5%（上限25%）
 function referralDiscountPct(){ const r=state.referral||{}; return Math.min(25,(r.referredPaidCount||0)*5); }
-// 継続割引：連続達成「月数」による（達成月の翌月から有効＝当月は前月までで数える）
-function studyDaysInMonth(ym){ return Object.keys(state.stats.reviews||{}).filter(d=>d.slice(0,7)===ym && (state.stats.reviews[d]||0)>0).length; }
-function monthQualifies(ym){ return studyDaysInMonth(ym)>=STREAK_GOAL_DAYS; } // 月20日以上（週5日ペース）
-function loyaltyMonths(){ let c=0; const d=new Date(); d.setDate(1); for(let i=0;i<24;i++){ d.setMonth(d.getMonth()-1); if(monthQualifies(d.toISOString().slice(0,7))) c++; else break; } return c; }
+// 継続割引：課金開始日から「30日サイクル」単位で判定（達成サイクルの翌サイクルから有効＝完了済みサイクルで数える）
+const CYCLE_MS=30*24*3600*1000;
+function billingStart(){ const b=state.billing; return (b&&b.startedAt)?b.startedAt:null; }
+function studyDaysInRange(s,e){ let n=0; for(const d in (state.stats.reviews||{})){ if((state.stats.reviews[d]||0)>0){ const t=new Date(d+'T00:00:00').getTime(); if(t>=s && t<e) n++; } } return n; }
+function studyDaysThisCycle(){ const st=billingStart(); if(!st) return 0; const k=Math.floor((Date.now()-st)/CYCLE_MS); return studyDaysInRange(st+k*CYCLE_MS, st+(k+1)*CYCLE_MS); }
+function loyaltyMonths(){ // ＝連続達成サイクル数
+  const st=billingStart(); if(!st) return 0; const completed=Math.floor((Date.now()-st)/CYCLE_MS); let c=0;
+  for(let k=completed;k>=1;k--){ if(studyDaysInRange(st+(k-1)*CYCLE_MS, st+k*CYCLE_MS)>=STREAK_GOAL_DAYS) c++; else break; } return c;
+}
 const LOYALTY_TIERS=[[1,5],[2,10],[3,15],[6,20],[12,25]];
 function loyaltyDiscountPct(){ const m=loyaltyMonths(); let p=0; for(const tr of LOYALTY_TIERS){ if(m>=tr[0]) p=tr[1]; } return p; }
 function loyaltyNext(){ const m=loyaltyMonths(); for(const tr of LOYALTY_TIERS){ if(m<tr[0]) return {months:tr[0], pct:tr[1]}; } return null; }
@@ -3589,13 +3645,14 @@ function billingPickPlan(p){ billingSel.plan=p; renderSettings(); }
 function billingPickTerm(t){ billingSel.term=t; renderSettings(); }
 function billingToCheckout(){ billingStep='checkout'; renderSettings(); }
 function billingConfirm(){
-  state.billing={plan:billingSel.plan, term:billingSel.term, since:Date.now(), card:'•••• 4242'};
+  const keepStart = (selfPaid() && state.billing && state.billing.startedAt) ? state.billing.startedAt : Date.now();
+  state.billing={plan:billingSel.plan, term:billingSel.term, since:Date.now(), startedAt:keepStart, card:'•••• 4242'};
   save(); upsertPlanStatus(); billingStep=null; renderSettings();
   toast('プランを変更しました（デモ）');
 }
 function billingDowngrade(){
   if(!confirm('無料プランに変更しますか？（デモ）')) return;
-  state.billing={plan:'free', term:null, since:null, card:null};
+  state.billing={plan:'free', term:null, since:null, startedAt:null, card:null};
   save(); upsertPlanStatus(); billingStep=null; renderSettings(); toast('無料プランに変更しました（デモ）');
 }
 function googleBtn(label){
@@ -3720,7 +3777,7 @@ function renderBilling(){
   const baseSel=PLAN_INFO[billingSel.plan].price[billingSel.term]; const disc=effectiveDiscountPct();
   v.innerHTML=`
     <div class="topbar"><h1>プラン</h1><button class="icon-btn x-btn" onclick="closeBilling()" style="box-shadow:none;background:transparent">✕</button></div>
-    <div class="bill-cur">現在のプラン：<b>${planLabel()}</b></div>
+    <div class="bill-cur">現在のプラン：<b>${planLabel()}</b>${(state.billing&&state.billing.startedAt)?`<br><span style="font-size:.8rem;color:var(--ink-3)">課金開始日：${new Date(state.billing.startedAt).toLocaleDateString('ja-JP')}（継続割引はここから30日ごとに判定）</span>`:''}</div>
     ${disc>0?`<div class="bill-disc-banner">🎉 割引 −${disc}% 適用中（継続 ${loyaltyDiscountPct()}% ＋ 紹介 ${referralDiscountPct()}%）</div>`:((loyaltyDiscountPct()+referralDiscountPct())>0?`<div class="bill-disc-banner muted">継続 ${loyaltyDiscountPct()}% ＋ 紹介 ${referralDiscountPct()}%（有料プランに加入すると有効）</div>`:'')}
     <div class="bill-terms">${['12m','3m','1m'].map(t=>`<button class="bill-term${billingSel.term===t?' sel':''}" onclick="billingPickTerm('${t}')">${TERM_INFO[t].label}${TERM_INFO[t].sub?`<small>${TERM_INFO[t].sub}</small>`:''}</button>`).join('')}</div>
     ${['light','premium'].map(planCardHtml).join('')}
@@ -3842,7 +3899,7 @@ function renderSettings(){
 
     <div class="section-title">1日の目標</div>
     <div class="set-group">
-      <div class="set-row"><div><div class="l">単語</div><div class="d">この数を学習すると「本日の単語」が完了</div></div>
+      <div class="set-row"><div><div class="l">単語・熟語</div><div class="d">この数を学習すると「本日の単語・熟語」が完了</div></div>
         <select id="setGoalWords" onchange="state.settings.goalWords=parseInt(this.value);save()">
           ${[5,10,15,20,30,40,50].map(n=>`<option value="${n}" ${s.goalWords===n?'selected':''}>${n}問</option>`).join('')}
         </select></div>
@@ -4064,6 +4121,8 @@ function studyTimeBuckets(period){
   return out;
 }
 function fmtMin(sec){ const m=Math.round(sec/60); return `${Math.floor(m/60)}時間${m%60}分`; }
+function fmtAxis(m){ if(m<=0) return '0'; return m>=60 ? `${(m/60).toFixed(m%60===0?0:1)}時間` : `${m}分`; }
+function timeAxis(maxMin,h){ h=h||84; const mid=Math.round(maxMin/2); return `<div class="y-axis" style="height:${h}px"><span>${fmtAxis(maxMin)}</span><span>${maxMin>1?fmtAxis(mid):''}</span><span>0</span></div>`; }
 function studyTimeHistoryHtml(){
   const periods=[['1w','1週間'],['1m','1か月'],['3m','3か月'],['6m','6か月'],['1y','1年'],['all','すべて']];
   const buckets=studyTimeBuckets(timeHistPeriod);
@@ -4073,9 +4132,10 @@ function studyTimeHistoryHtml(){
   <div class="th-head">学習時間の履歴</div>
   <div class="th-tabs">${periods.map(p=>`<button class="th-tab${timeHistPeriod===p[0]?' on':''}" onclick="setTimeHistPeriod('${p[0]}')">${p[1]}</button>`).join('')}</div>
   <div class="card" style="margin-top:12px">
+    <div class="chart-wrap">${timeAxis(Math.round(maxS/60),96)}
     <div class="bar-chart ${buckets.length>9?'dense':''}" style="height:96px">
       ${buckets.map(b=>`<div class="bar"><div class="fill" style="height:${Math.round(b.sec/maxS*82)}px"></div><span>${b.label}</span></div>`).join('')}
-    </div>
+    </div></div>
     <div style="text-align:center;color:var(--ink-1);font-weight:700;font-size:.95rem;margin-top:26px">合計 ${fmtMin(totSec)}</div>
     <div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:2px">期間の総学習時間</div>
   </div>`;
