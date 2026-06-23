@@ -148,6 +148,8 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .save-mini svg{width:15px;height:15px;}
 .save-mini:active{background:var(--green-soft);}
 .streak-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);}
+.streak-barlabel{font-size:.74rem;color:var(--ink-2);margin:12px 2px 5px;}
+.streak-barlabel b{color:var(--green-d);}
 .th-head{font-weight:800;font-size:1.05rem;margin:2px 0 12px;}
 .th-tabs{display:flex;flex-wrap:wrap;gap:6px;}
 .th-tab{flex:1;min-width:54px;padding:8px 4px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink-2);font-size:.8rem;font-weight:600;}
@@ -699,6 +701,7 @@ function normalizeState(){
   if(!state.stats.dailyCount || typeof state.stats.dailyCount!=='object') state.stats.dailyCount={date:null,words:0,idioms:0,compo:0,reviews:0};
   if(typeof state.stats.dailyCount.reviews!=='number') state.stats.dailyCount.reviews=0;
   if(typeof state.settings.reviewCap!=='number') state.settings.reviewCap=(typeof state.settings.reviewPerSession==='number'?Math.max(20,state.settings.reviewPerSession):30);
+  if(!state.settings.goalLevelAnchor) state.settings.goalLevelAnchor=state.settings.goalLevel;
   if(!state.progress || typeof state.progress!=='object') state.progress = {}; // preset/idiom 学習進捗（永続SRS）
   if(!state.history || typeof state.history!=='object') state.history = {compo:[],speech:[]};
   if(!state.billing || typeof state.billing!=='object') state.billing = {plan:'free', term:null, since:null, card:null};
@@ -1096,7 +1099,7 @@ const GOAL_LEVELS={
   toefl:[['f1','iBT 40〜'],['f2','iBT 60〜'],['f3','iBT 80〜'],['f4','iBT 100〜']],
 };
 function goalLabel(){ return (GOALS.find(x=>x[0]===state.settings.goal)||GOALS[0])[1]; }
-function goalLevelLabel(){ const lv=(GOAL_LEVELS[state.settings.goal]||[]).find(x=>x[0]===state.settings.goalLevel); return lv?lv[1]:''; }
+function goalLevelLabel(){ const L=String(state.settings.goalLevel).toLowerCase(); const lv=(GOAL_LEVELS[state.settings.goal]||[]).find(x=>String(x[0]).toLowerCase()===L); return lv?lv[1]:''; }
 function goalContext(){
   const map={daily:'everyday English conversation',business:'business / workplace English',toeic:'TOEIC-style English',eiken:'Eiken (英検) exam English',toefl:'TOEFL iBT academic English'};
   return `The learner's goal is ${map[state.settings.goal]||'general English'} at about the ${goalLevelLabel()||'intermediate'} level. Tailor the topic, vocabulary and difficulty accordingly.`;
@@ -1114,6 +1117,7 @@ function setGoal(g){
   state.settings.goal=g;
   const lv=GOAL_LEVELS[g]||[];
   if(!lv.find(x=>x[0]===state.settings.goalLevel)) state.settings.goalLevel=lv[1]?lv[1][0]:(lv[0]&&lv[0][0]);
+  state.settings.goalLevelAnchor=state.settings.goalLevel;
   save(); renderSettings();
 }
 function goalCat(){ return PRESET_LIB.find(c=>c.id===state.settings.goal); }
@@ -1196,8 +1200,31 @@ function idiomStudyPool(catId,lvlId){
   return lv.items.map(raw=>{ const o=idiomItem(raw,cat.fmt==='choice'?'choice':'fill'); const sig=cat.fmt==='choice'?raw[0]:raw[1];
     return { term:o.answer, pron:'', mean:o.mean, exEn:(o.q||'').replace('____',o.answer), exJa:'', pos:['熟語'], other:'', srs:getProg(idiomKeySig(catId,lvlId,sig)) }; });
 }
-// 設定レベルに近い順にレベルIDを並べる
-function nearestLevels(levels, cur){ const i=levels.indexOf(cur); if(i<0) return levels.slice(); return levels.slice().sort((a,b)=>Math.abs(levels.indexOf(a)-i)-Math.abs(levels.indexOf(b)-i)); }
+// レベルID（大小文字無視）でのインデックス・近い順
+function lvIdx(levels, lv){ const L=String(lv).toLowerCase(); return levels.findIndex(x=>String(x).toLowerCase()===L); }
+function nearestLevels(levels, cur){ const i=lvIdx(levels,cur); if(i<0) return levels.slice(); return levels.slice().sort((a,b)=>Math.abs(lvIdx(levels,a)-i)-Math.abs(lvIdx(levels,b)-i)); }
+function levelIdsFor(goalId){ const c=PRESET_LIB.find(x=>x.id===goalId)||IDIOM_LIB.find(x=>x.id===goalId); return c?c.levels.map(l=>l.id):[]; }
+function goalAnchor(){ return state.settings.goalLevelAnchor || state.settings.goalLevel; }
+function toSettingLevel(goalId, presetLvId){ const arr=GOAL_LEVELS[goalId]||[]; const m=arr.find(x=>String(x[0]).toLowerCase()===String(presetLvId).toLowerCase()); return m?m[0]:presetLvId; }
+// 自分の目標で許可するレベル：設定（アンカー）から下は1段まで（合わなすぎを防ぐ）。上は無制限。近い順。
+function allowedGoalLevels(){
+  const goal=state.settings.goal; const levels=levelIdsFor(goal); const anchor=goalAnchor();
+  const ai=lvIdx(levels, anchor); if(ai<0) return nearestLevels(levels, anchor);
+  const floor=Math.max(0, ai-1);
+  return nearestLevels(levels.filter((_,i)=>i>=floor), anchor);
+}
+function hasUnlearned(goalId, lvId){
+  const pcat=PRESET_LIB.find(c=>c.id===goalId), icat=IDIOM_LIB.find(c=>c.id===goalId);
+  return (pcat && presetPool(goalId,lvId).some(p=>p.srs.state==='new')) || (icat && idiomStudyPool(goalId,lvId).some(p=>p.srs.state==='new'));
+}
+// 設定レベルの教材が終わったら、許可範囲で近いレベルへ「実際に変更」（表示も更新）
+function syncGoalLevel(){
+  if(!state.settings.goalLevelAnchor) state.settings.goalLevelAnchor=state.settings.goalLevel;
+  const goal=state.settings.goal; let target=null;
+  for(const lv of allowedGoalLevels()){ if(hasUnlearned(goal,lv)){ target=lv; break; } }
+  if(target){ const setLv=toSettingLevel(goal,target); if(setLv!==state.settings.goalLevel){ state.settings.goalLevel=setLv; save(); } }
+  return state.settings.goalLevel;
+}
 // 単語・熟語を「同時に終わる」比率で need 個取り出す
 function balancedPick(unW, unI, need){
   const tw=unW.length, ti=unI.length, tot=tw+ti; if(tot===0||need<=0) return [];
@@ -1211,15 +1238,14 @@ function interleaveWI(arr){ const w=arr.filter(x=>!(x.pos&&x.pos.indexOf('熟語
 
 // ===== 本日の単語・熟語（10問）：設定の目標・レベル優先 → 近いレベル → 他カテゴリ → AI生成 =====
 async function quickStudy10(){
-  const N=10;
+  const N=10; syncGoalLevel();
   // 優先順位：ユーザー設定の目標 → 日常会話 → ビジネス → TOEIC → TOEFL → 英検
   const order=[state.settings.goal,'daily','business','toeic','toefl','eiken'].filter((g,i,a)=>a.indexOf(g)===i);
   let items=[];
   for(const g of order){
     if(items.length>=N) break;
     const pcat=PRESET_LIB.find(c=>c.id===g), icat=IDIOM_LIB.find(c=>c.id===g);
-    const baseLevels = pcat?pcat.levels.map(l=>l.id):(icat?icat.levels.map(l=>l.id):[]);
-    const levels = (g===state.settings.goal)? nearestLevels(baseLevels, state.settings.goalLevel) : baseLevels.slice();
+    const levels = (g===state.settings.goal)? allowedGoalLevels() : levelIdsFor(g);
     for(const lvId of levels){
       if(items.length>=N) break;
       const unW = pcat ? presetPool(g,lvId).filter(p=>p.srs.state==='new') : [];
@@ -1245,6 +1271,7 @@ async function quickStudy10(){
 // ===== 瞬間英作文（3問）：試験系の目的なら日常会話/ビジネスをランダムに =====
 const EXAM_TO_CEFR={ t1:'a2',t2:'b1',t3:'b2',t4:'c1', e1:'a2',e2:'b1',e3:'b2',e4:'c1', f1:'b1',f2:'b2',f3:'c1',f4:'c1' };
 function compoSrcCat(){ return state.settings.goal==='business'?'business':'daily'; }
+function compoSrcLabel(){ return compoSrcCat()==='business'?'ビジネス':'日常会話'; }
 function compoSrcLevel(catId){
   const g=state.settings.goal, lv=state.settings.goalLevel;
   if(g==='daily'||g==='business'){ return String(lv||'b1').toLowerCase(); } // 既にCEFR
@@ -1285,6 +1312,7 @@ function quickReview(){
 }
 function reviewNone(){ toast('いま復習が必要な単語はありません'); }
 function renderHome(){
+  syncGoalLevel();
   const all = Object.values(state.cards).filter(c=>c.type!=='text' && c.srs);
   const learned = all.filter(c=>c.srs.state==='review').length;
   const total = all.length;
@@ -1322,8 +1350,8 @@ function renderHome(){
     <div class="section-title">本日の学習</div>
     <div class="today-card">
       ${todayRow(I.cards||I.book||I.check,'本日の単語・熟語',`${goalLabel()}・${goalLevelLabel()}`,wDone,'quickStudy10()', badge(wDone,mixN,mixG))}
-      ${todayRow(I.pencil||I.edit||I.plus,'瞬間英作文',`${goalLabel()}・1日${cG}問`,cDone,'quickCompo3()', badge(cDone,cN,cG))}
-      ${todayRow(I.flame||I.refresh,'本日の復習',`単語・熟語を忘却曲線で復習${dueN>0?`（${dueN}問待ち）`:''}`,rDone,'quickReview()', rDone?`<span class="td-done">${I.check}完了</span>`:(rCap>0?`<span class="td-go">${rToday}/${rCap} ›</span>`:`<span class="td-go">${dueN}問 ›</span>`))}
+      ${todayRow(I.pencil||I.edit||I.plus,'瞬間英作文',`${compoSrcLabel()}`,cDone,'quickCompo3()', badge(cDone,cN,cG))}
+      ${todayRow(I.flame||I.refresh,'本日の復習','単語・熟語を忘却曲線で復習',rDone,'quickReview()', rDone?`<span class="td-done">${I.check}完了</span>`:`<span class="td-go">${(rCap>0?Math.min(dueN,rCap):dueN)}問 ›</span>`)}
     </div>
 
     <div class="section-title">サッとメモ・翻訳</div>
@@ -1338,20 +1366,22 @@ function renderHome(){
     ${(()=>{ const st=billingStart(); const sd=st?studyDaysThisCycle():studyDaysThisMonth(); const pct=Math.min(100,Math.round(sd/STREAK_GOAL_DAYS*100)); const cycleOk=sd>=STREAK_GOAL_DAYS;
       const lm=loyaltyMonths(); const lpct=loyaltyDiscountPct(); const nx=loyaltyNext(); const done=lpct>=25;
       const startLabel = st? new Date(st).toLocaleDateString('ja-JP') : null;
+      const studiedToday=(state.stats.reviews[todayStr()]||0)>0;
       const unit = st?'今期':'今月'; return `
     <div class="streak-card ${done?'done':''}" onclick="streakOpen=!streakOpen;renderHome()" style="cursor:pointer">
       <div class="streak-top">
         <div class="streak-flame ${state.stats.streak>0?'lit':''}">🔥</div>
         <div style="flex:1">
           <div class="streak-n">${state.stats.streak}<small>日連続</small></div>
-          <div class="streak-sub">${unit} ${sd} 日学習${cycleOk?' ✅':''}</div>
+          <div class="streak-sub">${studiedToday?`<span style="color:var(--green-d);font-weight:700">${I.check} 本日学習済み</span>`:'本日はまだ学習していません'}</div>
         </div>
         <span class="chev ${streakOpen?'open':''}" style="align-self:center">${I.chev}</span>
       </div>
+      <div class="streak-barlabel">継続割引の達成度 <b>${sd}/${STREAK_GOAL_DAYS}日</b>${cycleOk?' ✅':''}</div>
       <div class="streak-bar"><div class="streak-fill" style="width:${pct}%"></div></div>
       ${streakOpen?`<div class="streak-detail">
         <div class="streak-note" style="margin-bottom:6px">継続割引 <b style="color:var(--green-d)">${lpct}%</b>（連続 ${lm}回（30日）達成）</div>
-        <div class="streak-note">${cycleOk?`${unit}は達成（${sd}/${STREAK_GOAL_DAYS}日）`:`${unit}の学習 ${sd}/${STREAK_GOAL_DAYS}日 — 30日で20日以上学習すると達成`}${nx?` ・ あと${Math.max(0,nx.months-lm)}回継続で<b>${nx.pct}%</b>`:` ・ 最高ランク達成！🎉`}</div>
+        <div class="streak-note">${cycleOk?`${unit}は達成（${sd}/${STREAK_GOAL_DAYS}日）`:`${unit}の学習 ${sd}/${STREAK_GOAL_DAYS}日 — 30日で20日以上学習すると1回達成`}${nx?` ・ あと${Math.max(0,nx.months-lm)}回継続で<b>${nx.pct}%</b>`:` ・ 最高ランク達成！🎉`}</div>
         ${startLabel?`<div class="streak-note" style="margin-top:6px;color:var(--ink-3)">課金開始日：${startLabel}（ここから30日ごとに判定）</div>`:`<div class="streak-note" style="margin-top:6px;color:var(--ink-3)">継続割引は課金開始日から30日ごとに集計します</div>`}
       </div>`:''}
     </div>`; })()}
@@ -1368,7 +1398,7 @@ function renderHome(){
       <div class="bar-chart">
         ${mins.map((m,i)=>`<div class="bar"><div class="fill" style="height:${Math.round(m/maxM*72)}px"></div><span>${wkMon[i]}</span></div>`).join('')}
       </div></div>
-      <div style="text-align:center;color:var(--ink-2);font-size:.8rem;margin-top:24px">合計 ${totMin} 分（${Math.floor(totMin/60)}時間${totMin%60}分） ・ タップで履歴 ›</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:24px;font-size:.8rem;color:var(--ink-2)"><span>合計 ${totMin} 分（${Math.floor(totMin/60)}時間${totMin%60}分）</span><span style="color:var(--green-d);font-weight:700">履歴 ›</span></div>
     </div>`;
 }
 
@@ -3892,7 +3922,7 @@ function renderSettings(){
           ${GOALS.map(g=>`<option value="${g[0]}" ${s.goal===g[0]?'selected':''}>${g[1]}</option>`).join('')}
         </select></div>
       <div class="set-row"><div><div class="l">レベル</div></div>
-        <select id="setGoalLevel" onchange="state.settings.goalLevel=this.value;save()">
+        <select id="setGoalLevel" onchange="state.settings.goalLevel=this.value;state.settings.goalLevelAnchor=this.value;save()">
           ${(GOAL_LEVELS[s.goal]||[]).map(l=>`<option value="${l[0]}" ${s.goalLevel===l[0]?'selected':''}>${l[1]}</option>`).join('')}
         </select></div>
     </div>
@@ -4128,16 +4158,20 @@ function studyTimeHistoryHtml(){
   const buckets=studyTimeBuckets(timeHistPeriod);
   const maxS=Math.max(1,...buckets.map(b=>b.sec));
   const totSec=buckets.reduce((a,b)=>a+b.sec,0);
+  const H=170;
   return `
-  <div class="th-head">学習時間の履歴</div>
+  <div style="min-height:78vh;padding-top:4px">
+  <div class="th-head" style="font-size:1.25rem">学習時間の履歴</div>
   <div class="th-tabs">${periods.map(p=>`<button class="th-tab${timeHistPeriod===p[0]?' on':''}" onclick="setTimeHistPeriod('${p[0]}')">${p[1]}</button>`).join('')}</div>
-  <div class="card" style="margin-top:12px">
-    <div class="chart-wrap">${timeAxis(Math.round(maxS/60),96)}
-    <div class="bar-chart ${buckets.length>9?'dense':''}" style="height:96px">
-      ${buckets.map(b=>`<div class="bar"><div class="fill" style="height:${Math.round(b.sec/maxS*82)}px"></div><span>${b.label}</span></div>`).join('')}
+  <div class="card" style="margin-top:14px;padding-top:18px">
+    <div class="chart-wrap">${timeAxis(Math.round(maxS/60),H)}
+    <div class="bar-chart ${buckets.length>9?'dense':''}" style="height:${H}px">
+      ${buckets.map(b=>`<div class="bar"><div class="fill" style="height:${Math.round(b.sec/maxS*(H-14))}px"></div><span>${b.label}</span></div>`).join('')}
     </div></div>
-    <div style="text-align:center;color:var(--ink-1);font-weight:700;font-size:.95rem;margin-top:26px">合計 ${fmtMin(totSec)}</div>
-    <div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:2px">期間の総学習時間</div>
+    <div style="text-align:center;color:var(--ink-1);font-weight:800;font-size:1.15rem;margin-top:30px">合計 ${fmtMin(totSec)}</div>
+    <div style="text-align:center;color:var(--ink-3);font-size:.78rem;margin-top:3px">期間の総学習時間</div>
+  </div>
+  <div style="color:var(--ink-3);font-size:.72rem;text-align:center;margin-top:14px">1週間＝日別 ・ 1〜3か月＝週別 ・ 6か月以上＝月別で集計</div>
   </div>`;
 }
 function openStudyTimeHistory(){ openModal(studyTimeHistoryHtml()); }
