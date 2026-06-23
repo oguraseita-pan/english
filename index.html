@@ -3207,7 +3207,7 @@ function aiProviderName(){ return aiProvider()==='gemini' ? 'Gemini' : 'OpenAI';
 
 function renderAI(){
   const v=document.getElementById('view-ai');
-  if(!aiEnabled()){
+  if(!aiEnabled() && !managedAI()){
     v.innerHTML=`
       <div class="topbar"><h1>AI</h1></div>
       <div class="empty" style="padding:46px 22px">${spkInk()}
@@ -3244,7 +3244,7 @@ function threadRow(t){
     return `<div class="folder-row reorderable" data-rid="${t.id}">
       <div class="meta" style="cursor:pointer" onclick="renameThread('${t.id}')">
         <div class="nm">${esc(t.title)}</div>
-        <div class="ct">${esc(threadBadge(t))}・タップで名前/指示を編集</div>
+        <div class="ct">${esc(threadDesc(t))}・タップで名前/指示を編集</div>
       </div>
       <div class="row-ctrls">
         <button class="rc del" onclick="deleteThread('${t.id}')" aria-label="削除">${I.trash}</button>
@@ -3332,7 +3332,7 @@ function renderThread(){
       <button class="icon-btn" style="box-shadow:none;background:transparent;width:38px" onclick="activeThreadId=null;renderAI()" aria-label="一覧へ戻る">${I.back}</button>
       <div style="flex:1;min-width:0">
         <h1 style="font-size:1.2rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.title)}</h1>
-        <div class="sub">${esc(threadBadge(t))}</div>
+        ${t.title!==threadBadge(t)?`<div class="sub">${esc(threadBadge(t))}</div>`:''}
       </div>
       <button class="icon-btn" onclick="clearThread()" aria-label="会話をクリア" title="この会話を消去">${I.trash}</button>
     </div>
