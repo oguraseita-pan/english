@@ -316,7 +316,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .opt-btn:active{transform:scale(.985);}
 .opt-btn .oic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;flex:none;background:var(--green-soft);color:var(--green);}
 .opt-btn .oic svg{width:22px;height:22px;}
-.opt-btn .ot{font-weight:700;}
+.opt-btn .ot{font-weight:700;font-size:1rem;}
 .opt-btn .od{font-size:.8rem;color:var(--ink-3);margin-top:2px;}
 .deck-row .badge.zero{background:var(--line);color:var(--ink-3);}
 
@@ -1368,7 +1368,7 @@ function renderHome(){
       <button class="qa-btn alt" onclick="qaTranslate()" aria-label="翻訳" title="英⇄日に翻訳">${I.translate}</button>
       <button class="qa-btn" onclick="quickAdd()" aria-label="メモに追加" title="メモに追加">${I.plus}</button>
     </div>
-    <div style="font-size:.74rem;color:var(--ink-3);margin:7px 4px 0">＋でメモに保存（受信箱）。訳ボタンで英⇄日をすばやく翻訳します。</div>
+    <div style="font-size:.74rem;color:var(--ink-3);margin:7px 4px 0">＋でメモに保存（受信箱）。訳ボタンで英⇄日をすばやく翻訳。</div>
     <div id="qaTrans">${transPanelHtml()}</div>
 
     ${(()=>{ const lm=loyaltyMonths(); const lpct=loyaltyDiscountPct(); const nx=loyaltyNext(); const done=lpct>=25;
@@ -1379,7 +1379,7 @@ function renderHome(){
         <div class="streak-flame ${state.stats.streak>0?'lit':''}">🔥</div>
         <div style="flex:1">
           <div class="streak-n">${state.stats.streak}<small>日連続</small></div>
-          <div class="streak-today">${studiedToday?`<span class="ok">${I.check} 本日学習済み</span>`:'本日はまだ学習していません'}</div>
+          <div class="streak-today">${studiedToday?`<span class="ok">本日学習済み</span>`:'本日はまだ学習していません'}</div>
         </div>
         <span class="chev ${streakOpen?'open':''}" style="align-self:center">${I.chev}</span>
       </div>
@@ -3968,12 +3968,13 @@ function renderSettings(){
         <label class="switch"><input type="checkbox" ${s.dark?'checked':''} onchange="state.settings.dark=this.checked;applyTheme();save()"><span class="sl"></span></label></div>
     </div>
 
-    <div class="section-title">データ（バックアップ）</div>
+    ${!loggedIn()?`<div class="section-title">データ（バックアップ）</div>
     <div class="set-group">
       <div class="set-row" style="cursor:pointer" onclick="exportData()"><div><div class="l">バックアップを書き出す</div><div class="d">全データをJSONファイルで保存</div></div><span class="chev">${I.chev}</span></div>
       <div class="set-row" style="cursor:pointer" onclick="document.getElementById('importFile').click()"><div><div class="l">バックアップを読み込む</div><div class="d">JSONから復元（上書き）</div></div><span class="chev">${I.chev}</span></div>
       <input type="file" id="importFile" accept="application/json,.json" style="display:none" onchange="importData(this)" />
     </div>
+    <div style="color:var(--ink-3);font-size:.72rem;margin:6px 4px 0">※ログインすると自動でクラウドに保存・同期され、手動バックアップは不要になります。</div>`:''}
 
     <div class="section-title">情報</div>
     <div class="set-group">
@@ -3984,7 +3985,7 @@ function renderSettings(){
       <div class="set-row" style="cursor:pointer" onclick="openContact()"><div><div class="l">お問い合わせ</div></div><span class="chev">${I.chev}</span></div>
       <div class="set-row"><div><div class="l">バージョン</div></div><span style="color:var(--ink-3)">${APP_VERSION}</span></div>
     </div>
-    <div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:10px">Sprout · データはこの端末に保存されます<br>定期的にバックアップの書き出しをおすすめします</div>
+    <div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:10px">Sprout · ${loggedIn()?'データはクラウドに保存・同期されています':'データはこの端末に保存されます<br>定期的にバックアップの書き出しをおすすめします'}</div>
     ${(cloudConfigured()&&loggedIn()&&!authRecovery)?`
     <div class="section-title" style="color:var(--r-again)">アカウント</div>
     <div class="set-group">
