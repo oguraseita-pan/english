@@ -959,13 +959,14 @@ function seed(){
   mk(f3,'on the same page','','認識が一致して','Let\'s make sure we\'re on the same page.','認識を合わせておこう。',['フレーズ'],'類似表現：in agreement / aligned');
   mk(f2,'leverage','/ˈlevərɪdʒ/','〜を活用する／てこ入れ','We can leverage our network.','人脈を活用できる。',['動詞','名詞'],'名詞では「てこ・影響力」の意味もある');
   mk(f2,'on track','','順調で、軌道に乗って','The project is on track.','プロジェクトは順調だ。',['フレーズ'],'反対：off track（軌道を外れて）');
-  // 英語日記のサンプル（ルート直下・メモより上）
+  // 英語日記のサンプル（「英語日記」フォルダ内）
+  const diaryFid=uid(); state.folders[diaryFid]={id:diaryFid,name:'英語日記',parentId:null,createdAt:now()};
   const diaryId=uid();
   state.cards[diaryId]={id:diaryId, type:'text', diary:true, diaryDate:todayISO(), title:'My first diary',
     en:'Today I start to study English everyday. I want speak English more better.',
     enFixed:'Today I started studying English every day. I want to speak English better.',
     ja:'今日から毎日英語を勉強し始めました。もっと上手に英語を話したいです。',
-    folderId:null, createdAt:now()};
+    folderId:diaryFid, createdAt:now()};
   state.seeded = true;
   save();
 }
@@ -1083,14 +1084,18 @@ function setTab(name){
   if(typeof _srec!=='undefined' && _srec){ try{ _srec.stop(); }catch(_){ } _srec=null; }
   if(typeof _stimer!=='undefined'){ clearInterval(_stimer); }
   if(typeof speech!=='undefined' && speech) speech.recording=false;
+  // 学習中の経過時間を記録してから遷移し、各タブは「最初のページ」に戻す
+  if(session||compo||diaryS){ try{ recordTime(); }catch(_){ } }
+  session=null; reading=null; idiom=null; compo=null; speech=null; diaryS=null; wordList=null; histView=null;
   currentTab=name;
   noteSearchActive=false;
+  closeModal();
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
   window.scrollTo(0,0);
   if(name==='home') renderHome();
-  if(name==='notes'){ currentCardView=null; renderNotes(); }
+  if(name==='notes'){ currentFolder=null; currentCardView=null; noteEditMode=false; renderNotes(); }
   if(name==='study') renderStudy();
   if(name==='ai'){ activeThreadId=null; aiEditMode=false; renderAI(); }
 }
@@ -1319,6 +1324,85 @@ function quickReview(){
   renderStudySession();
 }
 function reviewNone(){ toast('いま復習が必要な単語はありません'); }
+
+// ===== 本日の英語日記 =====
+function ensureDiaryFolder(){
+  let f=Object.values(state.folders).find(x=>x.name==='英語日記'&&x.parentId===null);
+  if(!f){ const id=uid(); state.folders[id]={id,name:'英語日記',parentId:null,createdAt:now()}; f=state.folders[id]; save(); }
+  return f.id;
+}
+function todayDiaryCard(){ const d=todayISO(); return Object.values(state.cards).find(c=>c.type==='text'&&c.diary&&c.diaryDate===d); }
+function diaryDoneToday(){ const c=todayDiaryCard(); return !!(c && (c.en||'').trim()); }
+function startDiary(){
+  setTab('study'); startTimer();
+  const ex=todayDiaryCard();
+  diaryS={ date:todayISO(), text:(ex&&ex.en)||'', fb:(ex&&ex.enFixed)?{corrected:ex.enFixed,ja:ex.ja||'',feedback:[]}:null, cardId:ex?ex.id:null, loading:false };
+  renderDiary();
+}
+function renderDiary(){
+  const v=document.getElementById('view-study');
+  const d=diaryS; if(!d){ return; }
+  const dateLabel=new Date(d.date+'T00:00:00').toLocaleDateString('ja-JP',{month:'long',day:'numeric',weekday:'short'});
+  if(d.loading){
+    v.innerHTML=`<div class="study-wrap"><div class="topbar"><h1>本日の英語日記</h1><button class="icon-btn x-btn" onclick="exitDiary()" style="box-shadow:none;background:transparent">✕</button></div>
+      <div class="empty" style="padding:64px 20px"><div class="spinner"></div><div class="t">添削中…</div><div class="d">AIがあなたの日記を確認しています</div></div></div>`; return;
+  }
+  if(d.fb){
+    const fb=(d.fb.feedback||[]).filter(Boolean);
+    v.innerHTML=`<div class="study-wrap">
+      <div class="topbar"><h1>英語日記の添削</h1><button class="icon-btn x-btn" onclick="exitDiary()" style="box-shadow:none;background:transparent">✕</button></div>
+      <div class="d" style="margin:0 0 12px">${dateLabel}</div>
+      <div class="rr-detail" style="background:var(--surface);border-radius:14px;box-shadow:var(--shadow);padding:16px">
+        <div class="blk"><div class="lab">あなたの英文</div><div class="en" style="white-space:pre-wrap">${esc(d.text)}</div></div>
+        <div class="blk"><div class="lab">正解例（自然な英語）</div><div class="en" style="white-space:pre-wrap">${esc(d.fb.corrected)} ${spkBtn(d.fb.corrected,28)}</div></div>
+        ${d.fb.ja?`<div class="blk"><div class="lab">日本語訳</div><div style="white-space:pre-wrap">${esc(d.fb.ja)}</div></div>`:''}
+        ${fb.length?`<div class="blk"><div class="lab">フィードバック</div><ul style="margin:4px 0 0;padding-left:1.1em;line-height:1.7">${fb.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
+      </div>
+      <button class="btn btn-ghost full" style="padding:13px;margin-top:12px" onclick="diaryEditAgain()">✏️ 書き直す</button>
+      <button class="btn btn-primary full" style="padding:15px;margin-top:10px" onclick="finishDiary()">ノートに保存して終了</button>
+      <div class="d" style="text-align:center;margin-top:8px">ノートの「英語日記」フォルダに保存されます（日付つき）</div>
+    </div>`;
+    return;
+  }
+  v.innerHTML=`<div class="study-wrap">
+    <div class="topbar"><h1>本日の英語日記</h1><button class="icon-btn x-btn" onclick="exitDiary()" style="box-shadow:none;background:transparent">✕</button></div>
+    <div class="d" style="margin:0 0 10px">${dateLabel}・今日の出来事を英語で書いてみましょう。AIが添削して正解例とフィードバックを返します。</div>
+    <textarea id="diaryInput" rows="9" placeholder="Today I ..." style="width:100%;font-size:1rem;line-height:1.6;padding:14px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface)" oninput="diaryS.text=this.value">${esc(d.text)}</textarea>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+      <button class="mic-btn" id="diaryMic" onclick="toggleDictation('diaryInput', this)" aria-label="音声入力">${I.mic}</button>
+      <span class="mic-cap" id="micCap" style="font-size:.78rem;color:var(--ink-3)">タップして話す（英語）</span>
+    </div>
+    <button class="btn btn-primary full" style="padding:15px;margin-top:14px" onclick="submitDiary()">${aiReady()?'添削する':'AIをオンにすると添削できます'}</button>
+    ${!aiReady()?`<div class="compo-hint" style="margin-top:8px">※添削にはAIが必要です（設定でオン）。書いて保存だけでもOKです。</div>`:''}
+  </div>`;
+}
+function diaryEditAgain(){ diaryS.fb=null; renderDiary(); }
+async function submitDiary(){
+  const inp=document.getElementById('diaryInput'); const text=(inp?inp.value:diaryS.text||'').trim();
+  if(!text){ toast('日記を入力してください'); return; }
+  diaryS.text=text;
+  // 保存（添削なしでもノートに残す）
+  saveDiaryCard();
+  if(!aiReady()){ toast('保存しました（AIをオンにすると添削できます）'); finishDiary(); return; }
+  diaryS.loading=true; renderDiary();
+  try{
+    const content=await callAI([{role:'system',content:DIARY_SYS},{role:'user',content:text}],{json:true,temp:0.4});
+    let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
+    if(j && j.corrected){ diaryS.fb={corrected:j.corrected, ja:j.ja||'', feedback:Array.isArray(j.feedback)?j.feedback:[]}; saveDiaryCard(); }
+    else { toast('添削結果を取得できませんでした'); }
+  }catch(e){ const m=String(e&&e.message||e); toast('添削に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')); }
+  diaryS.loading=false; renderDiary();
+}
+function saveDiaryCard(){
+  const folderId=ensureDiaryFolder();
+  const data={ type:'text', diary:true, diaryDate:diaryS.date, title:(diaryS.text||'').split('\n')[0].slice(0,40)||'英語日記', en:diaryS.text||'', enFixed:(diaryS.fb&&diaryS.fb.corrected)||'', ja:(diaryS.fb&&diaryS.fb.ja)||'', folderId };
+  if(diaryS.cardId && state.cards[diaryS.cardId]){ Object.assign(state.cards[diaryS.cardId], data); }
+  else { const id=uid(); state.cards[id]={id, ...data, createdAt:now()}; diaryS.cardId=id; }
+  save();
+}
+function finishDiary(){ saveDiaryCard(); recordTime(); diaryS=null; setTab('home'); renderHome(); toast('英語日記を保存しました'); }
+function exitDiary(){ if(diaryS && (diaryS.text||'').trim()) saveDiaryCard(); recordTime(); diaryS=null; setTab('home'); renderHome(); }
+
 function renderHome(){
   syncGoalLevel();
   const all = Object.values(state.cards).filter(c=>c.type!=='text' && c.srs);
@@ -1360,6 +1444,7 @@ function renderHome(){
       ${todayRow(I.cards||I.book||I.check,'本日の単語・熟語',`${goalLabel()}・${goalLevelLabel()}`,wDone,'quickStudy10()', badge(wDone,mixN,mixG))}
       ${todayRow(I.pencil||I.edit||I.plus,'瞬間英作文',`${compoSrcLabel()}`,cDone,'quickCompo3()', badge(cDone,cN,cG))}
       ${todayRow(I.flame||I.refresh,'本日の復習','単語・熟語を忘却曲線で復習',rDone,'quickReview()', rDone?`<span class="td-done">${I.check}完了</span>`:`<span class="td-go">${(rCap>0?Math.min(dueN,rCap):dueN)}問 ›</span>`)}
+      ${(()=>{ const dDone=diaryDoneToday(); return todayRow(I.pen||I.edit||I.book,'本日の英語日記','英語で日記を書いてAI添削',dDone,'startDiary()', dDone?`<span class="td-done">${I.check}完了</span>`:`<span class="td-go">書く ›</span>`); })()}
     </div>
 
     <div class="section-title">サッとメモ・翻訳</div>
@@ -1644,7 +1729,7 @@ function closeCardView(){ currentCardView=null; renderNotes(); }
 function todayISO(){ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
 function editDiary(id, prefill){
   const c=id?state.cards[id]:(prefill||{});
-  const folderOpts=folderSelectOptions(c.folderId||currentFolder);
+  const folderOpts=folderSelectOptions(c.folderId||ensureDiaryFolder());
   const date=c.diaryDate||todayISO();
   openModal(`
     <h2>${id?'英語日記を編集':'新しい英語日記'}</h2>
@@ -1907,6 +1992,7 @@ function deleteCard(id){
    STUDY
    ==================================================================== */
 let session=null, reading=null, idiom=null, compo=null, speech=null, histView=null, wordList=null;
+let diaryS=null;
 let streakOpen=false;
 let timeHistPeriod='1w';
 let timeHistSel=null;
@@ -3073,7 +3159,6 @@ const AI_MODES={
   card:{label:'単語をカード化',convo:false,ph:'単語を送るとカード化できます',phs:'単語・フレーズ…',sys:'CARD'},
   correct:{label:'英文添削',convo:false,ph:'添削したい英文を入力',phs:'英文を入力…',sys:'You are an English proofreader for a Japanese learner. Correct the English the user writes, show the corrected version, then briefly explain the key fixes in Japanese.'},
   example:{label:'例文作成',convo:false,ph:'日本語または英語を入力（例：認識を合わせる / proceed）',phs:'日本語/英語を入力…',sys:'EXAMPLE'},
-  diary:{label:'英語日記',convo:false,ph:'今日の出来事を英語で書いてみよう。添削とフィードバックをします',phs:'英語で日記を書く…',sys:'DIARY'},
   translate:{label:'翻訳',convo:false,ph:'日本語↔英語を翻訳します',phs:'文章を入力…',sys:'Translate between Japanese and English naturally. If the input is Japanese, give natural English; if English, give natural Japanese. Add a short note on nuance if helpful.'}
 };
 const OTHER_SPEC='The "other" field must be a multi-line Japanese study note (use real newlines) built ONLY from the sections below that genuinely apply to this term — omit any section that does not fit, and never invent fake words. Sections and exact headers:\n【派生語】\nthen one line per real derivative as "品詞：word（日本語の意味）", adding " ※あまり使われない" when rare (e.g. "名詞：cherishment（大切にすること）※あまり使われない").\n【類義語】\nthen a single line of comma-separated English synonyms.\n【反意語】\nthen a single line of comma-separated English antonyms.\n💡【ニュアンス】\ninclude ONLY when the word has a noteworthy nuance; give a short Japanese explanation of how it differs from simpler synonyms (like / love etc.).\n💡【よくある表現】\nthen 1-3 common collocations, each as TWO lines: the English collocation, then its Japanese meaning on the next line.\nFor phrases/idioms, skip 【派生語】 and give 類義語/反意語/よくある表現 instead. Separate the section blocks with a blank line.';
@@ -3086,7 +3171,7 @@ const EXAMPLE_SYS='You generate everyday English for a Japanese learner. First d
 function ensureThreads(){
   if(!Array.isArray(state.threads)) state.threads=[];
   if(state.threads.length===0 && !state.aiThreadSeed){
-    ['chat','card','correct','diary','example','translate'].forEach(k=>{
+    ['chat','card','correct','example','translate'].forEach(k=>{
       state.threads.push({id:uid(),title:AI_MODES[k].label,mode:k,sys:'',messages:[],createdAt:now()});
     });
     state.aiThreadSeed=true; save();
@@ -3098,15 +3183,12 @@ function migrateThreads(){
   let changed=false;
   state.threads.forEach(t=>{
     if(t.mode==='nuance'){
-      if(!t.messages || t.messages.length===0){ t.mode='diary'; t.title='英語日記'; }
-      else { t.mode='chat'; } // 中身がある旧ニュアンス会話はチューターとして残す
+      t.mode='chat'; // 旧ニュアンス/日記スレッドはチューターに統合
       changed=true;
     }
   });
-  if(state.aiThreadSeed && !state.threads.some(t=>t.mode==='diary')){
-    state.threads.push({id:uid(),title:'英語日記',mode:'diary',sys:'',messages:[],createdAt:now()});
-    changed=true;
-  }
+  // 旧AI英語日記スレッドはホームの「本日の英語日記」に移行したため、添削スレッドへ変換
+  state.threads.forEach(t=>{ if(t.mode==='diary'){ t.mode='correct'; t.title='英文添削'; changed=true; } });
   if(changed) save();
 }
 function getThread(id){ return state.threads.find(t=>t.id===id); }
@@ -3286,7 +3368,6 @@ function msgHtml(m,i){
   }
   let extra='';
   if(m.card){ extra=`<button class="save-card" onclick="saveAICard(${i})">${I.plus} カードに保存</button>`; }
-  if(m.diary){ extra=`<button class="save-card" onclick="saveAIDiary(${i})">${I.pen} 日記に保存</button>`; }
   const isErr = m.error || (typeof m.content==='string' && m.content.indexOf('⚠️')===0);
   if(isErr){ extra+=`<button class="retry-btn" onclick="retryAI(${i})">${I.refresh} 再試行</button>`; }
   return `<div class="msg ai">${esc(m.content)}${extra}</div>`;
@@ -3302,12 +3383,6 @@ function saveAICard(i){
   const m=t.messages[i]; if(!m||!m.card) return;
   const c=m.card;
   editCard(null,{term:c.term||'',pron:c.pron||'',mean:c.mean||'',exEn:c.exEn||'',exJa:c.exJa||'',pos:Array.isArray(c.pos)?c.pos:(c.pos?[c.pos]:[]),other:c.other||''});
-}
-function saveAIDiary(i){
-  const t=getThread(activeThreadId); if(!t) return;
-  const m=t.messages[i]; if(!m||!m.diary) return;
-  const d=m.diary;
-  editDiary(null,{ en:d.orig||'', enFixed:d.corrected||'', ja:d.ja||'', title:'' });
 }
 function autoGrow(t){ t.style.height='auto'; t.style.height=Math.min(t.scrollHeight,120)+'px'; }
 function isMobile(){ return /Mobi|Android|iPhone/i.test(navigator.userAgent); }
@@ -3350,14 +3425,6 @@ async function generateReply(t, text){
       } else {
         t.messages.push({role:'assistant',content});
       }
-    } else if(t.mode==='diary'){
-      const content=await callAI([{role:'system',content:DIARY_SYS},{role:'user',content:text}],{json:true,temp:0.4});
-      let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
-      if(j && j.corrected){
-        const fb=(Array.isArray(j.feedback)?j.feedback:[]).filter(Boolean);
-        const body=`✏️ 添削後の英語\n${j.corrected}\n\n🇯🇵 日本語訳\n${j.ja||''}${fb.length?`\n\n💡 フィードバック\n・${fb.join('\n・')}`:''}`;
-        t.messages.push({role:'assistant',content:body, diary:{orig:text, corrected:j.corrected, ja:j.ja||'', feedback:fb}});
-      } else { t.messages.push({role:'assistant',content}); }
     } else if(t.mode==='example'){
       const content=await callAI([{role:'system',content:EXAMPLE_SYS},{role:'user',content:text}],{json:true,temp:0.6});
       let items=[]; try{ const j=JSON.parse(content); items=Array.isArray(j)?j:(j.items||[]); }catch(e){ items=[]; }
