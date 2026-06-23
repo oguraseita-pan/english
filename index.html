@@ -494,6 +494,10 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .plan-sub{font-size:.72rem;color:var(--ink-3);margin-top:2px;}
 .bill-sum-total b{font-size:1.05rem;}
 .bill-sum-total small{font-weight:500;color:var(--ink-3);font-size:.72rem;}
+.checkout-banner{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;z-index:9000;display:flex;align-items:center;gap:10px;background:var(--green-d);color:#fff;padding:11px 16px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.18);font-size:.85rem;max-width:92vw;}
+.checkout-banner .cb-btn{border:none;background:rgba(255,255,255,.22);color:#fff;font-weight:600;font-size:.78rem;padding:5px 11px;border-radius:999px;cursor:pointer;}
+.cb-spin{width:15px;height:15px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;display:inline-block;animation:cbspin .8s linear infinite;}
+@keyframes cbspin{to{transform:rotate(360deg);}}
 .ai-hint b{color:var(--ink);}
 .typing{display:inline-flex;gap:4px;}
 .typing span{width:7px;height:7px;border-radius:50%;background:var(--ink-3);animation:blink 1.2s infinite;}
@@ -765,7 +769,7 @@ function save(opts){
 const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publishable_jhQ8QRqM6QuCWlEjOPok9A_62zFa10k' };
 // Stripe本番フラグ。create-checkout / stripe-webhook をデプロイし、Price IDを設定したら true に。
 // false の間は従来どおりデモ課金画面（実決済なし）。
-const STRIPE = { enabled:false };
+const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
@@ -3874,7 +3878,7 @@ function handleCheckoutReturn(search){
     const q=new URLSearchParams(typeof search==='string'?search:(location.search||''));
     const c=q.get('checkout');
     if(!c) return false;
-    if(c==='success'){ toast('決済が完了しました。プランを反映しています…'); if(STRIPE.enabled) syncPlanFromServer(); }
+    if(c==='success'){ toast('決済が完了しました。プランを反映しています…'); if(STRIPE.enabled){ showCheckoutPending(); pollPlanAfterCheckout(); } }
     else if(c==='cancel'){ toast('決済をキャンセルしました'); }
     q.delete('checkout');
     if(typeof history!=='undefined' && history.replaceState){
@@ -3883,6 +3887,43 @@ function handleCheckoutReturn(search){
     }
     return true;
   }catch(_){ return false; }
+}
+/* ---- 反映待ちバナー（Webhook→plan_status 反映までのつなぎ）---- */
+let _checkoutPending=false;
+function setCheckoutBanner(html){
+  if(typeof document==='undefined'||!document.body) return;
+  let el=document.getElementById('checkoutBanner');
+  if(!html){ if(el) el.remove(); return; }
+  if(!el){ el=document.createElement('div'); el.id='checkoutBanner'; el.className='checkout-banner'; document.body.appendChild(el); }
+  el.innerHTML=html;
+}
+function showCheckoutPending(){ _checkoutPending=true; setCheckoutBanner('<span class="cb-spin"></span><span>決済が完了しました。プランを反映しています…</span>'); }
+function checkoutPendingDone(plan){
+  _checkoutPending=false;
+  const nm=(PLAN_INFO[plan]&&PLAN_INFO[plan].name)||'プラン';
+  setCheckoutBanner('<span>✅ '+esc(nm)+'が有効になりました</span>');
+  setTimeout(()=>setCheckoutBanner(''),4000);
+  if(typeof renderSettings==='function') renderSettings();
+  if(typeof rerenderActive==='function') rerenderActive();
+}
+function checkoutPendingTimeout(){
+  _checkoutPending=false;
+  setCheckoutBanner('<span>反映に少し時間がかかっています。数分後に自動反映されます。</span><button class="cb-btn" onclick="retryCheckoutSync()">今すぐ確認</button>');
+  setTimeout(()=>{ if(!_checkoutPending) setCheckoutBanner(''); },10000);
+}
+function retryCheckoutSync(){ showCheckoutPending(); pollPlanAfterCheckout(); }
+async function pollPlanAfterCheckout(){
+  if(!STRIPE.enabled){ setCheckoutBanner(''); _checkoutPending=false; return; }
+  let attempts=0;
+  const tick=async()=>{
+    attempts++;
+    if(_sb && loggedIn()){ try{ await syncPlanFromServer(); }catch(_){ } }
+    const now=(state.billing&&state.billing.plan)||'free';
+    if(now && now!=='free'){ checkoutPendingDone(now); return; }
+    if(attempts>=8){ checkoutPendingTimeout(); return; }
+    setTimeout(tick, 2000);
+  };
+  tick();
 }
 /* ---- サーバー（plan_status, Webhookが書き込む）を正としてプランを反映 ---- */
 async function syncPlanFromServer(){
