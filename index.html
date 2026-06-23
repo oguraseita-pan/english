@@ -487,6 +487,13 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .send-btn:active{transform:scale(.9);}
 .send-btn:disabled{opacity:.4;}
 .ai-hint{font-size:.84rem;color:var(--ink-2);background:var(--amber-soft);border-radius:12px;padding:12px 14px;margin-bottom:14px;}
+.ai-quota{font-size:.8rem;color:var(--ink-3);text-align:center;margin:-4px 0 14px;display:flex;align-items:center;justify-content:center;gap:8px;}
+.ai-quota b{color:var(--green-d);font-size:.92rem;}
+.ai-quota-ad{border:none;background:var(--green-soft);color:var(--green-d);font-weight:600;font-size:.78rem;padding:4px 10px;border-radius:999px;cursor:pointer;}
+.plan-price-wrap{text-align:right;}
+.plan-sub{font-size:.72rem;color:var(--ink-3);margin-top:2px;}
+.bill-sum-total b{font-size:1.05rem;}
+.bill-sum-total small{font-weight:500;color:var(--ink-3);font-size:.72rem;}
 .ai-hint b{color:var(--ink);}
 .typing{display:inline-flex;gap:4px;}
 .typing span{width:7px;height:7px;border-radius:50%;background:var(--ink-3);animation:blink 1.2s infinite;}
@@ -699,6 +706,7 @@ function defaultState(){
     settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:0.9, newPerDay:20, goal:'daily', goalLevel:'B1', goalWords:20, goalIdioms:10, goalCompo:5, reviewCap:30 },
     stats:{ reviews:{}, streak:0, lastStudy:null, time:{}, dailyCount:{date:null, words:0, idioms:0, compo:0, reviews:0} },
     history:{ compo:[], speech:[] },
+    aiUsage:{ date:null, uses:0, adResets:0, proUses:0 },
     seeded:false
   };
 }
@@ -707,6 +715,7 @@ function normalizeState(){
   if(!state.stats) state.stats = defaultState().stats;
   if(!state.stats.time || typeof state.stats.time!=='object') state.stats.time={};
   if(!state.stats.dailyCount || typeof state.stats.dailyCount!=='object') state.stats.dailyCount={date:null,words:0,idioms:0,compo:0,reviews:0};
+  if(!state.aiUsage || typeof state.aiUsage!=='object') state.aiUsage={date:null,uses:0,adResets:0,proUses:0};
   if(typeof state.stats.dailyCount.reviews!=='number') state.stats.dailyCount.reviews=0;
   if(typeof state.settings.reviewCap!=='number') state.settings.reviewCap=(typeof state.settings.reviewPerSession==='number'?Math.max(20,state.settings.reviewPerSession):30);
   if(!state.settings.goalLevelAnchor) state.settings.goalLevelAnchor=state.settings.goalLevel;
@@ -754,6 +763,9 @@ function save(opts){
        using (auth.uid() = user_id) with check (auth.uid() = user_id);
    =================================================================== */
 const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publishable_jhQ8QRqM6QuCWlEjOPok9A_62zFa10k' };
+// Stripe本番フラグ。create-checkout / stripe-webhook をデプロイし、Price IDを設定したら true に。
+// false の間は従来どおりデモ課金画面（実決済なし）。
+const STRIPE = { enabled:false };
 const APP_VERSION = '1.0.0';
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
@@ -787,9 +799,10 @@ async function cloudInit(){
     _sb.auth.onAuthStateChange((_e,session)=>{
       if(_e==='PASSWORD_RECOVERY'){ account.user=session?session.user:account.user; authRecovery=true; authView='recovery'; setTab('settings'); renderSettings(); return; }
       const was=loggedIn(); account.user=session?session.user:null;
-      if(!was && loggedIn()){ cloudPull(); } else { renderSettings(); }
+      if(!was && loggedIn()){ cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); } else { renderSettings(); }
     });
     if(loggedIn()) await cloudPull();
+    if(STRIPE.enabled && loggedIn()) await syncPlanFromServer();
   }catch(e){ /* offline or SDK blocked -> stay local-only */ }
   renderSettings();
 }
@@ -1377,11 +1390,11 @@ async function submitDiary(){
   if(!aiReady()){ toast('保存しました（AIをオンにすると添削できます）'); finishDiary(); return; }
   diaryS.loading=true; renderDiary();
   try{
-    const content=await callAI([{role:'system',content:DIARY_SYS},{role:'user',content:text}],{json:true,temp:0.4});
+    const content=await callAI([{role:'system',content:DIARY_SYS},{role:'user',content:text}],{json:true,temp:0.4,hard:true});
     let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
     if(j && j.corrected){ diaryS.fb={corrected:j.corrected, ja:j.ja||'', feedback:Array.isArray(j.feedback)?j.feedback:[]}; saveDiaryCard(); }
     else { toast('添削結果を取得できませんでした'); }
-  }catch(e){ const m=String(e&&e.message||e); toast('添削に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')); }
+  }catch(e){ if(isAiLimit(e)){ diaryS.loading=false; renderDiary(); openAiLimit(e.message==='AI_LIMIT_FREE'?'free':'paid'); return; } const m=String(e&&e.message||e); toast('添削に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')); }
   diaryS.loading=false; renderDiary();
 }
 function saveDiaryCard(){
@@ -2793,6 +2806,7 @@ async function genTheme(theme){
     renderCompo();
   }catch(err){
     if(!compo) return;
+    if(isAiLimit(err)){ compo=null; renderStudy(); openAiLimit(err.message==='AI_LIMIT_FREE'?'free':'paid'); return; }
     const m=err.message||'';
     toast('生成に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー'));
     compo=null; renderStudy();
@@ -2982,6 +2996,7 @@ async function gradeCompoAI(myIdx){
     let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
     fb = (j&&j.verdict) ? j : {verdict:'', comment:(content||''), fixed:'', alts:[]};
   }catch(err){
+    if(isAiLimit(err)){ compo.checking=false; renderCompo(); openAiLimit(err.message==='AI_LIMIT_FREE'?'free':'paid'); return; }
     const m=err.message||'';
     fb={verdict:'', comment:'AI添削に失敗（'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')+'）。お手本と見比べて自己採点してください。', fixed:'', alts:[]};
   }
@@ -3074,12 +3089,13 @@ async function gradeSpeech(){
   try{
     const sys='You are an encouraging English speaking coach for a Japanese learner who just did a ~1-minute spoken monologue (the text is speech-to-text and may be rough). Given the theme and transcript, output ONLY JSON: {"corrected":"a natural, cleaned-up English version of what they tried to say","points":["up to 4 short Japanese notes about grammar, word choice or nuance to fix"],"richer":["up to 3 more natural and richer English expressions/sentences they could have used"]}. Be supportive and concrete. The "points" MUST be in Japanese. No markdown, no code fences.';
     const u=`Theme: ${speech.theme}\nTranscript: ${speech.transcript}`;
-    const content=await callAI([{role:'system',content:sys},{role:'user',content:u}],{json:true,temp:0.4});
+    const content=await callAI([{role:'system',content:sys},{role:'user',content:u}],{json:true,temp:0.4,hard:true});
     let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
     if(!speech) return;
     speech.fb = (j&&(j.corrected||j.points||j.richer)) ? {corrected:j.corrected||'',points:Array.isArray(j.points)?j.points:[],richer:Array.isArray(j.richer)?j.richer:[]} : {corrected:'',points:[content||'添削結果を取得できませんでした。'],richer:[]};
   }catch(err){
     if(!speech) return;
+    if(isAiLimit(err)){ speech.phase='speak'; renderSpeech(); openAiLimit(err.message==='AI_LIMIT_FREE'?'free':'paid'); return; }
     const m=err.message||'';
     speech.fb={corrected:'',points:['添削に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')],richer:[]};
   }
@@ -3232,6 +3248,7 @@ function renderThreadList(){
     </div>
     ${!aiReady()?keyHintHtml():''}
     <button class="btn btn-primary full" style="padding:13px;margin-bottom:14px" onclick="openNewThread()">${I.plus} 新しいスレッド</button>
+    ${(managedAI()&&planTier()==='free')?`<div class="ai-quota">本日の無料AI 残り <b>${aiRemaining()}</b> / ${aiDailyCap()} 回${aiCanAdReset()?` ・ <button class="ai-quota-ad" onclick="adResetAI()">広告で+${AI_AD_BONUS}</button>`:''}</div>`:''}
     ${list.length===0
       ? `<div class="empty" style="padding:36px 20px">${spkInk()}<div class="t">スレッドがありません</div><div class="d">「新しいスレッド」から用途に合わせて作成できます。<br>例：チューター／英文添削／自分専用の指示</div></div>`
       : `<div class="list" id="threadList">${list.map(threadRow).join('')}</div>`}
@@ -3440,6 +3457,13 @@ async function generateReply(t, text){
       t.messages.push({role:'assistant',content});
     }
   }catch(err){
+    if(isAiLimit(err)){
+      const lm = err.message==='AI_LIMIT_FREE' ? '本日の無料AIは上限です。広告を見て+5回、またはライト以上で実質無制限に。' : '本日のAI利用が上限に達しました。時間をおいてお試しください。';
+      t.messages.push({role:'assistant',content:'⚠️ '+lm, error:true});
+      save(); aiBusy=false; renderThread();
+      openAiLimit(err.message==='AI_LIMIT_FREE'?'free':'paid');
+      return;
+    }
     let msg=err.message||'エラーが発生しました';
     if(msg==='NO_KEY') msg='APIキーが未設定です。設定から入力してください。';
     else if(msg==='AI_OFF') msg='AIがオフです。設定からオンにしてください。';
@@ -3475,9 +3499,78 @@ async function aiFetch(url,init){
     throw new Error('API '+res.status);
   }
 }
+/* ========= AI利用カウント・プラン上限・モデルルーティング =========
+   ・上限・モデルは「アプリ提供AI（ログイン中=managedAI）」のときだけ適用。
+   ・自分のAPIキー利用（BYO）は各自がGoogle/OpenAIに支払うため上限なし。
+   ・翻訳（DeepL中継）はこのカウント対象外（別関数・別エンドポイント）。 */
+const AI_FREE_BASE=5, AI_AD_BONUS=5, AI_AD_MAX=3;            // Free: 5/日 ＋ 広告1本=+5（最大3本→20/日）
+const AI_LIGHT_CAP=200;                                      // Light: 実質無制限（内部ソフト上限）
+const AI_PREMIUM_CAP=150, AI_PREMIUM_PRO_CAP=5;             // Premium: 実質無制限(150) ＋ 難所Pro 5/日
+const AI_MODEL_LITE='gemini-2.5-flash-lite';
+const AI_MODEL_FLASH='gemini-2.5-flash';
+const AI_MODEL_PRO='gemini-2.5-pro';
+function planTier(){ const b=state.billing||{}; return (b.plan==='light'||b.plan==='premium')?b.plan:'free'; }
+function ensureAiDay(){ const t=todayStr(); if(!state.aiUsage || state.aiUsage.date!==t){ state.aiUsage={date:t, uses:0, adResets:0, proUses:0}; } }
+function aiUsesToday(){ ensureAiDay(); return state.aiUsage.uses||0; }
+function aiProUsesToday(){ ensureAiDay(); return state.aiUsage.proUses||0; }
+function aiAdResetsToday(){ ensureAiDay(); return state.aiUsage.adResets||0; }
+function aiDailyCap(){ const t=planTier(); if(t==='light') return AI_LIGHT_CAP; if(t==='premium') return AI_PREMIUM_CAP; return AI_FREE_BASE + AI_AD_BONUS*Math.min(aiAdResetsToday(), AI_AD_MAX); }
+function aiRemaining(){ return Math.max(0, aiDailyCap()-aiUsesToday()); }
+function aiCanAdReset(){ return planTier()==='free' && aiAdResetsToday()<AI_AD_MAX; }
+function incAiUse(pro){ ensureAiDay(); state.aiUsage.uses=(state.aiUsage.uses||0)+1; if(pro) state.aiUsage.proUses=(state.aiUsage.proUses||0)+1; save(); }
+function aiModelFor(opts){
+  const t=planTier();
+  if(t==='premium'){
+    if(opts && opts.hard && aiProUsesToday()<AI_PREMIUM_PRO_CAP){ opts._pro=true; return AI_MODEL_PRO; }
+    return AI_MODEL_FLASH;
+  }
+  return AI_MODEL_LITE; // free / light
+}
+function isAiLimit(e){ const m=(e&&e.message)||e||''; return m==='AI_LIMIT_FREE'||m==='AI_LIMIT'; }
+/* 実際のリワード広告SDK（AdMob等）に差し替えるフック。window.SproutAd.show() があればそれを使う。 */
+async function showRewardedAd(){
+  if(typeof window!=='undefined' && window.SproutAd && typeof window.SproutAd.show==='function') return window.SproutAd.show();
+  return new Promise(res=>setTimeout(()=>res(true), 300)); // デモ：視聴完了とみなす
+}
+async function adResetAI(){
+  if(!aiCanAdReset()){ toast('本日の広告リセットは上限です'); return; }
+  toast('広告を読み込み中…');
+  let ok=false;
+  try{ ok=await showRewardedAd(); }catch(_){ ok=false; }
+  if(ok===false){ toast('広告を再生できませんでした'); return; }
+  ensureAiDay(); state.aiUsage.adResets=(state.aiUsage.adResets||0)+1; save();
+  closeModal();
+  toast('AIを +'+AI_AD_BONUS+'回 追加しました（残り'+aiRemaining()+'回）');
+  if(typeof currentTab!=='undefined' && currentTab==='ai' && typeof renderAI==='function') renderAI();
+}
+function openAiLimit(kind){
+  const free = (kind==='free') || planTier()==='free';
+  const canAd = aiCanAdReset();
+  openModal(`
+    <h2>${free?'本日の無料AIは上限です':'本日の利用上限に達しました'}</h2>
+    <div class="d" style="margin:6px 0 18px;color:var(--ink-2);line-height:1.6">
+      ${free
+        ? `無料プランのAIは1日 ${AI_FREE_BASE} 回までです。${canAd?`広告を見ると <b>+${AI_AD_BONUS}回</b> 追加できます（本日あと${AI_AD_MAX-aiAdResetsToday()}回）。`:'本日の広告リセットは上限に達しました。'}<br>ライト以上なら広告なしで実質無制限に使えます。`
+        : 'フェアユースの上限に達しました。少し時間をおいてから、もう一度お試しください。'}
+    </div>
+    <div class="modal-actions" style="flex-direction:column;gap:10px">
+      ${free&&canAd?`<button class="btn btn-primary full" style="padding:13px" onclick="adResetAI()">${I.sparkle} 広告を見て +${AI_AD_BONUS}回</button>`:''}
+      ${free?`<button class="btn ${canAd?'btn-ghost':'btn-primary'} full" style="padding:13px" onclick="openPlansFromLimit()">プランを見る</button>`:''}
+      <button class="btn btn-ghost full" style="padding:13px" onclick="closeModal()">閉じる</button>
+    </div>`);
+}
+function openPlansFromLimit(){ closeModal(); setTab('settings'); billingStep='plans'; renderSettings(); }
+
 async function callAI(messages,opts){
   opts=opts||{};
-  if(managedAI()) return callManaged(messages,opts);
+  if(managedAI()){
+    ensureAiDay();
+    if(aiUsesToday()>=aiDailyCap()) throw new Error(planTier()==='free'?'AI_LIMIT_FREE':'AI_LIMIT');
+    const model=aiModelFor(opts);
+    const out=await callManaged(messages, Object.assign({}, opts, {model}));
+    incAiUse(opts._pro);
+    return out;
+  }
   const p=aiProvider();
   if(p==='none') throw new Error('AI_OFF');
   if(p==='gemini') return callGemini(messages,opts);
@@ -3491,7 +3584,7 @@ async function callManaged(messages,opts){
   const res=await aiFetch(CLOUD.url.replace(/\/$/,'')+'/functions/v1/ai',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':CLOUD.anonKey},
-    body:JSON.stringify({ messages, json:!!opts.json, temp:(opts.temp!=null)?opts.temp:0.7 })
+    body:JSON.stringify({ messages, json:!!opts.json, temp:(opts.temp!=null)?opts.temp:0.7, model:opts.model||undefined })
   });
   const data=await res.json();
   if(data && data.error) throw new Error(data.error);
@@ -3621,7 +3714,7 @@ async function aiFillCard(){
     const sel=document.getElementById('cFolder'); const ib=inboxFolderId();
     if(sel && ib && sel.value===ib){ const wid=getWordFolderId(); ensureFolderOption(sel,wid,'単語'); sel.value=wid; toast('生成しました（保存先を「単語」に変更）'); }
     else toast('生成しました（確認して保存）');
-  }catch(err){ toast('生成に失敗: '+(/40[013]/.test(err.message)?'キーが無効':/429/.test(err.message)?'利用上限の可能性':/50[0234]/.test(err.message)?'サーバー混雑（再試行を）':'通信エラー')); }
+  }catch(err){ if(isAiLimit(err)){ btn.disabled=false; btn.innerHTML=I.sparkle+' AIで意味・例文を生成'; openAiLimit(err.message==='AI_LIMIT_FREE'?'free':'paid'); return; } toast('生成に失敗: '+(/40[013]/.test(err.message)?'キーが無効':/429/.test(err.message)?'利用上限の可能性':/50[0234]/.test(err.message)?'サーバー混雑（再試行を）':'通信エラー')); }
   btn.disabled=false; btn.innerHTML=I.sparkle+' AIで意味・例文を生成';
 }
 
@@ -3637,8 +3730,8 @@ let billingStep=null;       // null | 'plans' | 'checkout'
 let billingSel={plan:'light', term:'12m'};
 const PLAN_INFO={
   free:{name:'無料プラン'},
-  light:{name:'ライト', price:{'12m':500,'3m':800,'1m':1200}, feats:['単語・熟語・リーディング','瞬間英作文・英語日記','AI添削・翻訳（標準モデル）']},
-  premium:{name:'プレミアム', price:{'12m':1500,'3m':2400,'1m':3600}, feats:['ライトの全機能','最新モデルAIに無制限アクセス','添削・日記をより高精度に']}
+  light:{name:'ライト', price:{'12m':567,'3m':660,'1m':780}, total:{'12m':6800,'3m':1980,'1m':780}, feats:['広告なし','格安AIモデルを実質無制限','単語・熟語・リーディング／瞬間英作文・英語日記・添削']},
+  premium:{name:'プレミアム', price:{'12m':1233,'3m':1560,'1m':1780}, total:{'12m':14800,'3m':4680,'1m':1780}, feats:['ライトの全機能','高品質AIモデルを実質無制限','日記添削などをさらに高精度に']}
 };
 const TERM_INFO={'12m':{label:'12ヶ月',sub:'年間プラン（最安）'},'3m':{label:'3ヶ月',sub:''},'1m':{label:'1ヶ月',sub:''}};
 function authGo(v){ authView=v; renderSettings(); }
@@ -3754,7 +3847,59 @@ function openBilling(){ billingStep='plans'; billingSel={plan:(state.billing&&st
 function closeBilling(){ billingStep=null; renderSettings(); }
 function billingPickPlan(p){ billingSel.plan=p; renderSettings(); }
 function billingPickTerm(t){ billingSel.term=t; renderSettings(); }
-function billingToCheckout(){ billingStep='checkout'; renderSettings(); }
+function billingToCheckout(){
+  if(STRIPE.enabled && managedAI()){ startStripeCheckout(); return; }
+  billingStep='checkout'; renderSettings();
+}
+/* ---- Stripe Checkout（本番）: create-checkout 関数へ遷移 ---- */
+async function startStripeCheckout(){
+  if(!loggedIn()){ toast('決済にはログインが必要です（設定 → アカウント）'); return; }
+  toast('決済ページを準備しています…');
+  let token=''; try{ const { data }=await _sb.auth.getSession(); token=(data&&data.session)?data.session.access_token:''; }catch(_){}
+  if(!token){ toast('ログインが必要です'); return; }
+  try{
+    const res=await fetch(CLOUD.url.replace(/\/$/,'')+'/functions/v1/create-checkout',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':CLOUD.anonKey},
+      body:JSON.stringify({ plan:billingSel.plan, term:billingSel.term })
+    });
+    const data=await res.json().catch(()=>({}));
+    if(res.ok && data && data.url){ location.href=data.url; return; }
+    toast('決済ページを開けませんでした'+(data&&data.error?'（'+data.error+'）':''));
+  }catch(e){ toast('通信に失敗しました。接続を確認してください'); }
+}
+/* ---- 決済からの戻り（?checkout=success|cancel）---- */
+function handleCheckoutReturn(search){
+  try{
+    const q=new URLSearchParams(typeof search==='string'?search:(location.search||''));
+    const c=q.get('checkout');
+    if(!c) return false;
+    if(c==='success'){ toast('決済が完了しました。プランを反映しています…'); if(STRIPE.enabled) syncPlanFromServer(); }
+    else if(c==='cancel'){ toast('決済をキャンセルしました'); }
+    q.delete('checkout');
+    if(typeof history!=='undefined' && history.replaceState){
+      const url=location.pathname+(q.toString()?('?'+q.toString()):'')+location.hash;
+      history.replaceState(null,'',url);
+    }
+    return true;
+  }catch(_){ return false; }
+}
+/* ---- サーバー（plan_status, Webhookが書き込む）を正としてプランを反映 ---- */
+async function syncPlanFromServer(){
+  if(!STRIPE.enabled || !loggedIn() || !_sb) return;
+  try{
+    const r=await _sb.from('plan_status').select('plan,term,status,current_period_end').eq('user_id',account.user.id).maybeSingle();
+    const row=r&&r.data; if(!row) return;
+    const active = row.plan && row.plan!=='free' && (!row.status || row.status==='active' || row.status==='trialing');
+    if(active){
+      const keepStart=(state.billing&&state.billing.startedAt)||Date.now();
+      state.billing=Object.assign({}, state.billing||{}, { plan:row.plan, term:row.term||(state.billing&&state.billing.term)||'1m', startedAt:keepStart, since:Date.now() });
+    } else if(state.billing && state.billing.plan && state.billing.plan!=='free'){
+      state.billing={plan:'free', term:null, since:null, startedAt:null, card:null};
+    }
+    save(); if(typeof renderSettings==='function') renderSettings();
+  }catch(_){}
+}
 function billingConfirm(){
   const keepStart = (selfPaid() && state.billing && state.billing.startedAt) ? state.billing.startedAt : Date.now();
   state.billing={plan:billingSel.plan, term:billingSel.term, since:Date.now(), startedAt:keepStart, lockedDiscount:lockableDiscountPct(), card:'•••• 4242'};
@@ -3850,9 +3995,11 @@ function authBoxHtml(){
 }
 function planCardHtml(p){
   const info=PLAN_INFO[p]; const sel=billingSel.plan===p; const price=info.price[billingSel.term];
+  const total=info.total?info.total[billingSel.term]:price;
+  const sub = billingSel.term==='1m' ? '' : `<div class="plan-sub">${TERM_INFO[billingSel.term].label}まとめて ¥${total.toLocaleString()}</div>`;
   return `<div class="plan-card${sel?' sel':''}" onclick="billingPickPlan('${p}')">
     ${p==='premium'?`<div class="plan-badge">おすすめ</div>`:''}
-    <div class="plan-card-top"><div class="plan-name">${info.name}</div><div class="plan-price">¥${price.toLocaleString()}<small>/月</small></div></div>
+    <div class="plan-card-top"><div class="plan-name">${info.name}</div><div class="plan-price-wrap"><div class="plan-price">¥${price.toLocaleString()}<small>/月</small></div>${sub}</div></div>
     <ul class="plan-feats">${info.feats.map(f=>`<li>${I.check} <span>${f}</span></li>`).join('')}</ul>
   </div>`;
 }
@@ -3861,7 +4008,9 @@ function renderBilling(){
   const cur=state.billing||{plan:'free'};
   if(billingStep==='checkout'){
     const price=PLAN_INFO[billingSel.plan].price[billingSel.term];
-    const disc=lockableDiscountPct(); const fin=priceAt(price, disc); const lo=loyaltyDiscountPct(), re=referralDiscountPct();
+    const totalBase=PLAN_INFO[billingSel.plan].total?PLAN_INFO[billingSel.plan].total[billingSel.term]:price;
+    const disc=lockableDiscountPct(); const fin=priceAt(price, disc); const finTotal=priceAt(totalBase, disc); const lo=loyaltyDiscountPct(), re=referralDiscountPct();
+    const isMulti=billingSel.term!=='1m';
     v.innerHTML=`
       <div class="topbar"><h1>お支払い</h1><button class="icon-btn x-btn" onclick="billingToPlans()" style="box-shadow:none;background:transparent">✕</button></div>
       <div class="bill-sum">
@@ -3869,9 +4018,10 @@ function renderBilling(){
         ${disc>0?`<div class="bill-sum-row"><span>通常料金</span><b style="text-decoration:line-through;color:var(--ink-3)">¥${price.toLocaleString()} / 月</b></div>
         ${lo>0?`<div class="bill-sum-row"><span>継続割引</span><b style="color:var(--green-d)">−${lo}%</b></div>`:''}
         ${re>0?`<div class="bill-sum-row"><span>紹介割引</span><b style="color:var(--green-d)">−${re}%</b></div>`:''}`:''}
-        <div class="bill-sum-row"><span>お支払い</span><b>¥${fin.toLocaleString()} / 月</b></div>
+        <div class="bill-sum-row"><span>実質</span><b>¥${fin.toLocaleString()} / 月</b></div>
+        <div class="bill-sum-row bill-sum-total"><span>お支払い総額</span><b>¥${finTotal.toLocaleString()}${isMulti?` <small>（${TERM_INFO[billingSel.term].label}ぶん）</small>`:' / 月'}</b></div>
       </div>
-      <div class="d" style="margin:8px 2px 0;color:var(--green-d)">この割引率（−${disc}%）は<b>課金時点で確定</b>し、${TERM_INFO[billingSel.term].label}の間は変わりません。</div>
+      <div class="d" style="margin:8px 2px 0;color:var(--green-d)">${disc>0?`この割引率（−${disc}%）は<b>課金時点で確定</b>し、${TERM_INFO[billingSel.term].label}の間は変わりません。`:`${TERM_INFO[billingSel.term].label}ごとに自動更新されます。`}</div>
       <div class="section-title">カード情報（デモ）</div>
       <div class="set-group">
         <div class="field"><label>カード番号</label><input id="ccNum" inputmode="numeric" placeholder="4242 4242 4242 4242" value="4242 4242 4242 4242" /></div>
@@ -3881,7 +4031,7 @@ function renderBilling(){
         </div>
         <div class="field"><label>カード名義</label><input id="ccName" placeholder="TARO YAMADA" /></div>
       </div>
-      <button class="btn btn-primary full" style="padding:15px" onclick="billingConfirm()">¥${fin.toLocaleString()}/月で登録する</button>
+      <button class="btn btn-primary full" style="padding:15px" onclick="billingConfirm()">¥${finTotal.toLocaleString()}${isMulti?'':'/月'}で登録する</button>
       <div class="d" style="text-align:center;margin-top:12px">※これはデモの支払い画面です。実際の決済・課金は行われず、入力情報は保存されません。</div>`;
     return;
   }
@@ -4310,6 +4460,7 @@ function init(){
   // build settings once (it's rendered on demand too)
   renderSettings();
   renderHome();
+  handleCheckoutReturn();
   cloudInit();
   // register a tiny service worker for offline (best-effort, ignored on file://)
   if('serviceWorker' in navigator && location.protocol==='https:'){
