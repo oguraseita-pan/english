@@ -1091,6 +1091,7 @@ function studyDaysThisMonth(){
   return Object.keys(state.stats.reviews||{}).filter(d=>d.slice(0,7)===ym && (state.stats.reviews[d]||0)>0).length;
 }
 const STREAK_GOAL_DAYS=20;
+const SHOW_AI_SETTINGS=false; // 基本はアプリ提供AI（課金）に誘導するため、個人APIキー設定は非表示
 let _streakJustUp=false;
 // ホームのワンタッチ学習
 function reviewablePool(){ return Object.values(state.cards).filter(c=>c.type!=='text' && c.srs); }
@@ -1139,10 +1140,20 @@ function startCompoSrs(){
   renderCompo();
 }
 
-// ===== 学習時間トラッキング =====
-let _sessionStart=0;
-function startTimer(){ _sessionStart=Date.now(); }
-function recordTime(){ if(!_sessionStart) return; const sec=Math.round((Date.now()-_sessionStart)/1000); _sessionStart=0; if(sec>0&&sec<3600){ const d=todayStr(); if(!state.stats.time) state.stats.time={}; state.stats.time[d]=(state.stats.time[d]||0)+sec; } }
+// ===== 学習時間トラッキング（裏に回る/3分無操作で計測を停止） =====
+let _timeAccum=0, _timeMark=0, _lastAct=0, _timeIntv=null;
+const IDLE_MS=3*60*1000; // 3分操作がなければ放置とみなす
+function studySessionActive(){ return !!(typeof session!=='undefined'&&session) || !!(typeof compo!=='undefined'&&compo); }
+function ensureTimeListeners(){
+  if(_timeIntv) return;
+  const act=()=>{ _lastAct=Date.now(); if(!_timeMark && studySessionActive() && !document.hidden) _timeMark=Date.now(); };
+  document.addEventListener('pointerdown', act, true);
+  document.addEventListener('keydown', act, true);
+  document.addEventListener('visibilitychange', ()=>{ if(document.hidden){ if(_timeMark){ _timeAccum+=Date.now()-_timeMark; _timeMark=0; } } else { _lastAct=Date.now(); if(!_timeMark && studySessionActive()) _timeMark=Date.now(); } });
+  _timeIntv=setInterval(()=>{ if(_timeMark && (Date.now()-_lastAct>IDLE_MS)){ _timeAccum+=Date.now()-_timeMark; _timeMark=0; } }, 15000);
+}
+function startTimer(){ _timeAccum=0; _timeMark=Date.now(); _lastAct=Date.now(); ensureTimeListeners(); }
+function recordTime(){ if(_timeMark){ _timeAccum+=Date.now()-_timeMark; _timeMark=0; } const sec=Math.round(_timeAccum/1000); _timeAccum=0; if(sec>0&&sec<7200){ const d=todayStr(); if(!state.stats.time) state.stats.time={}; state.stats.time[d]=(state.stats.time[d]||0)+sec; } }
 
 // ===== AI生成（プリセットを学習し尽くした時のフォールバック） =====
 async function aiGenWords(n){
@@ -1236,25 +1247,6 @@ function renderHome(){
       ${todayRow(I.flame||I.refresh,'本日の復習','忘却曲線で復習（最大10問）',false,dueN>0?'quickReview()':'reviewNone()', dueN>0?`<span class="td-go">${dueN}問 ›</span>`:`<span class="td-none">なし</span>`)}
     </div>
 
-    ${(()=>{ const sd=studyDaysThisMonth(); const pct=Math.min(100,Math.round(sd/STREAK_GOAL_DAYS*100)); const done=sd>=STREAK_GOAL_DAYS; return `
-    <div class="streak-card ${done?'done':''}">
-      <div class="streak-top">
-        <div class="streak-flame ${state.stats.streak>0?'lit':''}">🔥</div>
-        <div>
-          <div class="streak-n">${state.stats.streak}<small>日連続</small></div>
-          <div class="streak-sub">${done?'今月の継続条件を達成！🎉':`今月の学習 ${sd} / ${STREAK_GOAL_DAYS}日`}</div>
-        </div>
-      </div>
-      <div class="streak-bar"><div class="streak-fill" style="width:${pct}%"></div></div>
-      <div class="streak-note">${done?'割引の継続条件（月20日以上）を満たしています':`割引の継続条件まであと <b>${STREAK_GOAL_DAYS-sd}</b> 日`}</div>
-    </div>`; })()}
-
-    <div class="stat-row">
-      <div class="tile"><div class="v">${learned}</div><div class="k">習得中</div></div>
-      <div class="tile"><div class="v">${total}</div><div class="k">総カード</div></div>
-      <div class="tile"><div class="v">${totMin}<small style="font-size:.6em">分</small></div><div class="k">今週の学習</div></div>
-    </div>
-
     <div class="section-title">サッとメモ・翻訳</div>
     <div class="quickadd">
       <input id="qaInput" placeholder="単語・フレーズ・文を入力…" onkeydown="if(event.key==='Enter')quickAdd()" />
@@ -1263,6 +1255,26 @@ function renderHome(){
     </div>
     <div style="font-size:.74rem;color:var(--ink-3);margin:7px 4px 0">＋でメモに保存（受信箱）。訳ボタンで英⇄日をすばやく翻訳します。</div>
     <div id="qaTrans">${transPanelHtml()}</div>
+
+    ${(()=>{ const sd=studyDaysThisMonth(); const pct=Math.min(100,Math.round(sd/STREAK_GOAL_DAYS*100)); const monthOk=sd>=STREAK_GOAL_DAYS;
+      const lm=loyaltyMonths(); const lpct=loyaltyDiscountPct(); const nx=loyaltyNext(); const done=lpct>=25; return `
+    <div class="streak-card ${done?'done':''}">
+      <div class="streak-top">
+        <div class="streak-flame ${state.stats.streak>0?'lit':''}">🔥</div>
+        <div>
+          <div class="streak-n">${state.stats.streak}<small>日連続</small></div>
+          <div class="streak-sub">継続割引 <b style="color:var(--green-d)">${lpct}%</b>（連続 ${lm}ヶ月達成）</div>
+        </div>
+      </div>
+      <div class="streak-bar"><div class="streak-fill" style="width:${pct}%"></div></div>
+      <div class="streak-note">${monthOk?`✅ 今月は達成（${sd}/${STREAK_GOAL_DAYS}日）`:`今月の学習 ${sd}/${STREAK_GOAL_DAYS}日 — 月20日で「達成」`}${nx?` ・ あと${Math.max(0,nx.months-lm)}ヶ月継続で<b>${nx.pct}%</b>`:` ・ 最高ランク達成！🎉`}</div>
+    </div>`; })()}
+
+    <div class="stat-row">
+      <div class="tile"><div class="v">${learned}</div><div class="k">習得中</div></div>
+      <div class="tile"><div class="v">${total}</div><div class="k">総カード</div></div>
+      <div class="tile"><div class="v">${totMin}<small style="font-size:.6em">分</small></div><div class="k">今週の学習</div></div>
+    </div>
 
     <div class="section-title">学習時間（この1週間）</div>
     <div class="card">
@@ -3419,9 +3431,17 @@ function authNextSignup(){
 }
 function planLabel(){ const b=state.billing||{}; const p=PLAN_INFO[b.plan]||PLAN_INFO.free; return b.plan==='free'?p.name:(p.name+'（'+(TERM_INFO[b.term]?TERM_INFO[b.term].label:'')+'）'); }
 // ===== 紹介システム =====
-function referralDiscountPct(){ const r=state.referral||{}; return Math.min(50,((r.usedCode&&r.usedCodeReferrerPaid)?10:0)+(r.referredPaidCount||0)*10); }
-function referralActive(){ const paid=(state.billing&&state.billing.plan&&state.billing.plan!=='free'); return !!paid && studyDaysThisMonth()>=STREAK_GOAL_DAYS; }
-function effectiveDiscountPct(){ return referralActive()?referralDiscountPct():0; }
+function selfPaid(){ return !!(state.billing && state.billing.plan && state.billing.plan!=='free'); }
+// 紹介割引：自分が紹介し、かつ有料プランの人数 × 5%（上限25%）
+function referralDiscountPct(){ const r=state.referral||{}; return Math.min(25,(r.referredPaidCount||0)*5); }
+// 継続割引：連続達成「月数」による（達成月の翌月から有効＝当月は前月までで数える）
+function studyDaysInMonth(ym){ return Object.keys(state.stats.reviews||{}).filter(d=>d.slice(0,7)===ym && (state.stats.reviews[d]||0)>0).length; }
+function monthQualifies(ym){ return studyDaysInMonth(ym)>=STREAK_GOAL_DAYS; } // 月20日以上（週5日ペース）
+function loyaltyMonths(){ let c=0; const d=new Date(); d.setDate(1); for(let i=0;i<24;i++){ d.setMonth(d.getMonth()-1); if(monthQualifies(d.toISOString().slice(0,7))) c++; else break; } return c; }
+const LOYALTY_TIERS=[[1,5],[2,10],[3,15],[6,20],[12,25]];
+function loyaltyDiscountPct(){ const m=loyaltyMonths(); let p=0; for(const tr of LOYALTY_TIERS){ if(m>=tr[0]) p=tr[1]; } return p; }
+function loyaltyNext(){ const m=loyaltyMonths(); for(const tr of LOYALTY_TIERS){ if(m<tr[0]) return {months:tr[0], pct:tr[1]}; } return null; }
+function effectiveDiscountPct(){ if(!selfPaid()) return 0; return Math.min(50, referralDiscountPct()+loyaltyDiscountPct()); }
 function discountedPrice(base){ return Math.round(base*(1-effectiveDiscountPct()/100)); }
 function normCode(s){ return (s||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,''); }
 async function upsertPlanStatus(){
@@ -3474,32 +3494,33 @@ async function applyReferralCode(){
     if(refUser===account.user.id){ toast('自分のコードは使えません'); return; }
     const { error }=await _sb.from('referrals').insert({ referee_user_id:account.user.id, referrer_code:code, referrer_user_id:refUser });
     if(error){ toast(/duplicate|unique/i.test(error.message||'')?'既にコードを使用済みです':('適用に失敗：'+error.message)); return; }
-    state.referral.usedCode=code; save(); toast('招待コードを適用しました（10%割引）'); renderSettings();
+    state.referral.usedCode=code; save(); toast('招待コードを適用しました'); renderSettings();
   }catch(e){ toast('適用に失敗：'+(e.message||'')); }
 }
 function referralBoxHtml(){
-  const r=state.referral||{}; const pct=referralDiscountPct(); const active=referralActive();
-  const paid=(state.billing&&state.billing.plan!=='free'); const days=studyDaysThisMonth();
+  const r=state.referral||{}; const pct=referralDiscountPct(); const paid=selfPaid();
+  const active=paid && pct>0;
   return `
     <div class="ref-disc ${active?'on':''}">
       <div class="ref-disc-n">${pct}%<small>割引</small></div>
-      <div class="ref-disc-s">${active?'適用中':'条件を満たすと適用'}</div>
+      <div class="ref-disc-s">${active?'適用中':(pct>0?'有料プランで適用':'紹介で割引')}</div>
     </div>
     <div class="ref-cond">
-      <div class="ref-cond-row">${paid?'✅':'⬜️'} 有料プランに加入している</div>
-      <div class="ref-cond-row">${days>=STREAK_GOAL_DAYS?'✅':'⬜️'} 今月の学習が20日以上（現在 ${days}日）</div>
+      <div class="ref-cond-row">${paid?'✅':'⬜️'} あなたが有料プランに加入している（割引を受ける条件）</div>
+      <div class="ref-cond-row">🎁 あなたのコードを使った人が<b>有料プラン</b>になるごとに <b>+5%</b>（最大25%）</div>
     </div>
     <div class="field" style="margin-top:14px"><label>あなたの招待コード</label>
       ${r.myCode?`<div class="key-set"><span class="lbl" style="font-family:var(--font-en);font-weight:700;letter-spacing:.05em">${esc(r.myCode)}</span><button class="btn btn-ghost" style="padding:7px 13px" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(r.myCode)}');toast('コピーしました')">コピー</button></div>
-      <div class="d">このコードを使ってもらうと、使った相手と<b>あなた</b>がそれぞれ10%割引（最大50%）。</div>`
+      <div class="d">友達にこのコードを使ってもらい、その人が有料プランになると、あなたの割引が5%増えます（最大25%）。</div>`
       :`<div style="display:flex;gap:8px"><input id="myCodeInput" placeholder="好きなコード（英数字4〜20）" style="flex:1" /><button class="btn btn-primary" style="padding:10px 16px" onclick="claimReferralCode()">発行</button></div>
       <div class="d">重複していなければ、好きな文字列を設定できます。</div>`}
     </div>
     <div class="field"><label>招待コードを使う</label>
-      ${r.usedCode?`<div class="d">適用済み：<b>${esc(r.usedCode)}</b>（10%割引）</div>`
-      :`<div style="display:flex;gap:8px"><input id="useCodeInput" placeholder="友達のコードを入力" style="flex:1" /><button class="btn btn-primary" style="padding:10px 16px" onclick="applyReferralCode()">適用</button></div>`}
+      ${r.usedCode?`<div class="d">適用済み：<b>${esc(r.usedCode)}</b></div>`
+      :`<div style="display:flex;gap:8px"><input id="useCodeInput" placeholder="友達のコードを入力" style="flex:1" /><button class="btn btn-primary" style="padding:10px 16px" onclick="applyReferralCode()">適用</button></div>
+      <div class="d">あなたを紹介してくれた人を応援できます。</div>`}
     </div>
-    <div class="d" style="margin-top:4px">紹介された人数：${r.referredCount||0}人（うち有料：${r.referredPaidCount||0}人）。割引は<b>あなたと相手の双方が有料プラン</b>で、かつ上記2条件を満たす月のみ有効です。</div>`;
+    <div class="d" style="margin-top:4px">紹介した人数：${r.referredCount||0}人（うち有料：${r.referredPaidCount||0}人）→ 紹介割引 ${pct}%</div>`;
 }
 function openBilling(){ billingStep='plans'; billingSel={plan:(state.billing&&state.billing.plan!=='free'?state.billing.plan:'light'), term:(state.billing&&state.billing.term)||'12m'}; refreshReferral(); renderSettings(); }
 function closeBilling(){ billingStep=null; renderSettings(); }
@@ -3611,13 +3632,14 @@ function renderBilling(){
   const cur=state.billing||{plan:'free'};
   if(billingStep==='checkout'){
     const price=PLAN_INFO[billingSel.plan].price[billingSel.term];
-    const disc=effectiveDiscountPct(); const fin=discountedPrice(price);
+    const disc=effectiveDiscountPct(); const fin=discountedPrice(price); const lo=selfPaid()?loyaltyDiscountPct():0; const re=selfPaid()?referralDiscountPct():0;
     v.innerHTML=`
       <div class="topbar"><h1>お支払い</h1><button class="icon-btn x-btn" onclick="billingToPlans()" style="box-shadow:none;background:transparent">✕</button></div>
       <div class="bill-sum">
         <div class="bill-sum-row"><span>プラン</span><b>${PLAN_INFO[billingSel.plan].name} ・ ${TERM_INFO[billingSel.term].label}</b></div>
         ${disc>0?`<div class="bill-sum-row"><span>通常料金</span><b style="text-decoration:line-through;color:var(--ink-3)">¥${price.toLocaleString()} / 月</b></div>
-        <div class="bill-sum-row"><span>紹介割引</span><b style="color:var(--green-d)">−${disc}%</b></div>`:''}
+        ${lo>0?`<div class="bill-sum-row"><span>継続割引</span><b style="color:var(--green-d)">−${lo}%</b></div>`:''}
+        ${re>0?`<div class="bill-sum-row"><span>紹介割引</span><b style="color:var(--green-d)">−${re}%</b></div>`:''}`:''}
         <div class="bill-sum-row"><span>お支払い</span><b>¥${fin.toLocaleString()} / 月</b></div>
       </div>
       <div class="section-title">カード情報（デモ）</div>
@@ -3638,7 +3660,7 @@ function renderBilling(){
   v.innerHTML=`
     <div class="topbar"><h1>プラン</h1><button class="icon-btn x-btn" onclick="closeBilling()" style="box-shadow:none;background:transparent">✕</button></div>
     <div class="bill-cur">現在のプラン：<b>${planLabel()}</b></div>
-    ${disc>0?`<div class="bill-disc-banner">🎉 紹介割引 −${disc}% が適用中です</div>`:(referralDiscountPct()>0?`<div class="bill-disc-banner muted">紹介割引 ${referralDiscountPct()}%（有料プラン＋月20日学習で有効）</div>`:'')}
+    ${disc>0?`<div class="bill-disc-banner">🎉 割引 −${disc}% 適用中（継続 ${loyaltyDiscountPct()}% ＋ 紹介 ${referralDiscountPct()}%）</div>`:((loyaltyDiscountPct()+referralDiscountPct())>0?`<div class="bill-disc-banner muted">継続 ${loyaltyDiscountPct()}% ＋ 紹介 ${referralDiscountPct()}%（有料プランに加入すると有効）</div>`:'')}
     <div class="bill-terms">${['12m','3m','1m'].map(t=>`<button class="bill-term${billingSel.term===t?' sel':''}" onclick="billingPickTerm('${t}')">${TERM_INFO[t].label}${TERM_INFO[t].sub?`<small>${TERM_INFO[t].sub}</small>`:''}</button>`).join('')}</div>
     ${['light','premium'].map(planCardHtml).join('')}
     <button class="btn btn-primary full" style="padding:15px;margin-top:4px" onclick="billingToCheckout()">${PLAN_INFO[billingSel.plan].name}にする（¥${discountedPrice(baseSel).toLocaleString()}/月）</button>
@@ -3682,7 +3704,7 @@ function renderSettings(){
     <div class="section-title">招待コード（紹介で割引）</div>
     <div class="set-group">${referralBoxHtml()}</div>`:''}
 
-    <div class="section-title">AI連携</div>
+    ${SHOW_AI_SETTINGS?`<div class="section-title">AI連携</div>
     <div class="set-group">
       <div class="set-row" style="cursor:pointer" onclick="aiSectionOpen=!aiSectionOpen;renderSettings()">
         <div><div class="l">AI連携の設定</div><div class="d">${managedAI()?'アプリのAIが有効（キー不要）':(s.aiProvider==='none'?'オフ ・ タップして設定':(aiProviderName()+(aiKey()?' ・ 設定済み':' ・ 未設定')))}</div></div>
@@ -3743,7 +3765,7 @@ function renderSettings(){
       `:''}
       ${s.aiProvider==='none'?`<div class="field" style="text-align:center;color:var(--ink-2)">AIはオフです。いつでもここからオンにできます。</div>`:''}
     `:''}
-    </div>
+    </div>`:''}
 
     <div class="section-title">学習の目的</div>
     <div class="set-group">
