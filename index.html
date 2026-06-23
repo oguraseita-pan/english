@@ -1366,7 +1366,7 @@ function renderDiary(){
   }
   v.innerHTML=`<div class="study-wrap">
     <div class="topbar"><h1>本日の英語日記</h1><button class="icon-btn x-btn" onclick="exitDiary()" style="box-shadow:none;background:transparent">✕</button></div>
-    <div class="d" style="margin:0 0 10px">${dateLabel}・今日の出来事を英語で書いてみましょう。AIが添削して正解例とフィードバックを返します。</div>
+    <div class="d" style="margin:0 0 10px">${dateLabel}・今日は何をしましたか？</div>
     <textarea id="diaryInput" rows="9" placeholder="Today I ..." style="width:100%;font-size:1rem;line-height:1.6;padding:14px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface)" oninput="diaryS.text=this.value">${esc(d.text)}</textarea>
     <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
       <button class="mic-btn" id="diaryMic" onclick="toggleDictation('diaryInput', this)" aria-label="音声入力">${I.mic}</button>
@@ -2481,7 +2481,7 @@ function endSessionEarly(){ recordTime(); const home=session&&session.fromHome; 
 /* ====================================================================
    READING (AIが記事を生成・タップで訳/カード化)
    ==================================================================== */
-const READ_GENRES=[['news','ニュース'],['business','ビジネス'],['novel','小説'],['daily','日常会話'],['essay','エッセイ'],['science','科学・技術'],['custom','自由に指定']];
+const READ_GENRES=[['daily','日常会話'],['business','ビジネス'],['essay','エッセイ'],['novel','小説'],['news','ニュース'],['science','科学・技術'],['custom','自由に指定']];
 const READ_LEVELS=[['A2','A2','初級'],['B1','B1','中級'],['B2','B2','中上級'],['C1','C1','上級']];
 const READ_LENGTHS=[[100,'短い'],[200,'普通'],[400,'長い']];
 const READ_GENRE_DESC={news:'a short news article',business:'a business / workplace scenario text',novel:'a short fictional story excerpt',daily:'an everyday conversation or diary-style text',essay:'a short opinion essay',science:'an accessible science / technology explainer'};
@@ -3189,6 +3189,13 @@ function migrateThreads(){
   });
   // 旧AI英語日記スレッドはホームの「本日の英語日記」に移行したため、添削スレッドへ変換
   state.threads.forEach(t=>{ if(t.mode==='diary'){ t.mode='correct'; t.title='英文添削'; changed=true; } });
+  // 英文添削スレッドの重複を1つに集約（中身があるものを優先して残す）
+  const corrects=state.threads.filter(t=>t.mode==='correct');
+  if(corrects.length>1){
+    const keep=corrects.find(t=>t.messages&&t.messages.length)||corrects[0];
+    state.threads=state.threads.filter(t=>t.mode!=='correct'||t===keep);
+    changed=true;
+  }
   if(changed) save();
 }
 function getThread(id){ return state.threads.find(t=>t.id===id); }
@@ -4056,6 +4063,11 @@ function renderSettings(){
       <div class="set-row"><div><div class="l">バージョン</div></div><span style="color:var(--ink-3)">${APP_VERSION}</span></div>
     </div>
     <div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:10px">Sprout · ${loggedIn()?'データはクラウドに保存・同期されています':'データはこの端末に保存されます<br>定期的にバックアップの書き出しをおすすめします'}</div>
+    <div class="section-title" style="color:var(--r-again)">学習データ</div>
+    <div class="set-group">
+      <button class="btn btn-ghost full" style="padding:12px;color:var(--r-again);border:1px solid var(--line)" onclick="resetLearningData()">学習履歴を削除</button>
+      <div class="d" style="margin-top:8px">ノート（フォルダ・カード）と学習の進捗・学習時間の履歴が初期化されます。連続学習日数は保持され、ログイン情報・プランはそのままです。</div>
+    </div>
     ${(cloudConfigured()&&loggedIn()&&!authRecovery)?`
     <div class="section-title" style="color:var(--r-again)">アカウント</div>
     <div class="set-group">
@@ -4093,6 +4105,19 @@ function importData(input){
     }catch(e){ toast('読み込めませんでした（ファイル形式を確認）'); }
   };
   r.readAsText(file); input.value='';
+}
+function resetLearningData(){
+  if(!confirm('学習データを初期化します。\n・ノート（フォルダ・カード）\n・追加した単語／メモ／英語日記\n・学習の進捗（習得状況・忘却曲線）と学習時間の履歴\nが削除され、初期サンプルの状態に戻ります。\n（連続学習日数はそのまま／ログイン情報・プランは保持されます）\n\nこの操作は取り消せません。続けますか？')) return;
+  const keep={ reviews: state.stats.reviews||{}, streak: state.stats.streak||0, lastStudy: state.stats.lastStudy||null };
+  state.folders={}; state.cards={};
+  state.progress={}; state.compoSrs={};
+  state.history={compo:[],speech:[]};
+  state.threads=[]; state.aiThreadSeed=false;
+  state.stats={ reviews:keep.reviews, streak:keep.streak, lastStudy:keep.lastStudy, time:{}, dailyCount:{date:null, words:0, idioms:0, compo:0, reviews:0} };
+  state.seeded=false; seed();
+  if(typeof ensureThreads==='function') ensureThreads();
+  save(); renderSettings();
+  toast('学習履歴を初期化しました（連続学習日数は保持）');
 }
 function resetAll(){
   if(!confirm('すべてのデータを消去します。\n・追加した単語／ノート／英語日記\n・学習履歴と進捗（暗記・テスト・日記）\n・設定（APIキーや好みも初期化）\nを消して、初期サンプルの状態に戻します。\nログイン中の場合は、次回の同期でクラウド側にも反映されます。\n\nこの操作は取り消せません。続けますか？')) return;
