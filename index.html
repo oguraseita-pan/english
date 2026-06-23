@@ -144,6 +144,9 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .td-done svg{width:14px;height:14px;}
 .td-go{display:inline-flex;align-items:center;color:#fff;background:var(--green);font-weight:700;font-size:.84rem;padding:6px 13px;border-radius:999px;box-shadow:0 2px 8px rgba(47,111,94,.3);}
 .td-none{color:var(--ink-3);font-size:.82rem;}
+.save-mini{margin-top:16px;background:transparent;border:1.5px solid var(--line);color:var(--green-d);font-weight:600;font-size:.82rem;padding:8px 16px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;}
+.save-mini svg{width:15px;height:15px;}
+.save-mini:active{background:var(--green-soft);}
 .qa-tile{display:flex;align-items:center;gap:11px;background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:14px;text-align:left;}
 .qa-tile:active{transform:scale(.98);}
 .qa-ic{width:38px;height:38px;border-radius:11px;background:var(--green-soft);color:var(--green-d);display:flex;align-items:center;justify-content:center;flex:none;}
@@ -673,8 +676,8 @@ function defaultState(){
   return {
     folders:{}, cards:{},
     threads:[], aiThreadSeed:false,
-    settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:0.9, newPerDay:20, goal:'daily', goalLevel:'B1', goalWords:20, goalIdioms:15, goalCompo:10 },
-    stats:{ reviews:{}, streak:0, lastStudy:null, time:{}, dailyDone:{date:null, words:false, compo:false} },
+    settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:0.9, newPerDay:20, goal:'daily', goalLevel:'B1', goalWords:20, goalIdioms:10, goalCompo:5, reviewPerSession:10 },
+    stats:{ reviews:{}, streak:0, lastStudy:null, time:{}, dailyCount:{date:null, words:0, idioms:0, compo:0} },
     history:{ compo:[], speech:[] },
     seeded:false
   };
@@ -683,7 +686,8 @@ function normalizeState(){
   state.settings = Object.assign(defaultState().settings, state.settings || {});
   if(!state.stats) state.stats = defaultState().stats;
   if(!state.stats.time || typeof state.stats.time!=='object') state.stats.time={};
-  if(!state.stats.dailyDone || typeof state.stats.dailyDone!=='object') state.stats.dailyDone={date:null,words:false,compo:false};
+  if(!state.stats.dailyCount || typeof state.stats.dailyCount!=='object') state.stats.dailyCount={date:null,words:0,idioms:0,compo:0};
+  if(typeof state.settings.reviewPerSession!=='number') state.settings.reviewPerSession=10;
   if(!state.progress || typeof state.progress!=='object') state.progress = {}; // preset/idiom 学習進捗（永続SRS）
   if(!state.history || typeof state.history!=='object') state.history = {compo:[],speech:[]};
   if(!state.billing || typeof state.billing!=='object') state.billing = {plan:'free', term:null, since:null, card:null};
@@ -1105,9 +1109,11 @@ function goalCat(){ return PRESET_LIB.find(c=>c.id===state.settings.goal); }
 function goalLevelObj(){ const c=goalCat(); return c&&c.levels.find(l=>l.id===state.settings.goalLevel); }
 
 // ===== 本日の学習：完了トラッキング =====
-function ensureDaily(){ const t=todayStr(); if(!state.stats.dailyDone||state.stats.dailyDone.date!==t){ state.stats.dailyDone={date:t,words:false,compo:false}; } }
-function isDailyDone(kind){ ensureDaily(); return !!state.stats.dailyDone[kind]; }
-function markDaily(kind){ ensureDaily(); state.stats.dailyDone[kind]=true; save(); }
+function ensureDaily(){ const t=todayStr(); if(!state.stats.dailyCount||state.stats.dailyCount.date!==t){ state.stats.dailyCount={date:t,words:0,idioms:0,compo:0}; } }
+function dailyCount(kind){ ensureDaily(); return state.stats.dailyCount[kind]||0; }
+function dailyGoal(kind){ return kind==='words'?(state.settings.goalWords||20):kind==='idioms'?(state.settings.goalIdioms||10):(state.settings.goalCompo||5); }
+function isDailyDone(kind){ return dailyCount(kind)>=dailyGoal(kind); }
+function incDaily(kind, n){ ensureDaily(); state.stats.dailyCount[kind]=(state.stats.dailyCount[kind]||0)+(n||1); }
 
 // ===== 本日の復習：期限到来の単語（カード＋プリセット）を集計 =====
 function dueCardItems(){ const t=now(); return reviewablePool().filter(c=>c.srs.state!=='new'&&c.srs.due<=t); }
@@ -1204,8 +1210,9 @@ async function quickCompo3(){
 
 // ===== 本日の復習：期限到来の単語を忘却曲線で最大10問 =====
 function quickReview(){
-  const items=dueReviewItems().slice(0,10);
-  if(items.length===0){ toast('いま復習が必要な単語はありません'); return; }
+  const n=Math.max(1, state.settings.reviewPerSession||10);
+  const items=dueReviewItems().slice(0,n);
+  if(items.length===0){ toast('いま復習が必要な単語・熟語はありません'); return; }
   setTab('study'); startTimer();
   session={ items, qi:0, total:items.length, flipped:false, results:[], openIdx:null, catName:'本日の復習', style:'srs', fromHome:true, daily:null };
   renderStudySession();
@@ -1217,7 +1224,10 @@ function renderHome(){
   const total = all.length;
   const hour = new Date().getHours();
   const greet = hour<5?'こんばんは':hour<11?'おはよう':hour<18?'こんにちは':'こんばんは';
-  const wDone=isDailyDone('words'), cDone=isDailyDone('compo');
+  const wDone=isDailyDone('words'), cDone=isDailyDone('compo'), iDone=isDailyDone('idioms');
+  const wN=dailyCount('words'), wG=dailyGoal('words');
+  const cN=dailyCount('compo'), cG=dailyGoal('compo');
+  const iN=dailyCount('idioms'), iG=dailyGoal('idioms');
   const dueN=dueReviewCount();
   // last 7 days study time (minutes)
   const days=[]; for(let i=6;i>=0;i--){ const d=new Date(Date.now()-i*DAY); days.push(d.toISOString().slice(0,10)); }
@@ -1231,6 +1241,7 @@ function renderHome(){
       <div class="today-tx"><div class="today-t">${t}</div><div class="today-s">${sub}</div></div>
       <div class="today-state">${badge}</div>
     </button>`;
+  const badge=(done,n,g)=>done?`<span class="td-done">${I.check}完了</span>`:`<span class="td-go">${n}/${g} ›</span>`;
 
   document.getElementById('view-home').innerHTML = `
     <div class="topbar">
@@ -1242,9 +1253,9 @@ function renderHome(){
 
     <div class="section-title">本日の学習</div>
     <div class="today-card">
-      ${todayRow(I.cards||I.book||I.check,'本日の単語',`${goalLabel()}・${goalLevelLabel()}`,wDone,'quickStudy10()', wDone?`<span class="td-done">${I.check}完了</span>`:`<span class="td-go">10問 ›</span>`)}
-      ${todayRow(I.pencil||I.edit||I.plus,'瞬間英作文',`${goalLabel()}・3文`,cDone,'quickCompo3()', cDone?`<span class="td-done">${I.check}完了</span>`:`<span class="td-go">3問 ›</span>`)}
-      ${todayRow(I.flame||I.refresh,'本日の復習','忘却曲線で復習（最大10問）',false,dueN>0?'quickReview()':'reviewNone()', dueN>0?`<span class="td-go">${dueN}問 ›</span>`:`<span class="td-none">なし</span>`)}
+      ${todayRow(I.cards||I.book||I.check,'本日の単語',`${goalLabel()}・${goalLevelLabel()}`,wDone,'quickStudy10()', badge(wDone,wN,wG))}
+      ${todayRow(I.pencil||I.edit||I.plus,'瞬間英作文',`${goalLabel()}・1日${cG}問`,cDone,'quickCompo3()', badge(cDone,cN,cG))}
+      ${todayRow(I.flame||I.refresh,'本日の復習',`単語・熟語を忘却曲線で復習${dueN>0?`（${dueN}問待ち）`:''}`,iDone,dueN>0?'quickReview()':'reviewNone()', iDone?`<span class="td-done">${I.check}完了</span>`:(dueN>0?`<span class="td-go">${iN}/${iG} ›</span>`:`<span class="td-none">${iN}/${iG}</span>`))}
     </div>
 
     <div class="section-title">サッとメモ・翻訳</div>
@@ -1285,6 +1296,18 @@ function renderHome(){
     </div>`;
 }
 
+// ワンタップでカード（受信箱）に保存：学習中・プリセット・瞬間英作文から
+function saveItemAsCard(o){
+  if(!o||!o.term){ toast('保存できる内容がありません'); return; }
+  const exists=Object.values(state.cards).some(c=>c.type!=='text' && String(c.term||'').toLowerCase()===String(o.term).toLowerCase());
+  if(exists){ toast('「'+o.term+'」は既に保存済みです'); return; }
+  let inbox=Object.values(state.folders).find(f=>f.name==='受信箱'&&f.parentId===null);
+  if(!inbox){ const id=uid(); state.folders[id]={id,name:'受信箱',parentId:null,createdAt:now()}; inbox=state.folders[id]; }
+  const id=uid();
+  state.cards[id]={id,folderId:inbox.id,term:String(o.term),pron:o.pron||'',mean:o.mean||'',exEn:o.exEn||'',exJa:o.exJa||'',other:o.other||'',pos:Array.isArray(o.pos)?o.pos:[],
+    srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now()};
+  save(); toast('「'+o.term+'」を受信箱に保存しました');
+}
 function quickAdd(){
   const inp=document.getElementById('qaInput');
   const term=inp.value.trim();
@@ -2099,7 +2122,7 @@ function pickIdiomChoice(i){
   const it=idiom.items[idiom.idx];
   idiom.userAns=i; idiom.correct=(i===it.ansIdx);
   if(idiom.correct) idiom.score++;
-  if(it.srs){ scheduleSrs(it.srs, idiom.correct?2:0); const d=todayStr(); state.stats.reviews[d]=(state.stats.reviews[d]||0)+1; updateStreak(); save(); }
+  if(it.srs){ scheduleSrs(it.srs, idiom.correct?2:0); const d=todayStr(); state.stats.reviews[d]=(state.stats.reviews[d]||0)+1; updateStreak(); incDaily('idioms'); save(); }
   pushIdiomLog(); idiom.answered=true; renderIdiom();
 }
 function checkIdiomFill(){
@@ -2129,9 +2152,11 @@ function idiomResultRow(r,i,open){
       <div class="blk"><div class="lab">問題</div><div>${esc(r.q).replace('____','（　）')}</div></div>
       <div class="blk"><div class="lab">正解の例文</div><div class="en">${esc(full)} ${spkBtn(full,26)}</div></div>
       ${!r.correct?`<div class="blk"><div class="lab">あなたの解答</div><div>${esc(r.userAns||'(無回答)')}</div></div>`:''}
+      <button class="btn btn-ghost full" style="padding:10px;margin-top:4px" onclick="event.stopPropagation();saveIdiomResult(${i})">${I.plus} カードに保存</button>
     </div>`:''}
   </div>`;
 }
+function saveIdiomResult(i){ const r=idiom&&idiom.log&&idiom.log[i]; if(r) saveItemAsCard({term:r.answer, mean:r.mean, exEn:r.q.replace('____',r.answer), pos:['熟語']}); }
 function renderStudySession(){
   const v=document.getElementById('view-study');
   if(session.qi>=session.items.length){ renderStudyResult(); return; }
@@ -2167,12 +2192,14 @@ function renderStudySession(){
             ${c.exEn?`<div class="b-ex"><div class="en">${esc(c.exEn)}</div>${c.exJa?`<div class="ja">${esc(c.exJa)}</div>`:''}</div>`:''}
             ${(c.pos&&c.pos.length)?`<div class="b-note">${c.pos.map(p=>`<span class="pos-chip">${esc(p)}</span>`).join('')}</div>`:''}
             ${c.other?`<div class="b-note">${esc(c.other)}</div>`:''}
+            <button class="save-mini" onclick="event.stopPropagation();saveCurrentStudyCard()">${I.plus} カードに保存</button>
           </div>
         </div>
       </div>
       ${rateRow}
     </div>`;
 }
+function saveCurrentStudyCard(){ const c=session&&session.items[session.qi]; if(c) saveItemAsCard({term:c.term, mean:c.mean, pron:c.pron, exEn:c.exEn, exJa:c.exJa, pos:c.pos, other:c.other}); }
 function startStudy(pool, style, catName){
   const items=selectItems(pool, style);
   if(!items.length){ toast('学習できるカードがありません'); return; }
@@ -2192,6 +2219,7 @@ function gradeStudy(r){
   scheduleSrs(c.srs, r);
   const d=todayStr(); state.stats.reviews[d]=(state.stats.reviews[d]||0)+1;
   updateStreak();
+  incDaily((c.pos && c.pos.indexOf('熟語')>=0)?'idioms':'words');
   session.results.push({ term:c.term, mean:c.mean, pron:c.pron, exEn:c.exEn, exJa:c.exJa, pos:c.pos, other:c.other, ok:(r>=2) });
   session.qi++; session.flipped=false;
   save();
@@ -2199,7 +2227,7 @@ function gradeStudy(r){
 }
 function renderStudyResult(){
   const v=document.getElementById('view-study');
-  if(!session.recorded){ session.recorded=true; recordTime(); if(session.daily) markDaily(session.daily); }
+  if(!session.recorded){ session.recorded=true; recordTime(); }
   const total=session.results.length, good=session.results.filter(r=>r.ok).length;
   const popped=_streakJustUp; _streakJustUp=false;
   const sd=studyDaysThisMonth(); const remain=Math.max(0,STREAK_GOAL_DAYS-sd);
@@ -2229,9 +2257,11 @@ function studyResultRow(r,i,open){
       ${r.exEn?`<div class="blk"><div class="lab">例文</div><div class="en">${esc(r.exEn)} ${spkBtn(r.exEn,24)}</div>${r.exJa?`<div style="color:var(--ink-2)">${esc(r.exJa)}</div>`:''}</div>`:''}
       ${(r.pos&&r.pos.length)?`<div class="blk">${r.pos.map(p=>`<span class="pos-chip">${esc(p)}</span>`).join('')}</div>`:''}
       ${r.other?`<div class="blk"><div class="lab">その他</div><div style="white-space:pre-wrap;line-height:1.6">${esc(r.other)}</div></div>`:''}
+      <button class="btn btn-ghost full save-from-study" style="padding:10px;margin-top:4px" onclick="event.stopPropagation();saveStudyResult(${i})">${I.plus} カードに保存</button>
     </div>`:''}
   </div>`;
 }
+function saveStudyResult(i){ const r=session&&session.results[i]; if(r) saveItemAsCard({term:r.term, mean:r.mean, pron:r.pron, exEn:r.exEn, exJa:r.exJa, pos:r.pos, other:r.other}); }
 function updateStreak(){
   const t=todayStr();
   if(state.stats.lastStudy===t) return;
@@ -2584,6 +2614,7 @@ function nextCompo(){
     compo.log=compo.log||[];
     compo.log.push({ jp:it.jp, en:it.en, userAns:compo.userAns||'', kind:it.kind, fb:{verdict, comment:fb.comment||'', fixed:fb.fixed||'', alts:fb.alts||[]} });
     recordCompoSrs(it, verdict);
+    incDaily('compo');
   }
   stopDictation();
   compo.idx++; compo.revealed=false; compo.verdict=null; compo.fb=null; compo.checking=false; compo.userAns='';
@@ -2603,13 +2634,13 @@ function renderCompo(){
     const logs=compo.log||[];
     const good=logs.filter(r=>r.fb&&r.fb.verdict==='○').length;
     if(!compo.saved){ compo.saved=true; pushCompoHistory(); }
-    if(!compo.recorded){ compo.recorded=true; recordTime(); if(compo.fromHome) markDaily('compo'); }
+    if(!compo.recorded){ compo.recorded=true; recordTime(); }
     const backLabel=compo.fromHome?'ホームに戻る':'学習に戻る';
     v.innerHTML=`
       <div class="study-top"><button class="icon-btn x-btn" onclick="exitCompoDone()" style="box-shadow:none;background:transparent">✕</button><div class="progress"><div style="width:100%"></div></div><div class="study-count">結果</div></div>
       <div class="compo-result-head">${I.trophy}<div class="big">${good} / ${logs.length}</div><div class="sub2">正解の数</div></div>
       <div class="section-title">解答一覧（タップで解説）</div>
-      <div class="list">${logs.map((r,i)=>compoResultRow(r,i,compo.openIdx===i)).join('')}</div>
+      <div class="list">${logs.map((r,i)=>compoResultRow(r,i,compo.openIdx===i,null,true)).join('')}</div>
       <button class="btn btn-primary full" style="padding:15px;margin-top:16px" onclick="exitCompoDone()">${backLabel}</button>`;
     return; // keep compo alive so rows can expand
   }
@@ -2658,7 +2689,7 @@ function renderCompo(){
     <div class="compo-jp">${esc(it.jp)}</div>
     ${answerArea}`;
 }
-function compoResultRow(r,i,open,onclickExpr){
+function compoResultRow(r,i,open,onclickExpr,canSave){
   const v=(r.fb&&r.fb.verdict)?r.fb.verdict:'－';
   const vc = v==='○'?'o':(v==='×'?'x':'t');
   const fb=r.fb||{};
@@ -2674,9 +2705,11 @@ function compoResultRow(r,i,open,onclickExpr){
       ${fb.comment?`<div class="blk"><div class="lab">コメント</div><div>${esc(fb.comment)}</div></div>`:''}
       ${fb.fixed?`<div class="blk"><div class="lab">自然な形</div><div class="en">${esc(fb.fixed)}</div></div>`:''}
       ${(fb.alts&&fb.alts.length)?`<div class="blk"><div class="lab">言い換え</div><div class="en">${fb.alts.map(a=>esc(a)).join('<br>')}</div></div>`:''}
+      ${canSave?`<button class="btn btn-ghost full" style="padding:10px;margin-top:4px" onclick="event.stopPropagation();saveCompoResult(${i})">${I.plus} お手本をカードに保存</button>`:''}
     </div>`:''}
   </div>`;
 }
+function saveCompoResult(i){ const r=compo&&compo.log&&compo.log[i]; if(r) saveItemAsCard({term:r.en, mean:r.jp, exEn:r.en, exJa:r.jp}); }
 function toggleResult(i){ if(!compo) return; compo.openIdx = (compo.openIdx===i)?null:i; renderCompo(); }
 function pushCompoHistory(){
   if(!compo||!compo.log||!compo.log.length) return;
@@ -3781,17 +3814,21 @@ function renderSettings(){
 
     <div class="section-title">1日の目標</div>
     <div class="set-group">
-      <div class="set-row"><div><div class="l">単語</div><div class="d">1日に学習する目標数</div></div>
+      <div class="set-row"><div><div class="l">単語</div><div class="d">この数を学習すると「本日の単語」が完了</div></div>
         <select id="setGoalWords" onchange="state.settings.goalWords=parseInt(this.value);save()">
           ${[5,10,15,20,30,40,50].map(n=>`<option value="${n}" ${s.goalWords===n?'selected':''}>${n}問</option>`).join('')}
         </select></div>
-      <div class="set-row"><div><div class="l">熟語</div></div>
+      <div class="set-row"><div><div class="l">熟語</div><div class="d">この数を復習すると「本日の復習」が完了</div></div>
         <select id="setGoalIdioms" onchange="state.settings.goalIdioms=parseInt(this.value);save()">
           ${[5,10,15,20,30].map(n=>`<option value="${n}" ${s.goalIdioms===n?'selected':''}>${n}問</option>`).join('')}
         </select></div>
-      <div class="set-row"><div><div class="l">瞬間英作文</div></div>
+      <div class="set-row"><div><div class="l">瞬間英作文</div><div class="d">この数で「瞬間英作文」が完了</div></div>
         <select id="setGoalCompo" onchange="state.settings.goalCompo=parseInt(this.value);save()">
           ${[3,5,10,15,20].map(n=>`<option value="${n}" ${s.goalCompo===n?'selected':''}>${n}問</option>`).join('')}
+        </select></div>
+      <div class="set-row"><div><div class="l">本日の復習：1回の出題数</div><div class="d">一度に出題する問題数（上限）</div></div>
+        <select id="setReviewPer" onchange="state.settings.reviewPerSession=parseInt(this.value);save()">
+          ${[5,10,15,20,30].map(n=>`<option value="${n}" ${s.reviewPerSession===n?'selected':''}>${n}問</option>`).join('')}
         </select></div>
     </div>
 
