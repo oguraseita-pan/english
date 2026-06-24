@@ -1,17 +1,17 @@
 {
-  "name": "Sprout — 英語を育てる",
+  "id": "/",
+  "name": "Sprout",
   "short_name": "Sprout",
-  "description": "単語の暗記から瞬間英作文・1分スピーチまで、AIが添削する英語学習アプリ。",
+  "description": "読む、から、話せるまで。英語学習アプリ Sprout",
   "lang": "ja",
-  "start_url": "./index.html",
-  "scope": "./",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#F4F1E8",
   "theme_color": "#2F6F5E",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icon-180.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" }
   ]
 }
