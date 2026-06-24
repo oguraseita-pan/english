@@ -537,8 +537,16 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .cur-plan-card .cpc-name{font-size:1.18rem;font-weight:700;color:var(--ink-1);}
 .cur-plan-card .cpc-sub{font-size:.8rem;color:var(--ink-3);margin-top:2px;}
 .cur-plan-card .cpc-badge{background:var(--green-d);color:#fff;font-size:.72rem;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;}
-.cur-plan-card .cpc-ai{font-size:.84rem;color:var(--ink-2);margin-top:10px;}
+.cur-plan-card .cpc-ai{font-size:.84rem;color:var(--ink-2);margin-top:14px;}
 .cur-plan-card .cpc-ai b{color:var(--green-d);}
+.cpc-badge.cancel{background:var(--amber-d);}
+.cpc-cancel-note{font-size:.78rem;color:var(--amber-d);margin-top:8px;line-height:1.5;}
+.cpc-ai-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.cpc-ai-reset{font-size:.74rem;color:var(--ink-3);}
+.cpc-ai-bar{height:9px;border-radius:999px;background:rgba(47,111,94,.14);overflow:hidden;}
+.cpc-ai-fill{height:100%;border-radius:999px;background:var(--green);transition:width .4s ease;}
+.cpc-ai-fill.low{background:var(--amber-d);}
+.cpc-ai-low{font-size:.74rem;color:var(--amber-d);margin-top:6px;}
 .pw-wrap{position:relative;}
 .pw-wrap input{width:100%;padding-right:46px;}
 .pw-eye{position:absolute;top:50%;right:6px;transform:translateY(-50%);border:none;background:transparent;color:var(--ink-3);cursor:pointer;padding:8px;display:flex;align-items:center;border-radius:8px;}
@@ -3995,12 +4003,12 @@ async function refreshPlanAfterPortal(){
 async function syncPlanFromServer(){
   if(!STRIPE.enabled || !loggedIn() || !_sb) return;
   try{
-    const r=await _sb.from('plan_status').select('plan,term,status,current_period_end').eq('user_id',account.user.id).maybeSingle();
+    const r=await _sb.from('plan_status').select('plan,term,status,current_period_end,cancel_at_period_end').eq('user_id',account.user.id).maybeSingle();
     const row=r&&r.data; if(!row) return;
     const active = row.plan && row.plan!=='free' && (!row.status || row.status==='active' || row.status==='trialing');
     if(active){
       const keepStart=(state.billing&&state.billing.startedAt)||Date.now();
-      state.billing=Object.assign({}, state.billing||{}, { plan:row.plan, term:row.term||(state.billing&&state.billing.term)||'1m', status:row.status||'active', periodEnd:row.current_period_end||null, startedAt:keepStart, since:Date.now() });
+      state.billing=Object.assign({}, state.billing||{}, { plan:row.plan, term:row.term||(state.billing&&state.billing.term)||'1m', status:row.status||'active', periodEnd:row.current_period_end||null, cancelAtPeriodEnd:!!row.cancel_at_period_end, startedAt:keepStart, since:Date.now() });
     } else if(state.billing && state.billing.plan && state.billing.plan!=='free'){
       state.billing={plan:'free', term:null, since:null, startedAt:null, card:null};
     }
@@ -4172,14 +4180,24 @@ function currentPlanCardHtml(){
   const termLabel=TERM_INFO[b.term]?TERM_INFO[b.term].label:'';
   const end=b.periodEnd?new Date(b.periodEnd):null;
   const endStr=(end&&!isNaN(end.getTime()))?end.toLocaleDateString('ja-JP'):'';
+  const cancelling=!!b.cancelAtPeriodEnd;
+  const dateLine = endStr ? (cancelling?`有効期限 ${endStr}`:`次回更新 ${endStr}`) : '';
+  const sub = [termLabel, dateLine].filter(Boolean).join(' ・ ');
   const cap=aiDailyCap(), rem=aiRemaining();
+  const pct = cap>0 ? Math.max(0, Math.min(100, Math.round(rem/cap*100))) : 0;
+  const low = pct<=15;
   return `<div class="cur-plan-card">
     <div class="cpc-top">
-      <div><div class="cpc-name">${esc(info.name||b.plan||'')}</div><div class="cpc-sub">${esc(termLabel)}${endStr?` ・ 次回更新 ${endStr}`:''}</div></div>
-      <span class="cpc-badge">ご利用中</span>
+      <div><div class="cpc-name">${esc(info.name||b.plan||'')}</div><div class="cpc-sub">${esc(sub)}</div></div>
+      <span class="cpc-badge${cancelling?' cancel':''}">${cancelling?'解約予定':'ご利用中'}</span>
     </div>
-    <div class="cpc-ai">本日のAI 残り <b>${rem}</b> / ${cap} 回${aiCanAdReset()?'':''}</div>
-    <button class="btn btn-ghost full" style="padding:12px;margin-top:12px" onclick="openCustomerPortal()">プラン変更・解約（管理ページ）</button>
+    ${cancelling?`<div class="cpc-cancel-note">期間終了まで利用できます。終了後は自動で無料プランになります。</div>`:''}
+    <div class="cpc-ai">
+      <div class="cpc-ai-head"><span>本日のAI利用</span><span class="cpc-ai-reset">0:00にリセット</span></div>
+      <div class="cpc-ai-bar"><div class="cpc-ai-fill${low?' low':''}" style="width:${pct}%"></div></div>
+      ${low?`<div class="cpc-ai-low">そろそろ本日の上限に近づいています</div>`:''}
+    </div>
+    <button class="btn btn-ghost full" style="padding:12px;margin-top:14px" onclick="openCustomerPortal()">プラン変更・解約（管理ページ）</button>
   </div>`;
 }
 function billingToPlans(){ billingStep='plans'; renderSettings(); }
