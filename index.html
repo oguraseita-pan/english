@@ -553,6 +553,13 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .pw-eye:active{background:var(--paper-2,rgba(0,0,0,.05));}
 .bill-sum{background:var(--green-soft);border-radius:14px;padding:14px 16px;margin:14px 0 4px;display:flex;flex-direction:column;gap:8px;}
 .bill-disc-banner{background:var(--green-soft);color:var(--green-d);font-weight:700;font-size:.86rem;border-radius:12px;padding:10px 14px;margin:10px 0 4px;text-align:center;}
+.disc-explain{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:14px;}
+.disc-explain .de-h{font-weight:800;margin-bottom:12px;font-size:.95rem;}
+.disc-explain .de-row{display:flex;gap:10px;font-size:.85rem;color:var(--ink-2);margin-bottom:11px;line-height:1.55;}
+.disc-explain .de-row b{color:var(--ink-1);}
+.disc-explain .de-ic{flex:none;}
+.disc-explain .de-note{font-size:.77rem;color:var(--ink-3);line-height:1.65;border-top:1px solid var(--line);padding-top:11px;margin-top:3px;}
+.disc-explain .de-note b{color:var(--green-d);}
 .bill-disc-banner.muted{background:var(--surface-2);color:var(--ink-3);font-weight:600;}
 .ref-disc{display:flex;align-items:baseline;gap:10px;padding:6px 2px 2px;}
 .ref-disc-n{font-family:var(--font-en);font-weight:700;font-size:2rem;line-height:1;color:var(--ink-3);}
@@ -1491,7 +1498,7 @@ function renderHome(){
     <div style="font-size:.74rem;color:var(--ink-3);margin:7px 4px 0">＋でメモに保存（受信箱）。訳ボタンで英⇄日をすばやく翻訳。</div>
     <div id="qaTrans">${transPanelHtml()}</div>
 
-    ${(()=>{ const lm=loyaltyMonths(); const lpct=loyaltyDiscountPct(); const nx=loyaltyNext(); const done=lpct>=25;
+    ${(()=>{ const lm=loyaltyMonths(); const lpct=loyaltyDiscountPct(); const nx=loyaltyNext(); const done=lpct>=15;
       const st=billingStart(); const sd=st?studyDaysThisCycle():studyDaysThisMonth(); const pct=Math.min(100,Math.round(sd/STREAK_GOAL_DAYS*100)); const cycleOk=sd>=STREAK_GOAL_DAYS;
       const startLabel = st? new Date(st).toLocaleDateString('ja-JP') : null;
       const studiedToday=(state.stats.reviews[todayStr()]||0)>0; return `
@@ -3763,8 +3770,8 @@ let billingStep=null;       // null | 'plans' | 'checkout'
 let billingSel={plan:'light', term:'12m'};
 const PLAN_INFO={
   free:{name:'無料プラン'},
-  light:{name:'ライト', price:{'12m':567,'3m':660,'1m':780}, total:{'12m':6800,'3m':1980,'1m':780}, feats:['広告なし','格安AIモデルを実質無制限','単語・熟語・リーディング／瞬間英作文・英語日記・添削']},
-  premium:{name:'プレミアム', price:{'12m':1233,'3m':1560,'1m':1780}, total:{'12m':14800,'3m':4680,'1m':1780}, feats:['ライトの全機能','高品質AIモデルを実質無制限','日記添削などをさらに高精度に']}
+  light:{name:'ライト', price:{'12m':650,'3m':800,'1m':980}, total:{'12m':7800,'3m':2400,'1m':980}, feats:['広告なし','格安AIモデルを実質無制限','単語・熟語・リーディング／瞬間英作文・英語日記・添削']},
+  premium:{name:'プレミアム', price:{'12m':1650,'3m':2100,'1m':2480}, total:{'12m':19800,'3m':6300,'1m':2480}, feats:['ライトの全機能','高品質AIモデルを実質無制限','日記添削などをさらに高精度に']}
 };
 const TERM_INFO={'12m':{label:'12ヶ月',sub:'年間プラン（最安）'},'3m':{label:'3ヶ月',sub:''},'1m':{label:'1ヶ月',sub:''}};
 function authGo(v){ authView=v; renderSettings(); }
@@ -3797,12 +3804,15 @@ function loyaltyMonths(){ // ＝連続達成サイクル数
   const st=billingStart(); if(!st) return 0; const completed=Math.floor((Date.now()-st)/CYCLE_MS); let c=0;
   for(let k=completed;k>=1;k--){ if(studyDaysInRange(st+(k-1)*CYCLE_MS, st+k*CYCLE_MS)>=STREAK_GOAL_DAYS) c++; else break; } return c;
 }
-const LOYALTY_TIERS=[[1,5],[2,10],[3,15],[6,20],[12,25]];
+const LOYALTY_TIERS=[[3,5],[6,10],[12,15]];
 function loyaltyDiscountPct(){ const m=loyaltyMonths(); let p=0; for(const tr of LOYALTY_TIERS){ if(m>=tr[0]) p=tr[1]; } return p; }
 function loyaltyNext(){ const m=loyaltyMonths(); for(const tr of LOYALTY_TIERS){ if(m<tr[0]) return {months:tr[0], pct:tr[1]}; } return null; }
-function effectiveDiscountPct(){ if(!selfPaid()) return 0; return Math.min(50, referralDiscountPct()+loyaltyDiscountPct()); }
+function effectiveDiscountPct(){ if(!selfPaid()) return 0; return Math.min(40, referralDiscountPct()+loyaltyDiscountPct()); }
 // 課金時に確定する割引（加入していなくても算出＝加入すれば確定する率）
-function lockableDiscountPct(){ return Math.min(50, referralDiscountPct()+loyaltyDiscountPct()); }
+function lockableDiscountPct(){ return Math.min(40, referralDiscountPct()+loyaltyDiscountPct()); }
+// 割引は「1ヶ月プラン」のみ適用（3ヶ月・年額は既に割引価格のため）
+function discountAppliesTerm(term){ return term==='1m'; }
+function termLockableDiscountPct(term){ return discountAppliesTerm(term) ? lockableDiscountPct() : 0; }
 // 実際に請求されている（課金時点で確定済みの）割引
 function appliedDiscountPct(){ const b=state.billing; return (selfPaid() && b && typeof b.lockedDiscount==='number') ? b.lockedDiscount : 0; }
 function discountedPrice(base){ return Math.round(base*(1-effectiveDiscountPct()/100)); }
@@ -3885,6 +3895,14 @@ function referralBoxHtml(){
       <div class="d">あなたを紹介してくれた人を応援できます。</div>`}
     </div>
     <div class="d" style="margin-top:4px">紹介した人数：${r.referredCount||0}人（うち有料：${r.referredPaidCount||0}人）→ 紹介割引 ${pct}%</div>`;
+}
+function discountExplainerHtml(){
+  return `<div class="disc-explain">
+    <div class="de-h">💡 割引のしくみ（最大40%オフ）</div>
+    <div class="de-row"><span class="de-ic">🔥</span><div><b>継続割引（最大15%）</b><br>3ヶ月・6ヶ月・12ヶ月の継続学習を達成するごとに ＋5%。</div></div>
+    <div class="de-row"><span class="de-ic">🎁</span><div><b>友達紹介割引（最大25%）</b><br>あなたの招待コードで友達が有料プランに登録するごとに ＋5%（最大5人で25%）。</div></div>
+    <div class="de-note">※ 割引は<b>月額（1ヶ月）プラン</b>にのみ適用されます。3ヶ月・年額プランは、もとから割引価格のため対象外です。<br>※ 割引率は課金した時点で確定し、その期間中は変わりません。<br>※ 2つを合わせて最大40%オフになります。</div>
+  </div>`;
 }
 function openBilling(){ billingStep='plans'; billingSel={plan:(state.billing&&state.billing.plan!=='free'?state.billing.plan:'light'), term:(state.billing&&state.billing.term)||'12m'}; refreshReferral(); renderSettings(); }
 function closeBilling(){ billingStep=null; renderSettings(); }
@@ -4017,7 +4035,7 @@ async function syncPlanFromServer(){
 }
 function billingConfirm(){
   const keepStart = (selfPaid() && state.billing && state.billing.startedAt) ? state.billing.startedAt : Date.now();
-  state.billing={plan:billingSel.plan, term:billingSel.term, since:Date.now(), startedAt:keepStart, lockedDiscount:lockableDiscountPct(), card:'•••• 4242'};
+  state.billing={plan:billingSel.plan, term:billingSel.term, since:Date.now(), startedAt:keepStart, lockedDiscount:termLockableDiscountPct(billingSel.term), card:'•••• 4242'};
   save(); upsertPlanStatus(); billingStep=null; renderSettings();
   toast('プランを変更しました（デモ）');
 }
@@ -4125,7 +4143,7 @@ function renderBilling(){
   if(billingStep==='checkout'){
     const price=PLAN_INFO[billingSel.plan].price[billingSel.term];
     const totalBase=PLAN_INFO[billingSel.plan].total?PLAN_INFO[billingSel.plan].total[billingSel.term]:price;
-    const disc=lockableDiscountPct(); const fin=priceAt(price, disc); const finTotal=priceAt(totalBase, disc); const lo=loyaltyDiscountPct(), re=referralDiscountPct();
+    const disc=termLockableDiscountPct(billingSel.term); const fin=priceAt(price, disc); const finTotal=priceAt(totalBase, disc); const lo=loyaltyDiscountPct(), re=referralDiscountPct();
     const isMulti=billingSel.term!=='1m';
     v.innerHTML=`
       <div class="topbar"><h1>お支払い</h1><button class="icon-btn x-btn" onclick="billingToPlans()" style="box-shadow:none;background:transparent">✕</button></div>
@@ -4152,7 +4170,7 @@ function renderBilling(){
     return;
   }
   // plans
-  const baseSel=PLAN_INFO[billingSel.plan].price[billingSel.term]; const disc=lockableDiscountPct(); const applied=appliedDiscountPct();
+  const baseSel=PLAN_INFO[billingSel.plan].price[billingSel.term]; const disc=termLockableDiscountPct(billingSel.term); const applied=appliedDiscountPct();
   const b=state.billing||{}; const paid=STRIPE.enabled && selfPaid();
   const isCur = paid && billingSel.plan===b.plan;
   const mainBtn = !paid
@@ -4167,11 +4185,12 @@ function renderBilling(){
   v.innerHTML=`
     <div class="topbar"><h1>プラン</h1><button class="icon-btn x-btn" onclick="closeBilling()" style="box-shadow:none;background:transparent">✕</button></div>
     ${paid ? currentPlanCardHtml() : `<div class="bill-cur">現在のプラン：<b>${planLabel()}</b></div>`}
-    ${disc>0&&!paid?`<div class="bill-disc-banner">🎉 今なら −${disc}%（継続 ${loyaltyDiscountPct()}% ＋ 紹介 ${referralDiscountPct()}%）・課金時点で確定</div>`:''}
+    ${disc>0&&!paid?`<div class="bill-disc-banner">🎉 月額プランが今なら −${disc}%（継続 ${loyaltyDiscountPct()}% ＋ 紹介 ${referralDiscountPct()}%）・課金時点で確定</div>`:''}
     <div class="section-title" style="margin-top:6px">${paid?'プランを変更':'プランを選ぶ'}</div>
     <div class="bill-terms">${['12m','3m','1m'].map(t=>`<button class="bill-term${billingSel.term===t?' sel':''}" onclick="billingPickTerm('${t}')">${TERM_INFO[t].label}${TERM_INFO[t].sub?`<small>${TERM_INFO[t].sub}</small>`:''}</button>`).join('')}</div>
     ${['light','premium'].map(planCardHtml).join('')}
     ${mainBtn}
+    ${!paid?discountExplainerHtml():''}
     ${(!STRIPE.enabled && cur.plan!=='free')?`<button class="btn btn-ghost full" style="padding:13px;margin-top:10px" onclick="billingDowngrade()">無料プランに戻す</button>`:''}
     <div class="d" style="text-align:center;margin-top:14px">${note}</div>`;
 }
