@@ -150,14 +150,11 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .td-none{color:var(--ink-3);font-size:.82rem;}
 .save-mini{margin-top:16px;background:transparent;border:1.5px solid var(--line);color:var(--green-d);font-weight:600;font-size:.82rem;padding:8px 16px;border-radius:999px;display:inline-flex;align-items:center;gap:5px;}
 .save-mini svg{width:15px;height:15px;}
-.ex-peek{margin-top:16px;width:100%;display:flex;flex-direction:column;align-items:center;gap:8px;}
-.ex-peek-sen{background:var(--green-soft);border-radius:12px;padding:10px 14px;font-family:var(--font-en);font-size:.98rem;color:var(--ink);text-align:center;width:100%;line-height:1.5;}
-.ex-peek-btn{background:transparent;border:1.5px dashed var(--green);color:var(--green-d);font-weight:600;font-size:.8rem;padding:7px 16px;border-radius:999px;}
-.memo-box{margin-top:14px;width:100%;text-align:left;}
-.memo-lab{font-size:.78rem;color:var(--ink-3);font-weight:700;display:flex;align-items:center;gap:5px;margin-bottom:5px;}
-.memo-lab svg{width:13px;height:13px;}
-.memo-edit{width:100%;min-height:48px;resize:vertical;border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;font-size:.9rem;font-family:inherit;background:var(--surface);color:var(--ink);box-sizing:border-box;}
-.card-btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;}
+.ex-peek{margin-top:30px;width:100%;display:flex;flex-direction:column;align-items:center;gap:12px;}
+.ex-peek::before{content:'';width:1.5px;height:18px;background:var(--green);display:block;}
+.ex-peek-sen{background:var(--green-soft);border-radius:12px;padding:12px 16px;font-family:var(--font-en);font-size:1.05rem;color:var(--ink);text-align:center;width:100%;line-height:1.55;}
+.ex-peek-btn{background:var(--surface);border:1.5px solid var(--green);color:var(--green-d);font-weight:700;font-size:.95rem;padding:10px 22px;border-radius:999px;}
+.card-btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:6px;}
 .save-mini:active{background:var(--green-soft);}
 .streak-detail{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);}
 .streak-barlabel{font-size:.74rem;color:var(--ink-2);margin:10px 2px 5px;}
@@ -2141,18 +2138,29 @@ function idiomAllItems(){
 }
 // カテゴリ・形式に依存しない安定SRSキー（フラッシュカードと4択で進捗を共有）
 function idiomKeyU(it){ return 'iu|'+String((it&&it.answer)||'').toLowerCase()+'|'+String((it&&it.q)||''); }
-const IDIOM_GROUP_SIZE=100;
-function idiomGroupCount(){ return Math.max(1, Math.ceil(idiomAllItems().length/IDIOM_GROUP_SIZE)); }
-function idiomGroupRange(g){ const all=idiomAllItems(); const start=g*IDIOM_GROUP_SIZE; const end=Math.min(all.length, start+IDIOM_GROUP_SIZE); return [start+1, end]; }
-function idiomGroupItems(g){ const all=idiomAllItems(); return all.slice(g*IDIOM_GROUP_SIZE, g*IDIOM_GROUP_SIZE+IDIOM_GROUP_SIZE); }
+// ===== CEFRレベルで熟語をグループ分け（辞書ベースの難易度＋AI判定で割当）=====
+const IDIOM_CEFR={"iu|take off|Please ____ your shoes here.":"A2","iu|get up|I ____ at six every morning.":"A2","iu|turn on|Can you ____ the lights?":"A2","iu|pick up|I'll ____ you at the station.":"A2","iu|wake up|What time do you ____?":"A2","iu|give up|I want to ____ smoking.":"A2","iu|put on|____ your coat; it's cold outside.":"A2","iu|call back|I'll ____ you later.":"A2","iu|go out|Let's ____ tonight.":"A2","iu|sit down|Please ____ here.":"A2","iu|come back|He will ____ soon.":"A2","iu|get home|I ____ around six.":"A2","iu|lie down|I want to ____ for a while.":"A2","iu|come in|Please ____ and have a seat.":"A2","iu|get on|Let's ____ the next bus.":"A2","iu|try on|Can I ____ these shoes?":"A2","iu|hurry up|____! We're going to be late.":"A2","iu|clean up|I need to ____ my desk.":"A2","iu|stand up|Please ____ when your name is called.":"A2","iu|looking for|I'm ____ my keys.":"A2","iu|turn down|Please ____ the volume a little.":"B1","iu|hang out|Let's ____ this weekend.":"B1","iu|fill out|Please ____ this form.":"B1","iu|show up|He didn't ____ for the meeting.":"B1","iu|deal with|I need to ____ this problem today.":"B1","iu|go over|Let's ____ the details later.":"B1","iu|hand in|Please ____ your report by Friday.":"B1","iu|set up|Please ____ the meeting room.":"B1","iu|drop off|I'll ____ you at the station.":"B1","iu|ended up|We ____ staying home.":"B1","iu|get along|We don't always ____, but we respect each other.":"B1","iu|catch up|Let's ____ over coffee.":"B1","iu|checked in|We ____ at the hotel at noon.":"B1","iu|ran into|I ____ an old friend at the mall.":"B2","iu|call off|We had to ____ the meeting.":"B2","iu|set off|Let's ____ early tomorrow.":"B2","iu|work out|Let's ____ a better plan.":"B2","iu|took off|She ____ early today.":"B2","iu|look after|Can you ____ the kids tonight?":"B2","iu|dwell on|Don't ____ the past.":"B1","iu|came up with|She ____ a great idea.":"B2","iu|cut down on|I'm trying to ____ sweets.":"B2","iu|get back to|I'll ____ you later about it.":"B2","iu|put up with|I can't ____ the loud noise.":"B2","iu|get rid of|I need to ____ these old clothes.":"B2","iu|on the fence|I'm ____ about which one to pick.":"B2","iu|under the weather|I'm feeling ____ today, so I'll rest.":"B2","iu|tabs on|He keeps ____ his spending.":"C1","iu|buckle down|I need to ____ before the exam.":"C1","iu|bottle up|He tends to ____ his feelings.":"C1","iu|fizzled out|The plan ____ after a week.":"C1","iu|cut corners|Don't ____ on safety.":"B1","iu|fell through|The deal ____ at the last minute.":"C1","iu|in the dark|I was kept ____ about the plan.":"C1","iu|bite the bullet|I had to ____ and pay the fee.":"C1","iu|play it by ear|Let's ____ and decide as we go.":"C1","iu|saw eye to eye|We finally ____ on the plan.":"C1","iu|call it a day|Let's ____ for today.":"C1","iu|let our hair down|Let's ____; we've earned it.":"C1","iu|goes the extra mile|She always ____ for her clients.":"C1","iu|wipe the slate clean|Let's ____ and start over.":"C1","iu|crying over spilt milk|It's no use ____.":"C1","iu|play devil's advocate|He likes to ____ in debates.":"C1","iu|jump to conclusions|Let's not ____ too quickly.":"C1","iu|pulled an all-nighter|I ____ to finish the report.":"C1","iu|beating around the bush|Stop ____ and tell me directly.":"C1","iu|pick up|I'll ____ you ____ at six.":"A2","iu|used to|I ____ play tennis.":"A2","iu|by the way|____, are you free tonight?":"A2","iu|for example|Try fruit, ____ apples.":"A2","iu|take it easy.|____. You'll be fine.":"A2","iu|so am i.|\"I'm tired.\" \"____.\"":"A2","iu|anything else?|____? No, that's all.":"A2","iu|that's it!|____! You got it.":"A2","iu|for here or to go?|____? To go, please.":"A2","iu|i'll take it.|It looks nice. ____.":"A2","iu|keep the change.|Here you go. ____.":"A2","iu|it's on me.|Lunch is on me today.":"A2","iu|here you are.|____. Enjoy your meal.":"A2","iu|why not?|\"Let's go out.\" \"____?\"":"A2","iu|not at all.|\"Thanks!\" \"____.\"":"A2","iu|i'll be right back.|Wait here. ____.":"A2","iu|what's going on?|You look upset. ____?":"A2","iu|i have no idea.|\"Where is he?\" \"____.\"":"A2","iu|what do you do?|Nice to meet you. ____?":"A2","iu|how's it going?|Hey! ____?":"A2","iu|good for you!|You passed? ____!":"A2","iu|what's the matter?|____? You look pale.":"A2","iu|after you.|____, please.":"A2","iu|you're welcome.|\"Thank you.\" \"____.\"":"A2","iu|take care.|See you. ____!":"A2","iu|see you later.|I'm off. ____.":"A2","iu|not really.|\"Are you busy?\" \"____.\"":"A2","iu|what's up?|Hey, ____?":"A2","iu|that's too bad.|Sick? ____.":"A2","iu|do you have the time?|Excuse me, ____?":"A2","iu|shut up!|____ and listen.":"A2","iu|i'm so sorry.|____ I'm late.":"A2","iu|not much.|\"What's up?\" \"____.\"":"A2","iu|let me see.|____... yes, that's right.":"A2","iu|never mind.|____, it's not important.":"A2","iu|drop by|____ anytime.":"B1","iu|end up|We ____ed ____ staying home.":"B1","iu|stay up|I ____ed ____ late last night.":"B1","iu|run into|I ran into an old friend.":"B1","iu|show up|He didn't ____.":"B1","iu|work out|I ____ every morning.":"B1","iu|on time|The train came ____.":"B1","iu|in fact|____, I already finished.":"B1","iu|such as|Sports ____ tennis are fun.":"B1","iu|so far|____, so good.":"B1","iu|as well|I want this one ____.":"A2","iu|look after|Can you ____ the kids?":"B1","iu|at least|It costs ____ ten dollars.":"B1","iu|right away|I'll do it ____.":"A2","iu|at first|____, it seemed hard.":"B1","iu|figure out|I can't ____ it ____.":"B1","iu|on purpose|I didn't do it ____.":"B1","iu|run out of|We ran out of milk.":"B1","iu|take care of|Can you ____ my cat?":"B1","iu|as soon as|Call me ____ you arrive.":"B1","iu|instead of|Let's walk ____ driving.":"B1","iu|in a hurry|Sorry, I'm ____.":"B2","iu|get along with|I ____ my coworkers.":"B1","iu|a couple of|I'll be back in ____ days.":"B2","iu|look forward to|I ____ the trip.":"B1","iu|be my guest.|\"May I sit here?\" \"____.\"":"B1","iu|i mean it.|Thank you. ____.":"B1","iu|please do me a favor.|____ and call him.":"B1","iu|i wish i could.|\"Come with us?\" \"____.\"":"B1","iu|i'd be glad to.|\"Can you help?\" \"____.\"":"B1","iu|so what?|____? It doesn't matter.":"B1","iu|don't mention it.|\"Thanks a lot.\" \"____.\"":"B1","iu|there you go again.|____, complaining.":"B1","iu|couldn't be better.|\"How are you?\" \"____.\"":"B1","iu|mind your own business.|____, please.":"B1","iu|give me a break.|____, I'm tired.":"B1","iu|none of your business.|That's ____.":"B1","iu|say hi to him for me.|Say hi to your family for me.":"B1","iu|you must be kidding.|____! Really?":"B1","iu|no wonder.|____ you're tired.":"B1","iu|how come?|____ you're late?":"B1","iu|what a pity!|Cancelled? ____!":"B1","iu|let's call it a day.|Good work. ____.":"B1","iu|it's a piece of cake.|Don't worry, ____.":"B1","iu|make yourself at home.|Come in, ____.":"B1","iu|just wait and see.|____ what happens.":"B1","iu|i'm afraid so.|\"Is it cancelled?\" \"____.\"":"B1","iu|what if it rains?|____ tomorrow?":"B1","iu|do you mind if i sit here?|Do you mind if I open the window?":"B1","iu|sounds good to me.|Pizza tonight? ____.":"B1","iu|it's worth a try.|It might fail, but ____.":"B1","iu|let's keep in touch.|It was great. ____.":"B1","iu|put off|Don't ____ the work.":"B1","iu|turn down|She ____ed ____ the offer.":"B1","iu|call off|They ____ed ____ the game.":"B1","iu|look up|____ it ____ in the dictionary.":"B1","iu|set off|We ____ early.":"B1","iu|wind down|I ____ with a book.":"B1","iu|tidy up|Let's ____ the kitchen.":"B1","iu|bring up|Don't ____ that ____ again.":"B1","iu|make sense|That ____s ____ to me.":"B1","iu|take turns|We ____ driving.":"B1","iu|after all|____, it was worth it.":"A2","iu|no longer|He ____ works here.":"B1","iu|plenty of|We have ____ time.":"B1","iu|get rid of|I got rid of old clothes.":"B1","iu|come up with|She came up with a great idea.":"B1","iu|cut down on|I'm ____ting ____ ____ sugar.":"B2","iu|by mistake|I deleted the file ____.":"B1","iu|in advance|Please book ____.":"B1","iu|the other day|I saw him ____.":"B2","iu|be about to|I was about to leave.":"B2","iu|catch up on|I need to ____ sleep.":"B2","iu|on a budget|We traveled ____.":"B2","iu|make up one's mind|I can't make up my mind.":"C1","iu|be supposed to|You're supposed to wait here.":"B2","iu|all of a sudden|____, it started raining.":"C1","iu|i'm not up for it.|Sorry, ____ today.":"B2","iu|it serves you right.|Lost again? ____.":"B2","iu|speaking of which,|____, did you call her?":"B2","iu|i'm at a loss for words.|____. Thank you.":"B2","iu|i have my hands full.|I can't help now; my hands are full.":"B2","iu|time will tell.|Who's right? ____.":"B2","iu|it goes without saying.|____ that health matters.":"B2","iu|couldn't agree more.|\"It's too hot.\" \"____.\"":"B2","iu|it's up in the air.|Our plan is still up in the air.":"B2","iu|when it comes to|____ cooking, he's an expert.":"B2","iu|it's no use doing|It's no use crying over it.":"B2","iu|there's no point in doing|There's no point in waiting longer.":"B2","iu|far from|The test was ____ easy.":"B2","iu|nothing but|He eats ____ junk food.":"B2","iu|anything but|The room was ____ clean.":"B2","iu|you flatter me.|\"You're brilliant!\" \"____.\"":"B2","iu|if only|____ I had more time.":"B2","iu|chances are,|____ he'll be late.":"B2","iu|speaking of,|____ food, I'm hungry.":"B2","iu|i'd like a word with you.|Can I have a word with you?":"B2","iu|so much for that.|So much for our picnic.":"B2","iu|you're telling me.|\"It's freezing!\" \"____.\"":"B2","iu|bound to|You're ____ succeed.":"B1","iu|fizzle out|The plan ____d ____.":"B1","iu|keep tabs on|I ____ my spending.":"B2","iu|wear and tear|It shows ____.":"B2","iu|on the fence|I'm ____ about it.":"B2","iu|bite the bullet|I bit the bullet and paid.":"B2","iu|the bottom line|____ is cost.":"B2","iu|get the hang of|I'm ____ting ____ ____ ____ it.":"C1","iu|a far cry from|It's ____ perfect.":"C1","iu|play it by ear|Let's ____.":"C1","iu|under the weather|I'm feeling ____.":"B2","iu|go the extra mile|She always ____es ____ ____ ____.":"C1","iu|on second thought|____, let's wait.":"B2","iu|pull an all-nighter|I ____ed ____ ____.":"B2","iu|come to think of it|____, he called.":"C1","iu|off the top of my head|____, maybe ten.":"C1","iu|turn in|Please ____ the report by Friday.":"A2","iu|deal with|Can you ____ this issue?":"A2","iu|put off|Let's ____ the meeting to Monday.":"A2","iu|go over|We need to ____ the contract again.":"A2","iu|wrap up|I'll ____ the report by end of day.":"A2","iu|fill in|Can you ____ for me on Monday?":"A2","iu|hand over|I'll ____ my tasks before I leave.":"A2","iu|bring up|We should ____ this at the meeting.":"A2","iu|write down|Please ____ the key points.":"A2","iu|stick to|Let's ____ the original plan.":"A2","iu|follow up|I'll ____ with you by email tomorrow.":"A2","iu|go through|Let's ____ the numbers before the call.":"A2","iu|reach out to|I'll ____ the client this afternoon.":"A2","iu|put together|Can you ____ the slides by noon?":"A2","iu|push back|Let's ____ the meeting to Friday.":"B1","iu|keep down|We need to ____ expenses.":"B1","iu|ramp up|We need to ____ hiring.":"B1","iu|roll out|Let's ____ the new feature next month.":"B1","iu|kick off|Let's ____ the project on Monday.":"B1","iu|touch base|Let's ____ next week to review.":"B1","iu|scope out|Let's ____ the competition first.":"B1","iu|keep posted|Please ____ me on any updates.":"B1","iu|cut back on|We need to ____ costs this quarter.":"B1","iu|in charge of|She is ____ the sales team.":"B1","iu|on behalf of|I'm writing ____ my manager.":"B1","iu|follow through|Let's ____ on this action item.":"B1","iu|manage|Let's ____ expectations early.":"B1","iu|nail down|Let's ____ the requirements first.":"B2","iu|firm up|We need to ____ the timeline.":"B2","iu|iron out|We need to ____ a few issues.":"B2","iu|align|Let's ____ on priorities first.":"B2","iu|phase out|Let's ____ the old system.":"B2","iu|circle back|Let's ____ on this after lunch.":"B2","iu|escalate|We need to ____ this to management.":"B2","iu|consolidate|Let's ____ the two reports.":"B2","iu|move the needle|This change won't ____.":"C1","iu|due diligence|We did our ____ before signing.":"C1","iu|double down on|We should ____ our top channel.":"C1","iu|pulled out of|They ____ the deal at the last minute.":"C1","iu|ballpark figure|Can you give me a ____?":"C1","iu|low-hanging fruit|Start with the ____.":"C1","iu|take ownership of|Please ____ this project.":"C1","iu|spearhead|She will ____ the initiative.":"C1","iu|greenlighted|They ____ the new project.":"C1","iu|set up|I'll ____ a meeting.":"B1","iu|wrap up|Let's ____ here.":"B1","iu|reach out|Feel free to ____.":"B1","iu|follow up|I'll ____ by email.":"B1","iu|touch base|Let's ____ next week.":"B1","iu|get back to|I'll ____ you soon.":"B2","iu|in charge of|She is ____ sales.":"B2","iu|on behalf of|I'm writing ____ my team.":"B2","iu|i'll get back to you.|____ by noon.":"B1","iu|let me check on that.|____ and reply.":"B1","iu|that works for me.|Friday at three? ____.":"B1","iu|thank you for your prompt response.|____.":"B1","iu|ramp up|We're ____ing ____ hiring.":"B1","iu|circle back|Let's ____ on this.":"B1","iu|move the needle|This won't ____.":"B2","iu|take ownership|Please ____ of this.":"B1","iu|due diligence|We did our ____.":"B1","iu|ballpark figure|Give me a ____.":"B1","iu|low-hanging fruit|Let's start with the ____.":"B1","iu|value proposition|What's our ____?":"B1","iu|could you put that in writing?|____, please?":"B2","iu|we're on the same page.|Good, ____.":"B2","iu|let's touch base next week.|____ on this.":"B2","iu|i'd appreciate a prompt reply.|____.":"B2","iu|please find attached the file.|Please find attached the report.":"B2","iu|can we push the deadline?|____ to Friday?":"B2","iu|let me run this by my manager.|____ first.":"B2","iu|we'll keep you posted.|____ on the progress.":"B2","iu|could we revisit the terms?|____ of the deal?":"B2","iu|i'll cc you on the email.|____ to the client.":"B2","iu|align on|Let's ____ priorities.":"B1","iu|let's circle back on this.|____ tomorrow.":"C1","iu|i'll loop you in.|____ on the thread.":"C1","iu|that's beyond my authority.|Sorry, ____.":"C1","iu|i'm afraid we can't meet that price.|____.":"C1","iu|let's table this for now.|____ and move on.":"C1","iu|that's a deal-breaker.|Late delivery is a deal-breaker.":"C1","iu|let's align on the next steps.|____ before Friday.":"C1","iu|that's outside our scope.|I'm afraid ____.":"C1","iu|can you ballpark the cost?|____ for me?":"C1","iu|let's take this offline.|____ after the meeting.":"C1","iu|for|Thank you ____ your prompt reply.":"A2","iu|to|Please refer ____ the attached file.":"A2","iu|to|We look forward ____ hearing from you.":"A2","iu|on|The shipment will arrive ____ Friday.":"A2","iu|out|Please fill ____ the application form.":"A2","iu|off|The meeting was put ____ until next week.":"A2","iu|from|The store is open ____ 9 a.m. to 8 p.m.":"A2","iu|with|Employees must comply ____ the safety rules.":"A2","iu|by|The report is due ____ the end of the month.":"A2","iu|for|Employees are eligible ____ a yearly bonus.":"A2","iu|for|The manager is responsible ____ scheduling.":"A2","iu|until|This coupon is valid ____ June 30.":"B1","iu|effect|The new policy takes ____ next week.":"B1","iu|attention|Thank you for your ____ to detail.":"B1","iu|to|The seminar is open ____ all staff.":"B1","iu|identification|All employees must wear an ____ badge.":"B1","iu|by|The report must be submitted ____ noon.":"B1","iu|free|We offer ____ shipping on all orders.":"B1","iu|for|We apologize ____ the shipping delay.":"B1","iu|to|Please adhere ____ the safety guidelines.":"B1","iu|located|The store is conveniently ____ downtown.":"B1","iu|upon|Payment is due ____ receipt of the invoice.":"B1","iu|by|Sales have increased ____ 20%.":"B2","iu|take|Please ____ into account the cost.":"B2","iu|come|Let's ____ up with a solution.":"B2","iu|make|We need to ____ a decision soon.":"B2","iu|in|He was ____ charge of the project.":"B2","iu|to|The contract is subject ____ change.":"B2","iu|take|The new policy will ____ effect next month.":"B2","iu|in|The figures are ____ line with forecasts.":"B2","iu|under|The proposal is currently ____ review.":"B2","iu|on|The company is ____ the verge of a deal.":"B2","iu|ahead of|The project is running ____ schedule, so we may finish early.":"B2","iu|steadily|Sales have grown ____ this year.":"C1","iu|on|Profits have been ____ the rise.":"C1","iu|far|Sales fell ____ short of the target.":"C1","iu|abide|All staff must ____ by the new policy.":"C1","iu|expire|The contract will ____ at month's end.":"C1","iu|with|The proposal was met ____ enthusiasm.":"C1","iu|in|The figures are ____ line with the forecast.":"C1","iu|to take|All applicants are required ____ a test.":"C1","iu|finalize|We need to ____ the budget before approval.":"C1","iu|subject|The merger is ____ to shareholder approval.":"C1","iu|to|The price is subject ____ change without notice.":"C1","iu|comply with|We ____ the rules.":"B1","iu|shows|The data ____ a clear trend.":"B1","iu|on|The model is based ____ real data.":"B1","iu|to|This leads ____ a new conclusion.":"B1","iu|on|The study focuses ____ climate change.":"B1","iu|gives|The theory ____ rise to new research.":"B1","iu|line|The findings are in ____ with prior work.":"B1","iu|accepted|The theory is widely ____ by scholars.":"B1","iu|to|This factor contributes ____ the problem.":"B1","iu|for|These results account ____ the difference.":"B1","iu|out|Researchers carried ____ an experiment.":"B1","iu|with|The results are consistent ____ the theory.":"B1","iu|obtained|The samples were ____ from a survey.":"B2","iu|confirms|The experiment ____ the hypothesis.":"B2","iu|with|The data are consistent ____ the model.":"B2","iu|contributes|Carbon dioxide ____ to global warming.":"B2","iu|similar|These findings are ____ to earlier ones.":"B2","iu|role|This factor plays a key ____ in growth.":"B2","iu|show|The results ____ a clear correlation.":"B2","iu|rise|The discovery gave ____ to a new field.":"B2","iu|comparison|Researchers drew a ____ between the two.":"B2","iu|relies|This theory ____ on several assumptions.":"B2","iu|plays|Temperature ____ a key role in the process.":"B2","iu|sheds|The data ____ light on the issue.":"B2","iu|accounts|The theory ____ for the anomaly.":"B2","iu|supports|The evidence ____ the hypothesis.":"B2","iu|related|The two variables are closely ____.":"B2","iu|gives|This ____ rise to further questions.":"B2","iu|vary|Results may ____ from region to region.":"B2","iu|acknowledge|The authors ____ several limitations.":"B2","iu|rests|The argument ____ on a false premise.":"B2","iu|carried|Scientists ____ out a detailed study.":"B2","iu|attributed|This phenomenon can be ____ to climate.":"B2","iu|take|We must ____ these factors into consideration.":"B2","iu|intertwined|These factors are closely ____.":"C1","iu|warrant|These results ____ further study.":"C1","iu|sheds|The study ____ light on the issue.":"C1","iu|contradict|The new data ____ the earlier theory.":"C1","iu|account for|The model fails to ____ the anomaly.":"C1","iu|corroborate|New findings ____ the earlier study.":"C1","iu|infer|We can ____ a pattern from the data.":"C1","iu|varies|The phenomenon ____ across cultures.":"C1","iu|diverge|The two theories ____ on key points.":"C1","iu|scrutinized|Researchers ____ the data carefully.":"C1","iu|related|The two variables are inversely ____.":"C1","iu|depend on|It ____s ____ the climate.":"B1","iu|consist of|Water ____s ____ two elements.":"B1","iu|attribute to|They ____ it ____ climate.":"B1","iu|atlantic ocean|cross the ____":"B1","iu|pacific ocean|the vast ____":"B1","iu|uncle sam|a cartoon of ____":"B1","iu|tropical zone|plants of the ____":"B1","iu|red tape|cut through ____":"B1","iu|zip code|enter your ____":"B1","iu|cobblestone street|a narrow ____":"B1","iu|infrared rays|detect ____":"B1","iu|polar bear|a hungry ____":"B1","iu|sea anemone|a colorful ____":"B1","iu|grass roots|a ____ movement":"B1","iu|double helix|the DNA ____":"B1","iu|coniferous tree|a tall ____":"B1","iu|per capita|____ income":"B1","iu|reclaimed land|build on ____":"B1","iu|australopithecus africanus|fossils of ____":"B1","iu|microscopic organism|study ____s":"B1","iu|unaided eye|visible to the ____":"B1","iu|reproductive organ|the ____s of plants":"B1","iu|fraternal society|join a ____":"B1","iu|recessive gene|carry a ____":"B1","iu|taste bud|____s on the tongue":"B1","iu|conditioned reflex|a ____ in dogs":"B1","iu|binary star|observe a ____":"B1","iu|tidal wave|a destructive ____":"B1","iu|purchasing power|loss of ____":"B1","iu|public hygiene|improve ____":"B1","iu|mixed breed|a ____ dog":"B1","iu|vice versa|She helps him, and ____.":"B1","iu|natural science|study ____":"B1","iu|mucous membrane|the ____ of the nose":"B1","iu|mountain lion|spot a ____":"B1","iu|mating season|during the ____":"B1","iu|nitric acid|dilute ____":"B1","iu|frontal lobe|the ____ of the brain":"B1","iu|irrational number|pi is an ____":"B1","iu|with|I agree ____ you.":"A2","iu|too|I'm ____ tired to walk.":"A2","iu|on|Please turn ____ the TV.":"A2","iu|for|Thank you ____ helping me.":"A2","iu|preparing|She is ____ for the exam.":"A2","iu|afraid|He is ____ of spiders.":"A2","iu|off|Please turn ____ the light.":"A2","iu|at|She is good ____ singing.":"A2","iu|known|He is ____ for being kind.":"A2","iu|of|He is afraid ____ the dark.":"A2","iu|in|I'm interested ____ history.":"A2","iu|interested|I'm ____ in learning French.":"A2","iu|careful|Please be ____ on the stairs.":"A2","iu|at|She is good ____ playing tennis.":"A2","iu|forward|We are looking ____ to the trip.":"A2","iu|for|Thank you ____ the wonderful gift.":"A2","iu|forward|I'm looking ____ to the festival.":"A2","iu|turned|The plan ____ out well.":"B1","iu|turned|We ____ down the offer.":"B1","iu|waited|She ____ for the train.":"B1","iu|of|She is fond ____ animals.":"B1","iu|take|Please ____ off your shoes.":"B1","iu|likely|He is ____ to succeed.":"B1","iu|gets|He ____ up early to study.":"B1","iu|came|I ____ up with a new idea.":"B1","iu|care|Please take ____ of yourself.":"B1","iu|took|She ____ part in the contest.":"B1","iu|takes|She ____ care of the children.":"B1","iu|took|We ____ part in the marathon.":"B1","iu|in|We arrived ____ time for the show.":"B1","iu|forward|I'm looking ____ to the holidays.":"B1","iu|to|I'm looking forward ____ seeing you.":"B1","iu|take|We must ____ care of the environment.":"B1","iu|off|Please turn ____ the lights when you leave.":"B1","iu|go over|Let's ____ the main points.":"B2","iu|takes after|She ____ her grandmother.":"B2","iu|for|He apologized ____ being late.":"B2","iu|came|He ____ up with a clever idea.":"B2","iu|put up with|I can't ____ his rude behavior.":"B2","iu|take|Please ____ off your hat indoors.":"B2","iu|to|I'm looking forward ____ the trip.":"B2","iu|called off|They ____ the meeting due to rain.":"B2","iu|to|We are used ____ getting up early.":"B2","iu|made|He ____ a fortune in business.":"B2","iu|in|He succeeded ____ passing the exam.":"B2","iu|of|She is capable ____ doing it alone.":"B2","iu|turned|The plan ____ out to be successful.":"B2","iu|thanks|____ to your help, we finished early.":"B2","iu|come up with|We need to ____ a solution to this.":"B2","iu|for|I am responsible ____ this project.":"B2","iu|out of|We ran ____ time.":"C1","iu|up to|I look ____ my mentor.":"C1","iu|down|Don't look ____ on others.":"C1","iu|called|They ____ off the outdoor event.":"C1","iu|looks|She ____ down on people who fail.":"C1","iu|up|I can't put ____ with this noise.":"C1","iu|down with|She came ____ a bad cold last week.":"C1","iu|put|They ____ off the outdoor concert.":"C1","iu|to|We must come ____ terms with the loss.":"C1","iu|ran|We ____ out of supplies quickly.":"C1","iu|takes|She ____ after her late grandmother.":"C1","iu|put|He can't ____ up with the pressure.":"C1","iu|adapted|She ____ to the new system quickly.":"C1","iu|down|He tends to look ____ on beginners.":"C1","iu|look|I really ____ up to my professor.":"C1","iu|out|The plan was carried ____ successfully.":"C1"};
+const CEFR_ORDER=['A2','B1','B2','C1'];
+const CEFR_NAME={A2:'A2 初級',B1:'B1 中級',B2:'B2 中上級',C1:'C1 上級'};
+function idiomCefrOf(it){ return IDIOM_CEFR[idiomKeyU(it)] || 'B1'; }
+function idiomLevelItems(cf){ return idiomAllItems().filter(it=>idiomCefrOf(it)===cf); }
 // style選択・件数表示用（各要素 {raw, srs}）
-function idiomGroupPool(g){ return idiomGroupItems(g).map(it=>({ raw:it, srs:getProg(idiomKeyU(it)) })); }
+function idiomLevelPoolC(cf){ return idiomLevelItems(cf).map(it=>({ raw:it, srs:getProg(idiomKeyU(it)) })); }
 // フラッシュカード用（startStudyに渡す学習カード形状）
-function idiomGroupCards(g){ return idiomGroupItems(g).map(it=>({ term:it.answer, pron:'', mean:it.mean, exEn:(it.q||'').replace('____',it.answer), exJa:'', pos:['熟語'], other:'', srs:getProg(idiomKeyU(it)) })); }
-// 任意の熟語から4択問題を生成（他の熟語のanswerをダミー選択肢に）
+function idiomLevelCards(cf){ return idiomLevelItems(cf).map(it=>({ term:it.answer, pron:'', mean:it.mean, exEn:(it.q||'').replace('____',it.answer), exJa:'', pos:['熟語'], other:'', srs:getProg(idiomKeyU(it)) })); }
+// 任意の熟語から4択問題を生成：語数・CEFRが近いものをダミーに選び品質を上げる
+function wcOf(s){ return String(s).trim().split(/\s+/).filter(Boolean).length; }
 function makeIdiomChoiceItem(it, allItems){
-  const pool=(allItems||idiomAllItems()).filter(x=>String(x.answer).toLowerCase()!==String(it.answer).toLowerCase());
-  const distractors=shuffle(pool.slice()).slice(0,3).map(x=>x.answer);
+  const all=allItems||idiomAllItems();
+  const ansLc=String(it.answer).toLowerCase(), wc=wcOf(it.answer), cf=idiomCefrOf(it);
+  const ne=x=>String(x.answer).toLowerCase()!==ansLc;
+  const uniq=arr=>{ const seen={}, out=[]; arr.forEach(a=>{ const k=a.toLowerCase(); if(!seen[k]){ seen[k]=1; out.push(a);} }); return out; };
+  let cands=all.filter(x=>ne(x)&&wcOf(x.answer)===wc&&idiomCefrOf(x)===cf);        // 同語数・同CEFR
+  let pick=uniq(shuffle(cands.slice()).map(x=>x.answer));
+  if(pick.length<3){ pick=uniq(pick.concat(shuffle(all.filter(x=>ne(x)&&wcOf(x.answer)===wc)).map(x=>x.answer))); }      // 同語数
+  if(pick.length<3){ pick=uniq(pick.concat(shuffle(all.filter(x=>ne(x)&&Math.abs(wcOf(x.answer)-wc)<=1)).map(x=>x.answer))); } // 語数±1
+  if(pick.length<3){ pick=uniq(pick.concat(shuffle(all.filter(ne)).map(x=>x.answer))); }                              // 最終手段
+  const distractors=pick.filter(a=>a.toLowerCase()!==ansLc).slice(0,3);
   const choices=shuffle([it.answer, ...distractors]);
   return { q:it.q, choices, ansIdx:choices.indexOf(it.answer), answer:it.answer, mean:it.mean, type:'choice' };
 }
@@ -2400,11 +2408,11 @@ function showWordList(kind, catId, levelId){
   closeModal();
   let pool, name;
   const all = levelId==='__all__';
-  if(kind==='idiomg'){
-    const g=parseInt(catId,10); const r=idiomGroupRange(g);
-    pool=idiomGroupItems(g).map(it=>({ term:it.answer, pron:'', mean:it.mean, exEn:(it.q||'').replace('____',it.answer), exJa:'', pos:['熟語'], other:'', srs:getProg(idiomKeyU(it)) }));
-    name='熟語 '+r[0]+'–'+r[1];
-    wordList={ pool, name, kind:'idiomg', gIdx:g, openIdx:null, grouped:false };
+  if(kind==='idiomc'){
+    const cf=catId; const items=idiomLevelItems(cf);
+    pool=items.map(it=>({ term:it.answer, pron:'', mean:it.mean, exEn:(it.q||'').replace('____',it.answer), exJa:'', pos:['熟語'], other:'', srs:getProg(idiomKeyU(it)) }));
+    name='熟語 '+(CEFR_NAME[cf]||cf);
+    wordList={ pool, name, kind:'idiomc', cefr:cf, openIdx:null, grouped:false };
     renderWordList(); return;
   }
   if(kind==='preset'){
@@ -2459,7 +2467,7 @@ function wlBack(){
   const wl=wordList; wordList=null;
   renderStudy();
   if(!wl){ return; }
-  if(wl.kind==='idiomg') idiomGroupStylePick(wl.gIdx);
+  if(wl.kind==='idiomc') idiomCefrStylePick(wl.cefr);
   else if(wl.kind==='idiom') idiomStylePick(wl.catId, wl.levelId);
   else presetStylePick(wl.catId, wl.levelId);
 }
@@ -2493,62 +2501,61 @@ function saveWordListItem(i){
   if(!wordList) return;
   const c=wordList.pool[i]; if(!c) return;
   const o={term:c.term, mean:c.mean, pron:c.pron||'', exEn:c.exEn||'', exJa:c.exJa||'', pos:Array.isArray(c.pos)?c.pos:[], other:c.other||''};
-  const kind = (wordList.kind==='idiom'||wordList.kind==='idiomg') ? 'idiom' : (isIdiomTerm(o)?'idiom':'word');
+  const kind = (wordList.kind==='idiom'||wordList.kind==='idiomc') ? 'idiom' : (isIdiomTerm(o)?'idiom':'word');
   saveItemAsCard(o, kind);
 }
 function toggleWordList(i){ if(!wordList) return; wordList.openIdx=(wordList.openIdx===i)?null:i; renderWordList(); }
 
 /* ---------- 熟語学習（穴埋め） ---------- */
 function idiomPick(){
-  const gc=idiomGroupCount();
   let rows='';
-  for(let g=0; g<gc; g++){
-    const r=idiomGroupRange(g); const pool=idiomGroupPool(g); const um=unmasteredCount(pool);
-    rows+=`<div class="deck-row" onclick="idiomGroupStylePick(${g})"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center">${I.book}</div><div class="meta"><div class="nm">${r[0]}–${r[1]}</div><div class="ct">${pool.length}問 ・ 未習得 ${um}</div></div><span class="chev">${I.chev}</span></div>`;
-  }
+  CEFR_ORDER.forEach(cf=>{
+    const pool=idiomLevelPoolC(cf); if(!pool.length) return;
+    const um=unmasteredCount(pool);
+    rows+=`<div class="deck-row" onclick="idiomCefrStylePick('${cf}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center">${I.book}</div><div class="meta"><div class="nm">${CEFR_NAME[cf]}</div><div class="ct">${pool.length}問 ・ 未習得 ${um}</div></div><span class="chev">${I.chev}</span></div>`;
+  });
   openModal(`
     <h2>熟語学習</h2>
-    <div style="color:var(--ink-2);font-size:.86rem;margin:-6px 0 12px;line-height:1.5">100問ごとのグループを選ぶ → 学習方式（未習得・忘却曲線など）→ 形式（フラッシュカード / 4択穴埋め）の順に選びます。どの熟語も両方の形式で学べます。</div>
+    <div style="color:var(--ink-2);font-size:.86rem;margin:-6px 0 12px;line-height:1.5">CEFRレベルを選ぶ → 学習方式（未習得・忘却曲線など）→ 形式（フラッシュカード / 4択穴埋め）の順に選びます。どの熟語も両方の形式で学べます。</div>
     <div class="deck-pick">${rows}</div>
     <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>`);
 }
-function idiomGroupStylePick(g){
-  const r=idiomGroupRange(g);
+function idiomCefrStylePick(cf){
+  if(CEFR_ORDER.indexOf(cf)<0){ toast('レベルが不正です'); return; }
   openModal(`
-    <h2>熟語 ${r[0]}–${r[1]}</h2>
+    <h2>熟語 ${CEFR_NAME[cf]}</h2>
     <div style="color:var(--ink-2);font-size:.86rem;margin:-6px 0 10px">学習方式を選択</div>
-    ${styleOptsHtml(st=>`idiomFormatPick(${g},'${st}')`, `showWordList('idiomg','${g}')`, idiomGroupPool(g))}
-    <div class="modal-actions" style="margin-top:8px"><button class="btn btn-ghost" onclick="idiomPick()">← グループへ戻る</button></div>`);
+    ${styleOptsHtml(st=>`idiomFormatPick('${cf}','${st}')`, `showWordList('idiomc','${cf}')`, idiomLevelPoolC(cf))}
+    <div class="modal-actions" style="margin-top:8px"><button class="btn btn-ghost" onclick="idiomPick()">← レベルへ戻る</button></div>`);
 }
-function idiomFormatPick(g, style){
-  const r=idiomGroupRange(g);
+function idiomFormatPick(cf, style){
   openModal(`
-    <h2>熟語 ${r[0]}–${r[1]}</h2>
+    <h2>熟語 ${CEFR_NAME[cf]}</h2>
     <div style="color:var(--ink-2);font-size:.86rem;margin:-6px 0 12px">${styleLabel(style)} ・ 形式を選択</div>
     <div class="deck-pick">
-      <div class="deck-row" onclick="startIdiomU(${g},'${style}','flash')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center">${I.book}</div><div class="meta"><div class="nm">フラッシュカード</div><div class="ct">めくって暗記 ・ カード保存可</div></div><span class="chev">${I.chev}</span></div>
-      <div class="deck-row" onclick="startIdiomU(${g},'${style}','choice')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${I.doc}</div><div class="meta"><div class="nm">4択穴埋め</div><div class="ct">試験形式で確認</div></div><span class="chev">${I.chev}</span></div>
+      <div class="deck-row" onclick="startIdiomU('${cf}','${style}','flash')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center">${I.book}</div><div class="meta"><div class="nm">フラッシュカード</div><div class="ct">めくって暗記 ・ カード保存可</div></div><span class="chev">${I.chev}</span></div>
+      <div class="deck-row" onclick="startIdiomU('${cf}','${style}','choice')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${I.doc}</div><div class="meta"><div class="nm">4択穴埋め</div><div class="ct">試験形式で確認</div></div><span class="chev">${I.chev}</span></div>
     </div>
-    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="idiomGroupStylePick(${g})">← 方式へ戻る</button></div>`);
+    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="idiomCefrStylePick('${cf}')">← 方式へ戻る</button></div>`);
 }
-function startIdiomU(g, style, fmt){
+function startIdiomU(cf, style, fmt){
   style=style||'srs';
-  const r=idiomGroupRange(g); const name='熟語 '+r[0]+'–'+r[1];
+  const name='熟語 '+(CEFR_NAME[cf]||cf);
   closeModal();
   if(fmt==='flash'){
-    const cards=idiomGroupCards(g);
-    if(!cards.length){ toast('この範囲は準備中です'); return; }
+    const cards=idiomLevelCards(cf);
+    if(!cards.length){ toast('このレベルは準備中です'); return; }
     startStudy(cards, style, name); // selectItems + カード保存ボタンを再利用
     return;
   }
   // 4択穴埋め
-  const pool=idiomGroupPool(g);
-  if(!pool.length){ toast('この範囲は準備中です'); return; }
+  const pool=idiomLevelPoolC(cf);
+  if(!pool.length){ toast('このレベルは準備中です'); return; }
   const picked=selectItems(pool, style);
   if(!picked.length){ toast(style==='review'?'復習対象がありません':(style==='unmastered'?'未習得の項目がありません':'対象がありません')); return; }
   const all=idiomAllItems();
   const items=picked.map(p=>{ const o=makeIdiomChoiceItem(p.raw, all); o.srs=p.srs; return o; });
-  idiom={ catName:name, fmt:'choice', items, idx:0, answered:false, userAns:null, userAnsText:'', correct:null, score:0, log:[], openIdx:null, isU:true, gIdx:g, style, fmtU:'choice' };
+  idiom={ catName:name, fmt:'choice', items, idx:0, answered:false, userAns:null, userAnsText:'', correct:null, score:0, log:[], openIdx:null, isU:true, cefr:cf, style, fmtU:'choice' };
   renderIdiom();
 }
 function idiomLevelPick(catId){
@@ -2595,13 +2602,13 @@ function startIdiom(catId, levelId, style){
 }
 function blankHtml(q){ return esc(q).replace('____','<span style="display:inline-block;min-width:64px;border-bottom:2px solid var(--green);text-align:center;font-weight:700;color:var(--green)">　？　</span>'); }
 function restartIdiom(){
-  if(idiom&&idiom.isU){ const g=idiom.gIdx,s=idiom.style; idiom=null; startIdiomU(g,s,'choice'); return; }
+  if(idiom&&idiom.isU){ const cf=idiom.cefr,s=idiom.style; idiom=null; startIdiomU(cf,s,'choice'); return; }
   if(!idiom||!idiom.catId) return; const c=idiom.catId,l=idiom.levelId,s=idiom.style||'srs'; idiom=null; startIdiom(c,l,s);
 }
 function idiomContinue(){
-  if(idiom&&idiom.isU){ const g=idiom.gIdx,s=idiom.style;
-    if(s==='review'||s==='unmastered'){ const left=selectItems(idiomGroupPool(g),s); if(!left.length){ toast(s==='review'?'復習対象はもうありません 🎉':'未習得の項目はもうありません 🎉'); return; } }
-    idiom=null; startIdiomU(g,s,'choice'); return;
+  if(idiom&&idiom.isU){ const cf=idiom.cefr,s=idiom.style;
+    if(s==='review'||s==='unmastered'){ const left=selectItems(idiomLevelPoolC(cf),s); if(!left.length){ toast(s==='review'?'復習対象はもうありません 🎉':'未習得の項目はもうありません 🎉'); return; } }
+    idiom=null; startIdiomU(cf,s,'choice'); return;
   }
   if(!idiom||!idiom.catId) return; const c=idiom.catId,l=idiom.levelId,s=idiom.style||'srs';
   if(s==='review'||s==='unmastered'){ const pool=idiomChoicePool(c,l); const left=selectItems(pool,s); if(!left.length){ toast(s==='review'?'復習対象はもうありません 🎉':'未習得の項目はもうありません 🎉'); return; } }
@@ -2661,7 +2668,9 @@ function pickIdiomChoice(i){
   idiom.userAns=i; idiom.correct=(i===it.ansIdx);
   if(idiom.correct) idiom.score++;
   if(it.srs){ scheduleSrs(it.srs, idiom.correct?2:0); const d=todayStr(); state.stats.reviews[d]=(state.stats.reviews[d]||0)+1; updateStreak(); incDaily('idioms'); save(); }
-  pushIdiomLog(); idiom.answered=true; renderIdiom();
+  pushIdiomLog(); idiom.answered=true;
+  try{ speak(it.q.replace('____', it.answer)); }catch(_){}   // 解答表示時に例文音声
+  renderIdiom();
 }
 function checkIdiomFill(){
   if(idiom.answered) return;
@@ -2670,13 +2679,15 @@ function checkIdiomFill(){
   idiom.userAnsText=val;
   idiom.correct = normTxt(val)===normTxt(it.answer) && normTxt(val)!=='';
   if(idiom.correct) idiom.score++;
-  pushIdiomLog(); idiom.answered=true; renderIdiom();
+  pushIdiomLog(); idiom.answered=true;
+  try{ speak(it.q.replace('____', it.answer)); }catch(_){}   // 解答表示時に例文音声
+  renderIdiom();
 }
 function pushIdiomLog(){
   const it=idiom.items[idiom.idx];
   idiom.log.push({ q:it.q, answer:it.answer, mean:it.mean, correct:idiom.correct, userAns: idiom.fmt==='fill'?(idiom.userAnsText||''):((it.choices&&it.choices[idiom.userAns])||'') });
 }
-function nextIdiom(){ idiom.idx++; idiom.answered=false; idiom.userAns=null; idiom.userAnsText=''; idiom.correct=null; renderIdiom(); }
+function nextIdiom(){ idiom.idx++; idiom.answered=false; idiom.userAns=null; idiom.userAnsText=''; idiom.correct=null; try{ window.scrollTo(0,0); }catch(_){} renderIdiom(); }
 function toggleIdiomResult(i){ if(!idiom) return; idiom.openIdx=(idiom.openIdx===i)?null:i; renderIdiom(); }
 function idiomResultRow(r,i,open){
   const full=r.q.replace('____', r.answer);
@@ -2722,8 +2733,8 @@ function renderStudySession(){
             ${c.pron?`<div class="pron">${esc(c.pron)}</div>`:''}
             <button class="spk-big" onclick="event.stopPropagation();speak(${esc(JSON.stringify(c.term))})">${I.speaker}</button>
             ${c.exEn?`<div class="ex-peek" onclick="event.stopPropagation()">
-              ${session.exShown?`<div class="ex-peek-sen">${esc(c.exEn)} ${spkBtn(c.exEn,24)}${c.exJa?`<div style="color:var(--ink-3);font-size:.85rem;margin-top:4px">${esc(c.exJa)}</div>`:''}</div>`:''}
-              <button class="ex-peek-btn" onclick="event.stopPropagation();peekExample()">${session.exShown?'例文を隠す':'例文を見て予測'}</button>
+              <button class="ex-peek-btn" onclick="event.stopPropagation();peekExample()">${session.exShown?'例文を隠す':'例文を表示'}</button>
+              ${session.exShown?`<div class="ex-peek-sen">${esc(c.exEn)} ${spkBtn(c.exEn,26)}${c.exJa?`<div style="color:var(--ink-3);font-size:.85rem;margin-top:5px">${esc(c.exJa)}</div>`:''}</div>`:''}
             </div>`:''}
             <div class="tap-hint">タップして答えを表示</div>
           </div>
@@ -2734,10 +2745,6 @@ function renderStudySession(){
             ${c.exEn?`<div class="b-ex"><div class="en">${esc(c.exEn)} ${spkBtn(c.exEn,26)}</div>${c.exJa?`<div class="ja">${esc(c.exJa)}</div>`:''}</div>`:''}
             ${(c.pos&&c.pos.length)?`<div class="b-note">${c.pos.map(p=>`<span class="pos-chip">${esc(p)}</span>`).join('')}</div>`:''}
             ${c.other?`<div class="b-note">${esc(c.other)}</div>`:''}
-            <div class="memo-box" onclick="event.stopPropagation()">
-              <div class="memo-lab">${I.pen||I.edit||''} メモ</div>
-              <textarea class="memo-edit" oninput="onStudyMemoInput(this)" placeholder="自分用メモ（覚え方・関連語など）">${esc(getMemo(c))}</textarea>
-            </div>
             <div class="card-btn-row">
               <button class="save-mini" onclick="event.stopPropagation();saveCurrentStudyCard()">${I.plus} 保存</button>
               <button class="save-mini" onclick="event.stopPropagation();toggleBookmarkStudy()">${isBookmarked(c.term)?'★ ブックマーク済':'☆ ブックマーク'}</button>
@@ -2773,6 +2780,7 @@ function startStudy(pool, style, catName){
   if(!items.length){ toast(style==='review'?'復習対象（不正確で終了）がありません':(style==='unmastered'?'未習得の項目がありません':'学習できるカードがありません')); return; }
   closeModal();
   session={ items, qi:0, total:items.length, flipped:false, exShown:false, results:[], openIdx:null, catName:catName||'学習', style, pool, sourceStyle:style };
+  try{ window.scrollTo(0,0); }catch(_){}
   renderStudySession();
 }
 function flipCard(){
@@ -2792,6 +2800,7 @@ function gradeStudy(r){
   session.results.push({ term:c.term, mean:c.mean, pron:c.pron, exEn:c.exEn, exJa:c.exJa, pos:c.pos, other:c.other, ok:(r>=2) });
   session.qi++; session.flipped=false; session.exShown=false;
   save();
+  try{ window.scrollTo(0,0); }catch(_){}
   renderStudySession();
 }
 function renderStudyResult(){
