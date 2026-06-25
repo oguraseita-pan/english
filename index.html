@@ -40,6 +40,8 @@
   --r-hard:#E0934A;
   --r-good:#2F6F5E;
   --r-easy:#4B7BA8;
+  --blue:#3A78C2;
+  --blue-soft:#E1ECF8;
   --shadow:0 1px 2px rgba(31,42,40,.06), 0 6px 18px rgba(31,42,40,.06);
   --shadow-lg:0 8px 40px rgba(31,42,40,.16);
   --radius:18px;
@@ -64,6 +66,8 @@ html[data-theme="dark"]{
   --green-soft:#1E2E2A;
   --amber:#F2B33D;
   --amber-soft:#33301F;
+  --blue:#6BA3E6;
+  --blue-soft:#1A2533;
   --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.3);
   --shadow-lg:0 8px 40px rgba(0,0,0,.5);
 }
@@ -320,6 +324,11 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .status-bar .sb-item{display:inline-flex;align-items:center;gap:6px;}
 .status-bar .sb-dot{width:10px;height:10px;border-radius:50%;display:inline-block;}
 .result-actions{display:flex;gap:10px;margin-top:16px;}
+.wl-group{font-weight:800;font-size:.92rem;color:var(--green-d);background:var(--green-soft);border-radius:10px;padding:7px 12px;margin:14px 0 8px;position:sticky;top:calc(var(--safe-t) + 4px);z-index:5;}
+.wl-group:first-child{margin-top:2px;}
+.wl-sticky-back{position:fixed;top:calc(var(--safe-t) + 10px);left:12px;z-index:60;display:inline-flex;align-items:center;gap:5px;background:var(--surface);color:var(--ink);font-weight:700;font-size:.85rem;border-radius:999px;padding:9px 14px 9px 11px;box-shadow:var(--shadow-lg);opacity:0;transform:translateY(-8px);pointer-events:none;transition:opacity .18s,transform .18s;}
+.wl-sticky-back.show{opacity:1;transform:translateY(0);pointer-events:auto;}
+.wl-sticky-back svg{width:17px;height:17px;}
 .opt-btn:active{transform:scale(.985);}
 .opt-btn .oic{width:40px;height:40px;border-radius:11px;display:grid;place-items:center;flex:none;background:var(--green-soft);color:var(--green);}
 .opt-btn .oic svg{width:22px;height:22px;}
@@ -740,7 +749,7 @@ function defaultState(){
   return {
     folders:{}, cards:{},
     threads:[], aiThreadSeed:false,
-    settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:0.9, newPerDay:20, goal:'daily', goalLevel:'B1', goalWords:20, goalIdioms:10, goalCompo:5, reviewCap:30 },
+    settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:0.9, newPerDay:20, goal:'daily', goalLevel:'B1', goalWords:20, goalIdioms:10, goalCompo:5, reviewCap:30, srsPreset:'standard', srsMaxIvl:180, saveDestWord:'auto', saveDestIdiom:'auto', saveDestReading:'auto' },
     stats:{ reviews:{}, streak:0, lastStudy:null, time:{}, dailyCount:{date:null, words:0, idioms:0, compo:0, reviews:0} },
     history:{ compo:[], speech:[] },
     aiUsage:{ date:null, uses:0, adResets:0, proUses:0 },
@@ -755,7 +764,20 @@ function normalizeState(){
   if(!state.aiUsage || typeof state.aiUsage!=='object') state.aiUsage={date:null,uses:0,adResets:0,proUses:0};
   if(typeof state.stats.dailyCount.reviews!=='number') state.stats.dailyCount.reviews=0;
   if(typeof state.settings.reviewCap!=='number') state.settings.reviewCap=(typeof state.settings.reviewPerSession==='number'?Math.max(20,state.settings.reviewPerSession):30);
+  if(typeof state.settings.srsPreset!=='string') state.settings.srsPreset='standard';
+  if(typeof state.settings.srsMaxIvl!=='number') state.settings.srsMaxIvl=180;
+  if(typeof state.settings.saveDestWord!=='string') state.settings.saveDestWord='auto';
+  if(typeof state.settings.saveDestIdiom!=='string') state.settings.saveDestIdiom='auto';
+  if(typeof state.settings.saveDestReading!=='string') state.settings.saveDestReading='auto';
   if(!state.settings.goalLevelAnchor) state.settings.goalLevelAnchor=state.settings.goalLevel;
+  // 既存ユーザーにも 単語学習／熟語学習 フォルダを用意
+  if(state.seeded && state.folders){
+    ['単語学習','熟語学習'].forEach(nm=>{
+      if(!Object.values(state.folders).some(f=>f.name===nm&&f.parentId===null)){
+        const id=uid(); state.folders[id]={id,name:nm,parentId:null,createdAt:now()};
+      }
+    });
+  }
   if(!state.progress || typeof state.progress!=='object') state.progress = {}; // preset/idiom 学習進捗（永続SRS）
   if(!state.history || typeof state.history!=='object') state.history = {compo:[],speech:[]};
   if(!state.billing || typeof state.billing!=='object') state.billing = {plan:'free', term:null, since:null, card:null};
@@ -1003,9 +1025,11 @@ const DAY = 86400000;
 /* ---------- sample seed (first run) ---------- */
 function seed(){
   if(state.seeded) return;
-  const fMemo=uid(), fInbox=uid(), fDiary=uid();
+  const fMemo=uid(), fInbox=uid(), fDiary=uid(), fWord=uid(), fIdiom=uid();
   state.folders[fMemo] = {id:fMemo,name:'メモ',parentId:null,createdAt:now()};
   state.folders[fInbox]= {id:fInbox,name:'受信箱',parentId:null,createdAt:now()};
+  state.folders[fWord] = {id:fWord,name:'単語学習',parentId:null,createdAt:now()};
+  state.folders[fIdiom]= {id:fIdiom,name:'熟語学習',parentId:null,createdAt:now()};
   state.folders[fDiary]= {id:fDiary,name:'英語日記',parentId:null,createdAt:now()};
   const mk=(folderId,term,pron,mean,exEn,exJa,pos,other)=>{
     const id=uid();
@@ -1545,16 +1569,53 @@ function renderHome(){
 }
 
 // ワンタップでカード（受信箱）に保存：学習中・プリセット・瞬間英作文から
-function saveItemAsCard(o){
+// 保存先フォルダの決定
+function ensureFolder(name){
+  let f=Object.values(state.folders).find(x=>x.name===name&&x.parentId===null);
+  if(!f){ const id=uid(); state.folders[id]={id,name,parentId:null,createdAt:now()}; f=state.folders[id]; }
+  return f;
+}
+function isIdiomTerm(o){
+  if(o&&Array.isArray(o.pos)&&(o.pos.includes('熟語')||o.pos.includes('句動詞')||o.pos.includes('イディオム'))) return true;
+  const t=String((o&&o.term)||'').trim();
+  return t.split(/\s+/).filter(Boolean).length>=2; // 2語以上＝熟語
+}
+// kind: 'word' | 'idiom' | 'reading' | 'inbox'
+function resolveSaveFolder(kind,o){
+  const s=state.settings;
+  let pref;
+  if(kind==='word')    pref=s.saveDestWord;
+  else if(kind==='idiom')   pref=s.saveDestIdiom;
+  else if(kind==='reading') pref=s.saveDestReading;
+  else pref='inbox';
+  // 明示フォルダ指定（存在すれば）
+  if(pref && pref!=='auto' && pref!=='inbox'){ const f=state.folders[pref]; if(f) return f; }
+  if(pref==='inbox') return ensureFolder('受信箱');
+  // auto（または未指定）：語数/品詞で単語/熟語に振り分け
+  if(kind==='word')  return ensureFolder('単語学習');
+  if(kind==='idiom') return ensureFolder('熟語学習');
+  // reading / その他
+  return ensureFolder(isIdiomTerm(o)?'熟語学習':'単語学習');
+}
+function saveDestOptions(cur, kind){
+  const autoLabel = kind==='word'?'単語学習（自動）':kind==='idiom'?'熟語学習（自動）':'自動（語数で判定）';
+  let html=`<option value="auto" ${(!cur||cur==='auto')?'selected':''}>${autoLabel}</option>`;
+  html+=`<option value="inbox" ${cur==='inbox'?'selected':''}>受信箱</option>`;
+  // 上位フォルダ一覧（受信箱以外）
+  Object.values(state.folders).filter(f=>f.parentId===null && f.name!=='受信箱')
+    .sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))
+    .forEach(f=>{ html+=`<option value="${f.id}" ${cur===f.id?'selected':''}>${esc(f.name)}</option>`; });
+  return html;
+}
+function saveItemAsCard(o,kind){
   if(!o||!o.term){ toast('保存できる内容がありません'); return; }
   const exists=Object.values(state.cards).some(c=>c.type!=='text' && String(c.term||'').toLowerCase()===String(o.term).toLowerCase());
   if(exists){ toast('「'+o.term+'」は既に保存済みです'); return; }
-  let inbox=Object.values(state.folders).find(f=>f.name==='受信箱'&&f.parentId===null);
-  if(!inbox){ const id=uid(); state.folders[id]={id,name:'受信箱',parentId:null,createdAt:now()}; inbox=state.folders[id]; }
+  const dest=resolveSaveFolder(kind||'inbox',o);
   const id=uid();
-  state.cards[id]={id,folderId:inbox.id,term:String(o.term),pron:o.pron||'',mean:o.mean||'',exEn:o.exEn||'',exJa:o.exJa||'',other:o.other||'',pos:Array.isArray(o.pos)?o.pos:[],
+  state.cards[id]={id,folderId:dest.id,term:String(o.term),pron:o.pron||'',mean:o.mean||'',exEn:o.exEn||'',exJa:o.exJa||'',other:o.other||'',pos:Array.isArray(o.pos)?o.pos:[],
     srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now()};
-  save(); toast('「'+o.term+'」を受信箱に保存しました');
+  save(); toast('「'+o.term+'」を'+dest.name+'に保存しました');
 }
 function quickAdd(){
   const inp=document.getElementById('qaInput');
@@ -1971,13 +2032,15 @@ function deleteFolder(id){
 
 /* ---------- card modal ---------- */
 function inboxFolderId(){ const f=Object.values(state.folders).find(x=>x.name==='受信箱'&&x.parentId===null); return f?f.id:null; }
-function getWordFolderId(){ let f=Object.values(state.folders).find(x=>x.name==='単語'&&x.parentId===null); if(!f){ const id=uid(); state.folders[id]={id,name:'単語',parentId:null,createdAt:now()}; save(); f=state.folders[id]; } return f.id; }
+function getWordFolderId(){ return ensureFolder('単語学習').id; }
+function getIdiomFolderId(){ return ensureFolder('熟語学習').id; }
 function ensureFolderOption(sel,id,name){ if(sel && ![...sel.options].some(o=>o.value===id)){ const o=document.createElement('option'); o.value=id; o.textContent=name; sel.appendChild(o); } }
 function editCard(id, prefill){
   const c = id?state.cards[id]:(prefill||{});
   let defFolder = c.folderId||currentFolder;
   const ib=inboxFolderId();
   if(c.id && ib && c.folderId===ib && (c.mean||'').trim()){ defFolder=getWordFolderId(); } // inbox item that now has meaning -> 単語
+  if(!id && prefill && prefill.term && !defFolder){ defFolder = isIdiomTerm(prefill)?getIdiomFolderId():getWordFolderId(); } // 新規（読み上げ/AI/翻訳）は語数で単語/熟語へ
   const folderOpts = folderSelectOptions(defFolder);
   openModal(`
     <h2>${id?'カードを編集':'新しいカード'}</h2>
@@ -2166,29 +2229,48 @@ function presetStylePick(catId, levelId){
 }
 
 /* ---------- SRS engine ---------- */
-function fmtDays(d){ if(d>=30){return Math.round(d/30)+'ヶ月';} if(d>=365){return Math.round(d/365)+'年';} return d+'日'; }
+// 忘却曲線プリセット。good/easyの伸び率・初期定着日数・easeの増減・上限日数を制御
+const SRS_PRESETS = {
+  slow:     { gradeGood:1, gradeEasy:2, goodMul:1.0, easyMul:1.15, easyBonus:0.10, hardMul:1.1, label:'ゆっくり' },
+  standard: { gradeGood:1, gradeEasy:3, goodMul:1.0, easyMul:1.3,  easyBonus:0.15, hardMul:1.2, label:'標準' },
+  fast:     { gradeGood:2, gradeEasy:4, goodMul:1.15,easyMul:1.45, easyBonus:0.20, hardMul:1.3, label:'ハイペース' }
+};
+function srsCfg(){
+  const s=state.settings||{};
+  const p=SRS_PRESETS[s.srsPreset]||SRS_PRESETS.standard;
+  const cap=(typeof s.srsMaxIvl==='number'&&s.srsMaxIvl>0)?s.srsMaxIvl:0; // 0=無制限
+  return Object.assign({}, p, { maxIvl:cap });
+}
+function capIvl(d){ const c=srsCfg().maxIvl; return c>0?Math.min(d,c):d; }
+function fmtDays(d){ if(d>=365){return (Math.round(d/365*10)/10)+'年';} if(d>=30){return Math.round(d/30)+'ヶ月';} return d+'日'; }
 function previewIvl(c,r){ return previewIvlSrs(c.srs,r); }
 function previewIvlSrs(s,r){
-  if(s.state==='new'||s.state==='learning'){ return ['<1分','10分','1日','3日'][r]; }
+  const cf=srsCfg();
+  if(s.state==='new'||s.state==='learning'){
+    if(r===0) return '<1分'; if(r===1) return '10分';
+    if(r===2) return fmtDays(capIvl(cf.gradeGood));
+    return fmtDays(capIvl(cf.gradeEasy));
+  }
   if(r===0) return '<1分';
-  if(r===1) return fmtDays(Math.max(1,Math.round(s.interval*1.2)));
-  if(r===2) return fmtDays(Math.max(1,Math.round(s.interval*s.ease)));
-  return fmtDays(Math.max(1,Math.round(s.interval*(s.ease+0.15)*1.3)));
+  if(r===1) return fmtDays(capIvl(Math.max(1,Math.round(s.interval*cf.hardMul))));
+  if(r===2) return fmtDays(capIvl(Math.max(1,Math.round(s.interval*s.ease*cf.goodMul))));
+  return fmtDays(capIvl(Math.max(1,Math.round(s.interval*(s.ease+cf.easyBonus)*cf.easyMul))));
 }
 function schedule(c,r){ scheduleSrs(c.srs,r); }
 function scheduleSrs(s,r){
   s.lastGrade=r;
+  const cf=srsCfg();
   if(s.state==='new'||s.state==='learning'){
     if(r===0){ s.state='learning'; s.interval=0; s.due=now()+60*1000; }
     else if(r===1){ s.state='learning'; s.due=now()+10*60*1000; }
-    else if(r===2){ s.state='review'; s.interval=1; s.reps=1; s.due=now()+DAY; }
-    else { s.state='review'; s.interval=3; s.reps=1; s.due=now()+3*DAY; }
+    else if(r===2){ s.state='review'; s.interval=capIvl(cf.gradeGood); s.reps=1; s.due=now()+s.interval*DAY; }
+    else { s.state='review'; s.interval=capIvl(cf.gradeEasy); s.reps=1; s.due=now()+s.interval*DAY; }
   } else {
     if(r===0){ s.lapses++; s.ease=Math.max(1.3,s.ease-0.2); s.state='learning'; s.interval=0; s.reps=0; s.due=now()+60*1000; }
     else {
-      if(r===1){ s.ease=Math.max(1.3,s.ease-0.15); s.interval=Math.max(1,Math.round(s.interval*1.2)); }
-      else if(r===2){ s.interval=Math.max(1,Math.round(s.interval*s.ease)); }
-      else { s.ease+=0.15; s.interval=Math.max(1,Math.round(s.interval*(s.ease)*1.3)); }
+      if(r===1){ s.ease=Math.max(1.3,s.ease-0.15); s.interval=capIvl(Math.max(1,Math.round(s.interval*cf.hardMul))); }
+      else if(r===2){ s.interval=capIvl(Math.max(1,Math.round(s.interval*s.ease*cf.goodMul))); }
+      else { s.ease+=cf.easyBonus; s.interval=capIvl(Math.max(1,Math.round(s.interval*s.ease*cf.easyMul))); }
       s.reps++; s.state='review'; s.due=now()+s.interval*DAY;
     }
   }
@@ -2198,7 +2280,7 @@ function newSrs(){ return {state:'new',due:0,interval:0,ease:2.5,reps:0,lapses:0
 function getProg(key){ if(!state.progress) state.progress={}; if(!state.progress[key]) state.progress[key]=newSrs(); return state.progress[key]; }
 function presetKey(catId,lvlId,term){ return 'p|'+catId+'|'+lvlId+'|'+String(term).toLowerCase(); }
 function idiomKeySig(catId,lvlId,sig){ return 'i|'+catId+'|'+lvlId+'|'+String(sig); }
-function masteryLabel(s){ if(!s||s.state==='new') return ['未学習','var(--ink-3)']; if(s.state==='learning') return ['学習中','var(--amber-d)']; if(s.interval>=21) return ['習得済み','var(--green)']; return ['復習中','var(--green)']; }
+function masteryLabel(s){ if(!s||s.state==='new') return ['未学習','var(--ink-3)']; if(s.state==='learning') return ['学習中','var(--amber-d)']; if(s.interval>=21) return ['習得済み','var(--blue)']; return ['復習中','var(--green)']; }
 function rankUnmastered(s){ if(s.state==='new') return 0; if(s.state==='learning') return 1; return 2 + Math.min(s.reps,8)*0.1 + Math.min(s.interval,90)*0.001; }
 // 未習得＝まだ習得済みでない（new/learning/復習中）
 function isUnmastered(s){ return !s || s.state==='new' || s.state==='learning' || (s.interval||0)<21; }
@@ -2274,40 +2356,67 @@ function startPreset(catId, levelId, style){
 function showWordList(kind, catId, levelId){
   closeModal();
   let pool, name;
+  const all = levelId==='__all__';
   if(kind==='preset'){
     const c=PRESET_LIB.find(x=>x.id===catId); if(!c){ toast('見つかりません'); return; }
-    const lvName = levelId==='__all__' ? 'すべて' : (c.levels.find(x=>x.id===levelId)||{}).name;
+    const lvName = all ? 'すべて' : (c.levels.find(x=>x.id===levelId)||{}).name;
     if(!lvName){ toast('見つかりません'); return; }
-    pool=presetPool(catId,levelId); name=c.name+' / '+lvName;
+    if(all){ pool=[]; c.levels.forEach(l=>l.words.forEach(w=>{ const o=presetWord(w); o.srs=getProg(presetKey(catId,l.id,o.term)); o._lv=l.name; pool.push(o); })); }
+    else pool=presetPool(catId,levelId);
+    name=c.name+' / '+lvName;
   } else {
     const c=IDIOM_LIB.find(x=>x.id===catId); if(!c){ toast('見つかりません'); return; }
-    const lvName = levelId==='__all__' ? 'すべて' : (c.levels.find(x=>x.id===levelId)||{}).name;
+    const lvName = all ? 'すべて' : (c.levels.find(x=>x.id===levelId)||{}).name;
     if(!lvName){ toast('見つかりません'); return; }
     name=c.name+' / '+lvName;
-    if(c.fmt==='choice') pool=idiomChoicePool(catId,levelId).map(p=>{ const o=idiomItem(p.raw,'choice'); return { term:o.answer, mean:o.mean, exEn:o.q.replace('____',o.answer), exJa:'', pos:['熟語'], other:'', srs:p.srs }; });
-    else pool=idiomFlashPool(catId,levelId);
+    if(c.fmt==='choice'){
+      pool=idiomChoicePool(catId,levelId).map(p=>{ const o=idiomItem(p.raw,'choice'); const lv=c.levels.find(l=>l.id===p.lid); return { term:o.answer, mean:o.mean, exEn:o.q.replace('____',o.answer), exJa:'', pos:['熟語'], other:'', srs:p.srs, _lv:lv?lv.name:'' }; });
+    } else if(all){
+      pool=[]; c.levels.forEach(l=>l.items.forEach(it=>pool.push({ term:it[1], pron:'', mean:it[2]||'', exEn:it[0].replace('____',it[1]), exJa:'', pos:['熟語'], other:'', srs:getProg(idiomKeySig(catId,l.id,it[1])), _lv:l.name })));
+    } else pool=idiomFlashPool(catId,levelId);
   }
-  wordList={ pool, name, kind, catId, levelId, openIdx:null };
+  wordList={ pool, name, kind, catId, levelId, openIdx:null, grouped:all };
   renderWordList();
 }
 function renderWordList(){
   const v=document.getElementById('view-study');
   const sc=statusCounts(wordList.pool);
+  let rows;
+  if(wordList.grouped){
+    let html='', curLv=null, n=0;
+    wordList.pool.forEach((c,i)=>{
+      if(c._lv!==curLv){ curLv=c._lv; n=0; html+=`<div class="wl-group">${esc(curLv)}</div>`; }
+      n++; html+=wordListRow(c,i,wordList.openIdx===i,n);
+    });
+    rows=html;
+  } else {
+    rows=wordList.pool.map((c,i)=>wordListRow(c,i,wordList.openIdx===i,i+1)).join('');
+  }
   v.innerHTML=`
+    <button class="wl-sticky-back" id="wlStickyBack" onclick="wordList=null;renderStudy()">${I.back} 学習に戻る</button>
     <div class="topbar"><h1 style="font-size:1.3rem">${esc(wordList.name)}</h1></div>
     <button class="cd-back" onclick="wordList=null;renderStudy()">${I.back} 学習に戻る</button>
     <div class="status-bar">
       <span class="sb-item"><span class="sb-dot" style="background:var(--ink-3)"></span>未学習：${sc.新規}</span>
       <span class="sb-item"><span class="sb-dot" style="background:var(--amber-d)"></span>学習中：${sc.学習中}</span>
-      <span class="sb-item"><span class="sb-dot" style="background:var(--green)"></span>習得済：${sc.習得済}</span>
+      <span class="sb-item"><span class="sb-dot" style="background:var(--blue)"></span>習得済：${sc.習得済}</span>
     </div>
-    <div class="list">${wordList.pool.map((c,i)=>wordListRow(c,i,wordList.openIdx===i)).join('')}</div>`;
+    <div class="list">${rows}</div>`;
+  setupWlSticky();
 }
-function wordListRow(c,i,open){
+function setupWlSticky(){
+  const btn=document.getElementById('wlStickyBack'); if(!btn) return;
+  const target=document.scrollingElement||document.documentElement;
+  if(window.__wlScroll) window.removeEventListener('scroll', window.__wlScroll, true);
+  window.__wlScroll=()=>{ const b=document.getElementById('wlStickyBack'); if(!b) return; const y=window.scrollY||target.scrollTop||0; b.classList.toggle('show', y>200); };
+  window.addEventListener('scroll', window.__wlScroll, true);
+  window.__wlScroll();
+}
+function wordListRow(c,i,open,num){
   const ml=masteryLabel(c.srs), lab=ml[0], col=ml[1];
   return `<div class="result-row">
     <div class="rr-head" onclick="toggleWordList(${i})">
-      <span class="wl-num">${i+1}</span>
+      <span class="wl-num">${num}</span>
       <span style="width:11px;height:11px;border-radius:50%;background:${col};flex:none;display:inline-block"></span>
       <div class="rr-meta" style="flex:1"><div class="rr-jp" style="font-family:var(--font-en);font-weight:600;font-size:1.05rem">${esc(c.term)}</div><div class="rr-ans">${esc(c.mean)}</div></div>
       ${spkBtn(c.term,26)}
@@ -2317,8 +2426,16 @@ function wordListRow(c,i,open){
       <div class="blk"><div class="lab">意味</div><div>${esc(c.mean)||'<span style="color:var(--ink-3)">（未登録）</span>'}</div></div>
       ${c.exEn?`<div class="blk"><div class="lab">例文</div><div class="en">${esc(c.exEn)} ${spkBtn(c.exEn,24)}</div>${c.exJa?`<div style="color:var(--ink-2)">${esc(c.exJa)}</div>`:''}</div>`:''}
       <div class="blk"><div class="lab">進捗</div><div style="color:${col};font-weight:600">${lab}</div></div>
+      <button class="btn btn-ghost full wl-save" style="margin-top:10px;padding:10px" onclick="event.stopPropagation();saveWordListItem(${i})">${I.plus||''} カードに保存</button>
     </div>`:''}
   </div>`;
+}
+function saveWordListItem(i){
+  if(!wordList) return;
+  const c=wordList.pool[i]; if(!c) return;
+  const o={term:c.term, mean:c.mean, pron:c.pron||'', exEn:c.exEn||'', exJa:c.exJa||'', pos:Array.isArray(c.pos)?c.pos:[], other:c.other||''};
+  const kind = wordList.kind==='idiom' ? 'idiom' : (isIdiomTerm(o)?'idiom':'word');
+  saveItemAsCard(o, kind);
 }
 function toggleWordList(i){ if(!wordList) return; wordList.openIdx=(wordList.openIdx===i)?null:i; renderWordList(); }
 
@@ -2467,7 +2584,7 @@ function idiomResultRow(r,i,open){
     </div>`:''}
   </div>`;
 }
-function saveIdiomResult(i){ const r=idiom&&idiom.log&&idiom.log[i]; if(r) saveItemAsCard({term:r.answer, mean:r.mean, exEn:r.q.replace('____',r.answer), pos:['熟語']}); }
+function saveIdiomResult(i){ const r=idiom&&idiom.log&&idiom.log[i]; if(r) saveItemAsCard({term:r.answer, mean:r.mean, exEn:r.q.replace('____',r.answer), pos:['熟語']},'idiom'); }
 function renderStudySession(){
   const v=document.getElementById('view-study');
   if(session.qi>=session.items.length){ renderStudyResult(); return; }
@@ -2510,7 +2627,7 @@ function renderStudySession(){
       ${rateRow}
     </div>`;
 }
-function saveCurrentStudyCard(){ const c=session&&session.items[session.qi]; if(c) saveItemAsCard({term:c.term, mean:c.mean, pron:c.pron, exEn:c.exEn, exJa:c.exJa, pos:c.pos, other:c.other}); }
+function saveCurrentStudyCard(){ const c=session&&session.items[session.qi]; if(c){ const o={term:c.term, mean:c.mean, pron:c.pron, exEn:c.exEn, exJa:c.exJa, pos:c.pos, other:c.other}; saveItemAsCard(o, isIdiomTerm(o)?'idiom':'word'); } }
 function startStudy(pool, style, catName){
   const items=selectItems(pool, style);
   if(!items.length){ toast(style==='review'?'復習対象（不正確で終了）がありません':(style==='unmastered'?'未習得の項目がありません':'学習できるカードがありません')); return; }
@@ -2592,7 +2709,7 @@ function studyResultRow(r,i,open){
     </div>`:''}
   </div>`;
 }
-function saveStudyResult(i){ const r=session&&session.results[i]; if(r) saveItemAsCard({term:r.term, mean:r.mean, pron:r.pron, exEn:r.exEn, exJa:r.exJa, pos:r.pos, other:r.other}); }
+function saveStudyResult(i){ const r=session&&session.results[i]; if(r){ const o={term:r.term, mean:r.mean, pron:r.pron, exEn:r.exEn, exJa:r.exJa, pos:r.pos, other:r.other}; saveItemAsCard(o, isIdiomTerm(o)?'idiom':'word'); } }
 function updateStreak(){
   const t=todayStr();
   if(state.stats.lastStudy===t) return;
@@ -3043,7 +3160,7 @@ function compoResultRow(r,i,open,onclickExpr,canSave){
     </div>`:''}
   </div>`;
 }
-function saveCompoResult(i){ const r=compo&&compo.log&&compo.log[i]; if(r) saveItemAsCard({term:r.en, mean:r.jp, exEn:r.en, exJa:r.jp}); }
+function saveCompoResult(i){ const r=compo&&compo.log&&compo.log[i]; if(r) saveItemAsCard({term:r.en, mean:r.jp, exEn:r.en, exJa:r.jp},'reading'); }
 function toggleResult(i){ if(!compo) return; compo.openIdx = (compo.openIdx===i)?null:i; renderCompo(); }
 function pushCompoHistory(){
   if(!compo||!compo.log||!compo.log.length) return;
@@ -4430,6 +4547,38 @@ function renderSettings(){
         <select id="setReviewCap" onchange="state.settings.reviewCap=parseInt(this.value);save();renderSettings()">
           ${[20,30,40,50,60,80].map(n=>`<option value="${n}" ${s.reviewCap===n?'selected':''}>${n}問</option>`).join('')}
           <option value="0" ${(!s.reviewCap||s.reviewCap===0)?'selected':''}>上限なし</option>
+        </select></div>
+    </div>
+
+    <div class="section-title">忘却曲線（暗記の間隔）</div>
+    <div class="set-group">
+      <div class="set-row"><div><div class="l">学習ペース</div><div class="d">${s.srsPreset==='slow'?'復習多め・間隔は短め（しっかり定着）':s.srsPreset==='fast'?'復習少なめ・間隔は長め（短時間で回す）':'バランス重視（おすすめ）'}</div></div>
+        <select id="setSrsPreset" onchange="state.settings.srsPreset=this.value;save();renderSettings()">
+          <option value="slow" ${s.srsPreset==='slow'?'selected':''}>ゆっくり</option>
+          <option value="standard" ${(!s.srsPreset||s.srsPreset==='standard')?'selected':''}>標準</option>
+          <option value="fast" ${s.srsPreset==='fast'?'selected':''}>ハイペース</option>
+        </select></div>
+      <div class="set-row"><div><div class="l">表示間隔の上限</div><div class="d">正解を続けても、この日数以内には必ず再出題されます</div></div>
+        <select id="setSrsMax" onchange="state.settings.srsMaxIvl=parseInt(this.value);save();renderSettings()">
+          ${[30,60,90,120,180,365].map(n=>`<option value="${n}" ${s.srsMaxIvl===n?'selected':''}>${n>=365?'1年':(n+'日')}</option>`).join('')}
+          <option value="0" ${(!s.srsMaxIvl||s.srsMaxIvl===0)?'selected':''}>上限なし</option>
+        </select></div>
+      <div style="color:var(--ink-3);font-size:.72rem;margin:8px 4px 2px">例）標準・上限180日のとき：新規で「かんたん」→3日後→約10日後…と伸び、最長でも180日で再出題されます。</div>
+    </div>
+
+    <div class="section-title">カードの保存先</div>
+    <div class="set-group">
+      <div class="set-row"><div><div class="l">単語（学習・一覧から）</div></div>
+        <select id="setDestWord" onchange="state.settings.saveDestWord=this.value;save()">
+          ${saveDestOptions(s.saveDestWord,'word')}
+        </select></div>
+      <div class="set-row"><div><div class="l">熟語（学習・一覧から）</div></div>
+        <select id="setDestIdiom" onchange="state.settings.saveDestIdiom=this.value;save()">
+          ${saveDestOptions(s.saveDestIdiom,'idiom')}
+        </select></div>
+      <div class="set-row"><div><div class="l">リーディング・英作文など</div><div class="d">「自動」なら1語→単語学習／2語以上→熟語学習に振り分けます</div></div>
+        <select id="setDestReading" onchange="state.settings.saveDestReading=this.value;save()">
+          ${saveDestOptions(s.saveDestReading,'reading')}
         </select></div>
     </div>
 
