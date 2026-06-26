@@ -73,13 +73,12 @@ html[data-theme="dark"]{
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{margin:0;padding:0;}
-html{height:100%;background:var(--paper);}
+html{min-height:100%;background:var(--paper);}
 body{
   font-family:var(--font-ui);
   background:var(--paper);
-  height:100vh;
-  height:100dvh;
-  overflow:hidden;
+  min-height:100vh;
+  min-height:100dvh;
   color:var(--ink);
   font-size:16px;line-height:1.5;
   -webkit-font-smoothing:antialiased;
@@ -94,7 +93,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 ::selection{background:var(--amber-soft);}
 
 /* ---------- App shell ---------- */
-#app{width:100%;max-width:680px;margin:0 auto;height:100vh;height:100dvh;position:relative;overflow-y:auto;overscroll-behavior-y:none;}
+#app{width:100%;max-width:680px;margin:0 auto;min-height:100vh;min-height:100dvh;position:relative;}
 .view{display:none;padding:calc(var(--safe-t) + 8px) 18px calc(var(--tabbar-h) + var(--safe-b) + 28px);animation:fade .25s ease;}
 .view.active{display:block;}
 @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
@@ -202,11 +201,16 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .stat-row .v.flame{color:var(--amber-d);}
 
 .section-title{font-weight:600;font-size:.82rem;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin:24px 4px 10px;}
-.set-collapse{margin:0;}
-.set-collapse>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.set-collapse{margin-bottom:9px;}
+.set-collapse>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);box-shadow:var(--shadow);border-radius:var(--radius-sm);padding:15px 16px;font-weight:700;font-size:1rem;color:var(--ink);transition:transform .12s;}
+.set-collapse>summary:active{transform:scale(.985);}
 .set-collapse>summary::-webkit-details-marker{display:none;}
-.set-collapse>summary .set-caret{transition:transform .2s ease;color:var(--ink-3);display:inline-flex;}
+.set-collapse>summary .set-fold-r{display:inline-flex;align-items:center;gap:8px;flex:none;}
+.set-collapse>summary .set-fold-hint{color:var(--ink-3);font-size:.76rem;font-weight:600;}
+.set-collapse>summary .set-caret{transition:transform .2s ease;color:var(--ink-2);display:inline-flex;}
 .set-collapse[open]>summary .set-caret{transform:rotate(90deg);}
+.set-collapse[open]>summary .set-fold-hint{display:none;}
+.set-collapse>.set-group{margin-top:9px;}
 
 .quickadd{display:flex;gap:8px;align-items:center;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);padding:8px 8px 8px 16px;}
 .quickadd input{flex:1;border:none;background:none;outline:none;padding:8px 0;}
@@ -1061,12 +1065,13 @@ const DAY = 86400000;
 /* ---------- sample seed (first run) ---------- */
 function seed(){
   if(state.seeded) return;
-  const fBm=uid(), fInbox=uid(), fWord=uid(), fIdiom=uid(), fDiary=uid();
+  const fBm=uid(), fInbox=uid(), fWord=uid(), fIdiom=uid(), fDiary=uid(), fMemo=uid();
   state.folders[fBm]   = {id:fBm,   name:'ブックマーク',parentId:null,order:0,createdAt:now()};
   state.folders[fInbox]= {id:fInbox, name:'受信箱',     parentId:null,order:1,createdAt:now()};
   state.folders[fWord] = {id:fWord,  name:'単語',       parentId:null,order:2,createdAt:now()};
   state.folders[fIdiom]= {id:fIdiom, name:'熟語',       parentId:null,order:3,createdAt:now()};
   state.folders[fDiary]= {id:fDiary, name:'英語日記',   parentId:null,order:4,createdAt:now()};
+  state.folders[fMemo] = {id:fMemo,  name:'メモ',       parentId:null,order:5,createdAt:now()};
   const mk=(folderId,term,pron,mean,exEn,exJa,pos,other)=>{
     const id=uid();
     state.cards[id]={id,folderId,term,pron:pron||'',mean,exEn:exEn||'',exJa:exJa||'',other:other||'',pos:pos||[],
@@ -1076,9 +1081,9 @@ function seed(){
   mk(fInbox,'reluctant','/rɪˈlʌktənt/','気が進まない、しぶしぶの','She was reluctant to leave.','彼女は帰りたがらなかった。',['形容詞'],'反意語：willing（乗り気な）');
   mk(fInbox,'come up with','','〜を思いつく','I came up with a new idea.','新しいアイデアを思いついた。',['句動詞'],'類似表現：think of / devise');
   mk(fInbox,'leverage','/ˈlevərɪdʒ/','〜を活用する／てこ入れ','We can leverage our network.','人脈を活用できる。',['動詞','名詞'],'名詞では「てこ・影響力」の意味もある');
-  // メモ（フォルダではなくノート）をルート直下に1件
+  // メモはメモフォルダの中に1件
   const memoId=uid();
-  state.cards[memoId]={id:memoId, type:'text', memo:true, title:'', body:'ここに自由にメモを書けます。覚えたい表現やアイデアをすぐ残しましょう。', folderId:null, order:0, createdAt:now()};
+  state.cards[memoId]={id:memoId, type:'text', memo:true, title:'', body:'ここに自由にメモを書けます。覚えたい表現やアイデアをすぐ残しましょう。', folderId:fMemo, order:0, createdAt:now()};
   state.seeded = true;
   save();
 }
@@ -3834,12 +3839,22 @@ function aiProviderName(){ return aiProvider()==='gemini' ? 'Gemini' : 'OpenAI';
 
 function renderAI(){
   const v=document.getElementById('view-ai');
+  if(!managedAI() && !SHOW_AI_SETTINGS){
+    v.innerHTML=`
+      <div class="topbar"><h1>AI</h1></div>
+      <div class="empty" style="padding:46px 22px">${spkInk()}
+        <div class="t">AIの使用にはログインが必要です</div>
+        <div class="d">ログインすると、AIチューター・英文添削・カード化などが使えます。</div>
+        <button class="btn btn-primary" style="margin-top:16px;padding:11px 18px" onclick="setTab('settings');renderSettings()">ログイン / 設定をひらく</button>
+      </div>`;
+    return;
+  }
   if(!aiEnabled() && !managedAI()){
     v.innerHTML=`
       <div class="topbar"><h1>AI</h1></div>
       <div class="empty" style="padding:46px 22px">${spkInk()}
         <div class="t">AI機能はオフです</div>
-        <div class="d">設定でAIプロバイダー（OpenAI または 無料枠のあるGemini）を選ぶと、<br>チューター・添削・カード化などが使えます。</div>
+        <div class="d">設定でAIプロバイダーを選ぶと、<br>チューター・添削・カード化などが使えます。</div>
         <button class="btn btn-primary" style="margin-top:16px;padding:11px 18px" onclick="setTab('settings');renderSettings()">設定をひらく</button>
       </div>`;
     return;
@@ -4798,7 +4813,7 @@ function renderSettings(){
     <div class="topbar"><h1>設定</h1>
       <button class="icon-btn x-btn" onclick="setTab('home')" style="box-shadow:none;background:transparent">✕</button></div>
 
-    <details class="set-collapse"><summary class="section-title">アカウント<span class="set-caret">${I.chev}</span></summary>
+    <details class="set-collapse"><summary>アカウント<span class="set-fold-r"><span class="set-fold-hint">タップで開く</span><span class="set-caret">${I.chev}</span></span></summary>
     <div class="set-group">
       ${!cloudConfigured() ? `
         <div class="field">
@@ -4968,7 +4983,7 @@ function renderSettings(){
     <div style="color:var(--ink-3);font-size:.72rem;margin:6px 4px 0">※ログインすると自動でクラウドに保存・同期され、手動バックアップは不要になります。</div>`:''}
 
     ${(cloudConfigured()&&loggedIn()&&!authRecovery&&authView==='menu')?`
-    <details class="set-collapse"><summary class="section-title">招待コード（紹介で割引）<span class="set-caret">${I.chev}</span></summary>
+    <details class="set-collapse"><summary>招待コード（紹介で割引）<span class="set-fold-r"><span class="set-fold-hint">タップで開く</span><span class="set-caret">${I.chev}</span></span></summary>
     <div class="set-group">${referralBoxHtml()}</div></details>`:''}
 
     <div class="section-title">情報</div>
