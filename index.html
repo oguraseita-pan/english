@@ -77,8 +77,11 @@ html{height:100%;background:var(--paper);}
 body{
   font-family:var(--font-ui);
   background:var(--paper);
-  height:100%;
+  height:100vh;
+  height:100dvh;
   overflow:hidden;
+  display:flex;
+  flex-direction:column;
   color:var(--ink);
   font-size:16px;line-height:1.5;
   -webkit-font-smoothing:antialiased;
@@ -93,8 +96,8 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 ::selection{background:var(--amber-soft);}
 
 /* ---------- App shell ---------- */
-#app{max-width:680px;margin:0 auto;height:100vh;height:100dvh;position:relative;overflow-y:auto;overscroll-behavior-y:none;}
-.view{display:none;padding:calc(var(--safe-t) + 8px) 18px calc(var(--tabbar-h) + var(--safe-b) + 28px);animation:fade .25s ease;}
+#app{width:100%;max-width:680px;margin:0 auto;flex:1 1 auto;min-height:0;position:relative;overflow-y:auto;overscroll-behavior-y:none;}
+.view{display:none;padding:calc(var(--safe-t) + 8px) 18px 28px;animation:fade .25s ease;}
 .view.active{display:block;}
 @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 
@@ -506,7 +509,7 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .msg.ai .ex-item .ex-en{font-family:var(--font-en);font-size:1.02rem;line-height:1.4;}
 .msg.ai .ex-item .ex-ja{font-size:.86rem;color:var(--ink-2);margin-top:3px;}
 .msg.ai .ex-item .save-card{margin-top:8px;}
-.chat-input{position:sticky;bottom:calc(var(--tabbar-h) + var(--safe-b) + 8px);display:flex;gap:8px;align-items:flex-end;background:var(--surface);border-radius:18px;box-shadow:var(--shadow-lg);padding:8px 8px 8px 14px;}
+.chat-input{position:sticky;bottom:8px;display:flex;gap:8px;align-items:flex-end;background:var(--surface);border-radius:18px;box-shadow:var(--shadow-lg);padding:8px 8px 8px 14px;}
 .chat-input textarea{flex:1;border:none;outline:none;background:none;resize:none;max-height:120px;padding:8px 0;line-height:1.4;}
 .send-btn{background:var(--green);color:#fff;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none;transition:transform .12s;}
 .send-btn:active{transform:scale(.9);}
@@ -631,7 +634,7 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .slider-row input[type=range]{width:130px;accent-color:var(--green);}
 
 /* ---------- Bottom tab bar ---------- */
-.tabbar{position:fixed;bottom:0;left:0;right:0;max-width:680px;margin:0 auto;height:calc(var(--tabbar-h) + var(--safe-b));padding-bottom:var(--safe-b);background:rgba(255,255,255,.86);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border-top:1px solid var(--line);display:flex;z-index:40;}
+.tabbar{flex:none;width:100%;max-width:680px;margin:0 auto;height:calc(var(--tabbar-h) + var(--safe-b));padding-bottom:var(--safe-b);background:rgba(255,255,255,.86);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border-top:1px solid var(--line);display:flex;z-index:40;}
 html[data-theme="dark"] .tabbar{background:rgba(28,33,35,.86);}
 .tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--ink-3);font-size:.66rem;font-weight:600;}
 .tabbar button svg{width:23px;height:23px;}
@@ -750,6 +753,7 @@ const I = {
   cards:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7.5" width="13" height="13.5" rx="2.5"/><path d="M7 4.5h10A2.5 2.5 0 0 1 19.5 7v9.5"/></svg>',
   pencil:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16.6 3.4a2 2 0 0 1 2.83 2.83L7.6 18.06l-3.9 1.07 1.07-3.9z"/><path d="M14.3 5.7l3 3"/></svg>',
   chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5H6A2.5 2.5 0 0 1 3.5 12V6A2.5 2.5 0 0 1 6 3.5h8A2.5 2.5 0 0 1 16.5 6v1"/><path d="M11 9.5h7A2.5 2.5 0 0 1 20.5 12v6a2.5 2.5 0 0 1-2.5 2.5h-1.2l-3.1 2.3V20.5H11A2.5 2.5 0 0 1 8.5 18v-6A2.5 2.5 0 0 1 11 9.5z"/></svg>',
+  list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="3.8" cy="6" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.8" cy="12" r="1.1" fill="currentColor" stroke="none"/><circle cx="3.8" cy="18" r="1.1" fill="currentColor" stroke="none"/></svg>',
 };
 
 /* ---------- state & storage ---------- */
@@ -2160,6 +2164,14 @@ function idiomAllItems(){
 }
 // カテゴリ・形式に依存しない安定SRSキー（フラッシュカードと4択で進捗を共有）
 function idiomKeyU(it){ return 'iu|'+String((it&&it.answer)||'').toLowerCase()+'|'+String((it&&it.q)||''); }
+// 熟語一覧の見出し：mean の英語部分（慣用句そのもの）を見出しにし、日本語を意味として返す。
+// 例「look down on 〜を見下す」→ head:"look down on", jp:"〜を見下す"。英語部分が無ければ answer を使う。
+function idiomHead(mean, answer){
+  const m=String(mean||'').trim();
+  const i=m.search(/[^\x00-\x7F]/); // 最初の非ASCII（日本語）位置
+  if(i>0){ const head=m.slice(0,i).replace(/[\s,;:：、。]+$/,'').trim(); if(head) return { head, jp:m.slice(i).trim() }; }
+  return { head:(answer||m), jp:(i>0?m.slice(i).trim():m) };
+}
 // 例文を組み立て：____が複数（分離型句動詞）なら answer の各語で順に埋める
 function idiomExample(q, answer){
   q=String(q||''); const n=(q.match(/____/g)||[]).length;
@@ -2385,8 +2397,8 @@ function presetUnmasteredCount(catId,lvlId){
 function idiomKeySig(catId,lvlId,sig){ return 'i|'+catId+'|'+lvlId+'|'+String(sig); }
 function masteryLabel(s){ if(!s||s.state==='new') return ['未学習','var(--ink-3)']; if(s.state==='learning') return ['学習中','var(--amber-d)']; if(s.interval>=21 || (s.reps||0)>=2) return ['習得済み','var(--blue)']; return ['復習中','var(--green)']; }
 function rankUnmastered(s){ if(s.state==='new') return 0; if(s.state==='learning') return 1; return 2 + Math.min(s.reps,8)*0.1 + Math.min(s.interval,90)*0.001; }
-// 未学習＝まだ習得済みでない（new/learning/復習中）
-function isUnmastered(s){ return !s || s.state==='new' || s.state==='learning' || ((s.interval||0)<21 && (s.reps||0)<2); }
+// 未学習＝まだ一度も学習していない（new）。学習を始めると即座に学習中/習得へ移る
+function isUnmastered(s){ return !s || s.state==='new'; }
 // 復習＝直近の判定が不正確（lastGrade 0/1）で終わっているもの
 function isReviewItem(s){ return !!s && s.lastGrade!=null && s.lastGrade<=1; }
 // 一覧上部に出すステータス別件数（忘却曲線の状態で動的に変化）
@@ -2464,7 +2476,7 @@ function showWordList(kind, catId, levelId){
   const all = levelId==='__all__';
   if(kind==='idiomc'){
     const cf=catId; const items=idiomLevelItems(cf);
-    pool=items.map(it=>({ term:it.answer, pron:'', mean:it.mean, exEn:(it.q||'').replace('____',it.answer), exJa:'', pos:['熟語'], other:'', srs:getProg(idiomKeyU(it)) }));
+    pool=items.map(it=>{ const h=idiomHead(it.mean, it.answer); return { term:h.head, pron:'', mean:h.jp, exEn:(it.q||'').replace('____',it.answer), exJa:'', pos:['熟語'], other:'', srs:getProg(idiomKeyU(it)) }; });
     name='熟語 '+(CEFR_NAME[cf]||cf);
     wordList={ pool, name, kind:'idiomc', cefr:cf, openIdx:null, grouped:false };
     renderWordList(); return;
@@ -3199,8 +3211,8 @@ function startCompoMenu(){
   openModal(`
     <h2>瞬間英作文</h2>
     <p style="color:var(--ink-2);font-size:.88rem;margin:0 0 14px">日本語を見て、すぐに英語を声に出す（または入力する）トレーニングです。出題方法を選んでください。</p>
-    <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();startCompoGrammarPick()">${I.book||I.cardPlus} 文法</button>
-    <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();startCompoScenePick()">${I.chat||I.cardPlus} 場面</button>
+    <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();startCompoGrammarPick()">${I.book||I.cardPlus} 文法から選ぶ</button>
+    <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();startCompoScenePick()">${I.chat||I.cardPlus} 場面から選ぶ</button>
     <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="${aiReady()?"closeModal();startCompoThemePick()":"toast('テーマ出題にはAIが必要です。設定でオンにしてください')"}">${I.sparkle} テーマを選ぶ（AI生成）</button>
     ${!aiReady()?`<div class="compo-hint" style="margin-top:-2px;margin-bottom:10px">※テーマ出題は、設定でAI（OpenAI/Gemini）をオンにすると使えます。</div>`:''}
     <button class="btn btn-ghost full" style="padding:15px;justify-content:flex-start;gap:12px;margin-bottom:10px" onclick="closeModal();startCompoPick()">${I.cardPlus} カードの例文</button>
@@ -3245,12 +3257,12 @@ function compoPresetPool(type, ci, li){
   }));
   return out;
 }
-function compoUnmasteredCount(pool){ return pool.filter(p=>p.status!=='ok').length; }
+function compoUnmasteredCount(pool){ return pool.filter(p=>p.status==null).length; }
 function compoReviewCount(pool){ return pool.filter(p=>p.status==='ng').length; }
 function compoSelectItems(pool, style){
   let arr;
   if(style==='review') arr=pool.filter(p=>p.status==='ng');
-  else if(style==='unmastered') arr=pool.filter(p=>p.status!=='ok');
+  else if(style==='unmastered') arr=pool.filter(p=>p.status==null);
   else arr=pool.slice(); // random / order
   if(!arr.length) arr=pool.slice();
   return shuffle(arr).slice(0,10);
@@ -3275,8 +3287,8 @@ function compoLevelPick(type, ci){
   openModal(`
     <h2>${esc(set.key)}</h2>
     <div class="deck-pick">
-      ${set.levels.map(l=>`<div class="deck-row" onclick="compoStylePick('${type}',${ci},'${l.id}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center">${I.trophy}</div><div class="meta"><div class="nm">${esc(l.name)}</div><div class="ct">${l.items.length}問</div></div><span class="chev">${I.chev}</span></div>`).join('')}
-      <div class="deck-row" onclick="compoStylePick('${type}',${ci},'__all__')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--ink-1);color:#fff;display:grid;place-items:center">${I.list||I.book}</div><div class="meta"><div class="nm">すべて</div><div class="ct">${total}問</div></div><span class="chev">${I.chev}</span></div>
+      ${set.levels.map(l=>`<div class="deck-row" onclick="compoStylePick('${type}',${ci},'${l.id}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center">${I.trophy}</div><div class="meta"><div class="nm">${esc(l.name)}</div><div class="ct">全${l.items.length}問・未学習${compoUnmasteredCount(compoPresetPool(type,ci,l.id))}問</div></div><span class="chev">${I.chev}</span></div>`).join('')}
+      <div class="deck-row" onclick="compoStylePick('${type}',${ci},'__all__')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${I.list}</div><div class="meta"><div class="nm">すべて</div><div class="ct">全${total}問・未学習${compoUnmasteredCount(compoPresetPool(type,ci,'__all__'))}問</div></div><span class="chev">${I.chev}</span></div>
     </div>
     <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="compoCatPick('${type}')">← 戻る</button></div>`);
 }
@@ -3292,7 +3304,7 @@ function compoStylePick(type, ci, li){
     <button class="opt-btn" onclick="startCompoPresetStudy('${type}',${ci},'${li}','unmastered')"><span class="oic" style="background:var(--amber-soft);color:var(--amber-d)">${I.trophy}</span><span class="ot">未学習</span>${cnt(um)}</button>
     <button class="opt-btn" onclick="startCompoPresetStudy('${type}',${ci},'${li}','review')"><span class="oic" style="background:var(--r-again);color:#fff">${I.refresh}</span><span class="ot">復習</span>${cnt(rv)}</button>
     <button class="opt-btn" onclick="startCompoPresetStudy('${type}',${ci},'${li}','random')"><span class="oic" style="background:var(--green-soft);color:var(--green)">${I.cardPlus}</span><span class="ot">ランダム</span></button>
-    <button class="opt-btn" onclick="showCompoList('${type}',${ci},'${li}')"><span class="oic" style="background:var(--paper-2,#eee);color:var(--ink-1)">${I.list||I.book}</span><span class="ot">問題一覧</span><span class="opt-count">${pool.length}</span></button>
+    <button class="opt-btn" onclick="showCompoList('${type}',${ci},'${li}')"><span class="oic" style="background:var(--green-soft);color:var(--green)">${I.list}</span><span class="ot">問題一覧</span><span class="opt-count">${pool.length}</span></button>
     <div class="modal-actions" style="margin-top:8px"><button class="btn btn-ghost" onclick="compoLevelPick('${type}',${ci})">← 難易度へ戻る</button></div>`);
 }
 function startCompoPresetStudy(type, ci, li, style){
