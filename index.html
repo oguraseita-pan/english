@@ -279,6 +279,9 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .drag-handle:active{cursor:grabbing;background:var(--green-soft);color:var(--green);}
 .drag-handle svg{width:20px;height:20px;pointer-events:none;}
 .chev{color:var(--ink-3);flex:none;}
+.set-row>.chev{color:var(--ink-2);}
+.set-row>.chev svg,.set-collapse>summary .set-caret svg{width:20px;height:20px;display:block;}
+.set-collapse>summary .set-caret{color:var(--ink-2);}
 
 .card-row .term-wrap{flex:1;min-width:0;}
 .card-row .term{font-family:var(--font-en);font-size:1.12rem;font-weight:500;line-height:1.2;}
@@ -599,6 +602,13 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .disc-explain{background:var(--surface-2);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:14px;}
 .disc-explain .de-h{font-weight:800;margin-bottom:12px;font-size:.95rem;}
 .disc-explain .de-row{display:flex;gap:10px;font-size:.85rem;color:var(--ink-2);margin-bottom:11px;line-height:1.55;}
+.inv-hero{background:linear-gradient(135deg,var(--green) 0%,var(--green-d) 100%);border-radius:18px;padding:22px 20px;text-align:center;color:#fff;box-shadow:var(--shadow);}
+.inv-hero-lab{font-size:.82rem;opacity:.9;letter-spacing:.02em;}
+.inv-hero-pct{font-family:var(--font-en);font-size:3rem;font-weight:800;line-height:1.05;margin:4px 0 6px;}
+.inv-hero-pct small{font-size:1.1rem;font-weight:700;margin-left:4px;}
+.inv-hero-break{font-size:.86rem;opacity:.95;}
+.update-banner{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabbar-h) + var(--safe-b) + 14px);z-index:150;display:flex;align-items:center;gap:12px;background:var(--green-d);color:#fff;padding:11px 14px 11px 18px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.22);font-size:.88rem;max-width:92vw;}
+.update-banner button{background:#fff;color:var(--green-d);font-weight:700;font-size:.85rem;padding:7px 15px;border-radius:999px;flex:none;}
 .disc-explain .de-row b{color:var(--ink-1);}
 .disc-explain .de-ic{flex:none;}
 .disc-explain .de-note{font-size:.77rem;color:var(--ink-3);line-height:1.65;border-top:1px solid var(--line);padding-top:11px;margin-top:3px;}
@@ -884,6 +894,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
+const APP_BUILD = '2026.06.27-1';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -1262,6 +1273,7 @@ function setTab(name){
   // 学習中の経過時間を記録してから遷移し、各タブは「最初のページ」に戻す
   if(session||compo||diaryS){ try{ recordTime(); }catch(_){ } }
   session=null; reading=null; idiom=null; compo=null; speech=null; diaryS=null; wordList=null; histView=null;
+  invitePage=false;
   currentTab=name;
   noteSearchActive=false;
   closeModal();
@@ -4420,6 +4432,7 @@ let authView='menu';        // 'menu' | 'login' | 'signup1' | 'signup2' | 'forgo
 let authRecovery=false;
 let authDraftEmail='';
 let billingStep=null;       // null | 'plans' | 'checkout'
+let invitePage=false;       // 招待コードを別ページ表示
 let billingSel={plan:'light', term:'12m'};
 const PLAN_INFO={
   free:{name:'無料プラン'},
@@ -4548,6 +4561,22 @@ function referralBoxHtml(){
       <div class="d">あなたを紹介してくれた人を応援できます。</div>`}
     </div>
     <div class="d" style="margin-top:4px">紹介した人数：${r.referredCount||0}人（うち有料：${r.referredPaidCount||0}人）→ 紹介割引 ${pct}%</div>`;
+}
+function openInvite(){ invitePage=true; refreshReferral(); renderSettings(); }
+function closeInvite(){ invitePage=false; renderSettings(); }
+function renderInvitePage(){
+  const ref=referralDiscountPct(), loy=loyaltyDiscountPct(), tot=Math.min(40, ref+loy), paid=selfPaid();
+  document.getElementById('view-settings').innerHTML=`
+    <div class="topbar"><h1>招待コード</h1><button class="icon-btn x-btn" onclick="closeInvite()" style="box-shadow:none;background:transparent">✕</button></div>
+    <div class="inv-hero">
+      <div class="inv-hero-lab">現在の合計割引${paid?'':'（有料プランで適用されます）'}</div>
+      <div class="inv-hero-pct">${tot}%<small>OFF</small></div>
+      <div class="inv-hero-break">紹介 ${ref}%　＋　継続 ${loy}%　<span style="opacity:.7">（合計 最大40%）</span></div>
+    </div>
+    <div class="set-group" style="margin-top:14px">${referralBoxHtml()}</div>
+    <div style="margin-top:18px">${discountExplainerHtml()}</div>
+  `;
+  renderAuthGate();
 }
 function discountExplainerHtml(){
   return `<div class="disc-explain">
@@ -4875,6 +4904,7 @@ function currentPlanCardHtml(){
 function billingToPlans(){ billingStep='plans'; renderSettings(); }
 function renderSettings(){
   if(billingStep){ renderBilling(); return; }
+  if(invitePage){ renderInvitePage(); return; }
   const s=state.settings;
   document.getElementById('view-settings').innerHTML=`
     <div class="topbar"><h1>設定</h1>
@@ -4998,7 +5028,7 @@ function renderSettings(){
         </select></div>
     </div>
 
-    <div class="section-title">忘却曲線（暗記の間隔）</div>
+    <div class="section-title">忘却曲線の学習設定</div>
     <div class="set-group">
       <div class="set-row"><div><div class="l">学習ペース</div><div class="d">${s.srsPreset==='slow'?'復習多め':s.srsPreset==='fast'?'復習少なめ':'バランス'}</div></div>
         <select id="setSrsPreset" onchange="state.settings.srsPreset=this.value;save();renderSettings()">
@@ -5006,14 +5036,14 @@ function renderSettings(){
           <option value="standard" ${(!s.srsPreset||s.srsPreset==='standard')?'selected':''}>標準</option>
           <option value="fast" ${s.srsPreset==='fast'?'selected':''}>ハイペース</option>
         </select></div>
+      <div class="set-row"><div><div class="l">1日の新規カード上限</div><div class="d">1日に出す未学習カードの上限数</div></div>
+        <select id="setNew" onchange="state.settings.newPerDay=parseInt(this.value);save()">
+          ${[5,10,15,20,30,50].map(n=>`<option value="${n}" ${s.newPerDay===n?'selected':''}>${n}枚</option>`).join('')}
+        </select></div>
       <div class="set-row"><div><div class="l">表示間隔の上限</div></div>
         <select id="setSrsMax" onchange="state.settings.srsMaxIvl=parseInt(this.value);save();renderSettings()">
           ${[90,120,180,365].map(n=>`<option value="${n}" ${s.srsMaxIvl===n?'selected':''}>${n>=365?'1年':(n+'日')}</option>`).join('')}
           <option value="0" ${(!s.srsMaxIvl||s.srsMaxIvl===0)?'selected':''}>上限なし</option>
-        </select></div>
-      <div class="set-row"><div><div class="l">1日の新規カード上限</div><div class="d">忘却曲線学習で、1日に出す未学習カードの上限数です。</div></div>
-        <select id="setNew" onchange="state.settings.newPerDay=parseInt(this.value);save()">
-          ${[5,10,15,20,30,50].map(n=>`<option value="${n}" ${s.newPerDay===n?'selected':''}>${n}枚</option>`).join('')}
         </select></div>
       <div style="color:var(--ink-3);font-size:.72rem;margin:8px 4px 2px">例）標準・上限180日のとき：新規で「かんたん」→3日後→約10日後…と伸び、最長でも180日で再出題されます。</div>
     </div>
@@ -5051,9 +5081,13 @@ function renderSettings(){
     <div style="color:var(--ink-3);font-size:.72rem;margin:6px 4px 0">※ログインすると自動でクラウドに保存・同期され、手動バックアップは不要になります。</div>`:''}
 
     ${(cloudConfigured()&&loggedIn()&&!authRecovery&&authView==='menu')?`
-    <div class="section-title">招待コード（紹介で割引）</div>
-    <details class="set-collapse"><summary>招待コード（紹介で割引）<span class="set-caret">${I.chev}</span></summary>
-    <div class="set-group">${referralBoxHtml()}</div></details>`:''}
+    <div class="section-title">招待コード</div>
+    <div class="set-group">
+      <div class="set-row" style="cursor:pointer" onclick="openInvite()">
+        <div><div class="l">招待コード</div><div class="d">紹介割引：現在 <b style="color:var(--green-d)">${referralDiscountPct()}%</b></div></div>
+        <span class="chev">${I.chev}</span>
+      </div>
+    </div>`:''}
 
     <div class="section-title">情報</div>
     <div class="set-group">
@@ -5304,6 +5338,41 @@ function logoSvg(size,cls){
   </svg>`;
 }
 
+// ===== 自動アップデート（ホーム画面から削除不要で反映） =====
+function _updateSafeToReload(){
+  return !(typeof session!=='undefined'&&session) && !(typeof compo!=='undefined'&&compo)
+      && !(typeof diaryS!=='undefined'&&diaryS) && !(typeof reading!=='undefined'&&reading)
+      && !(typeof idiom!=='undefined'&&idiom);
+}
+function applyUpdate(){
+  try{ const u=new URL(location.href); u.searchParams.set('_v', Date.now()); location.replace(u.toString()); }
+  catch(e){ try{ location.reload(); }catch(_){ } }
+}
+function showUpdateBanner(){
+  if(document.getElementById('updateBanner')) return;
+  const b=document.createElement('div'); b.id='updateBanner'; b.className='update-banner';
+  b.innerHTML=`<span>新しいバージョンがあります</span><button onclick="applyUpdate()">更新</button>`;
+  document.body.appendChild(b);
+}
+async function checkForUpdate(mode){
+  try{
+    const res=await fetch('version.json?_='+Date.now(), { cache:'no-store' });
+    if(!res.ok) return;
+    const j=await res.json(); const latest=(j&&(j.build||j.version))||'';
+    if(!latest || latest===APP_BUILD) return;       // 最新（または取得不可）→ 何もしない
+    const hadBust=/[?&]_v=/.test(location.search);   // 一度リロード済みなら無限ループを防ぐ
+    if(!hadBust && (mode==='startup' || (mode==='foreground' && _updateSafeToReload()))){
+      applyUpdate();                                  // 起動時・安全な復帰時は静かに自動更新
+    } else {
+      showUpdateBanner();                             // 学習中などはバナーでお知らせ（操作を中断しない）
+    }
+  }catch(e){ /* オフライン等は無視 */ }
+}
+function setupAutoUpdate(){
+  checkForUpdate('startup');
+  document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') checkForUpdate('foreground'); });
+  setInterval(()=>{ if(document.visibilityState==='visible') checkForUpdate('periodic'); }, 5*60*1000);
+}
 function init(){
   load();
   if(!state.seeded) seed();
@@ -5320,6 +5389,7 @@ function init(){
   renderHome();
   handleCheckoutReturn();
   cloudInit();
+  setupAutoUpdate();
   // register a tiny service worker for offline (best-effort, ignored on file://)
   if('serviceWorker' in navigator && location.protocol==='https:'){
     const swCode=`self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',()=>{});`;
