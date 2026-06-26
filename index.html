@@ -355,7 +355,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .opt-btn .od{font-size:.8rem;color:var(--ink-3);margin-top:2px;}
 .deck-row .badge.zero{background:var(--line);color:var(--ink-3);}
 
-.study-wrap{display:flex;flex-direction:column;min-height:calc(100dvh - var(--safe-t) - var(--safe-b) - var(--tabbar-h) - 24px);min-height:calc(100svh - var(--safe-t) - var(--safe-b) - var(--tabbar-h) - 24px);margin-bottom:-16px;}
+.study-wrap{display:flex;flex-direction:column;min-height:calc(100dvh - var(--safe-t) - var(--safe-b) - var(--tabbar-h) - 24px);margin-bottom:-16px;}
 .study-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
 .progress{flex:1;height:7px;background:var(--line);border-radius:4px;margin:0 12px;overflow:hidden;}
 .progress > div{height:100%;background:var(--green);border-radius:4px;transition:width .3s;}
@@ -930,6 +930,30 @@ function stateLooksEmpty(s){
   const reviews=s.stats&&s.stats.reviews&&Object.keys(s.stats.reviews).length||0;
   return prog===0 && compoSrs===0 && streak===0 && timeEntries===0 && reviews===0;
 }
+function mergeStates(local, remote){
+  // ローカルとリモートを結合（ユニオン）して、どちらの学習データも失わない
+  const a=local||{}, b=remote||{};
+  const bNewer = (b._updatedAt||0) >= (a._updatedAt||0);
+  const out = bNewer ? Object.assign({}, a, b) : Object.assign({}, b, a); // 競合スカラーは新しい方を採用
+  const mergeMap=(key)=>{ const r=Object.assign({}, a[key]||{}); const bb=b[key]||{}; Object.keys(bb).forEach(k=>{ if(!(k in r) || bNewer) r[k]=bb[k]; }); return r; };
+  out.folders = mergeMap('folders');
+  out.cards   = mergeMap('cards');
+  out.progress= mergeMap('progress');
+  out.compoSrs= mergeMap('compoSrs');
+  out.memos   = mergeMap('memos');
+  const sa=a.stats||{}, sb=b.stats||{};
+  out.stats = Object.assign({}, bNewer?sa:sb, bNewer?sb:sa);
+  out.stats.streak = Math.max(sa.streak||0, sb.streak||0);
+  const mx=(o1,o2)=>{ const r=Object.assign({}, o1||{}); Object.keys(o2||{}).forEach(k=>{ r[k]=Math.max(r[k]||0, o2[k]||0); }); return r; };
+  out.stats.time = mx(sa.time, sb.time);
+  out.stats.reviews = mx(sa.reviews, sb.reviews);
+  const ta=Array.isArray(a.threads)?a.threads:[], tb=Array.isArray(b.threads)?b.threads:[];
+  const seen={}, threads=[];
+  (bNewer?tb.concat(ta):ta.concat(tb)).forEach(t=>{ if(t&&t.id&&!seen[t.id]){ seen[t.id]=1; threads.push(t); } });
+  out.threads = threads;
+  out._updatedAt = Math.max(a._updatedAt||0, b._updatedAt||0);
+  return out;
+}
 async function cloudPull(){
   if(!_sb || !loggedIn()) return;
   try{
@@ -939,18 +963,28 @@ async function cloudPull(){
       const remote = (typeof data.data==='string') ? JSON.parse(data.data) : data.data;
       const localT = state._updatedAt||0, remoteT = remote._updatedAt||0;
       const remoteHas = !stateLooksEmpty(remote), localHas = !stateLooksEmpty(state);
-      let pull;
-      if(remoteHas && !localHas) pull=true;       // 端末側は未学習 → クラウドの学習データを取り込む（初期サンプルで上書きしない）
-      else if(localHas && !remoteHas) pull=false;  // クラウドが空に近い → ローカルの学習データを守ってアップロード
-      else pull = (remoteT > localT);              // どちらも実データあり → 新しい方を採用
-      if(pull){
-        state = Object.assign(defaultState(), remote);
+      try{ localStorage.setItem(STORE_KEY+'_bak', JSON.stringify(state)); }catch(_){} // 念のため上書き前のローカルを退避
+      if(remoteHas && localHas){
+        // 両方に学習データ → 結合して双方を保全（消失防止）。結合結果はクラウドにも反映。
+        state = mergeStates(state, remote);
         normalizeState();
-        save({keepStamp:true, noCloud:true});
+        save({keepStamp:false});
         rerenderActive();
-        toast('クラウドから同期しました');
+        toast('クラウドと統合しました');
       } else {
-        await cloudPush();
+        let pull;
+        if(remoteHas && !localHas) pull=true;       // 端末側は未学習 → クラウドの学習データを取り込む
+        else if(localHas && !remoteHas) pull=false;  // クラウドが空に近い → ローカルを守ってアップロード
+        else pull = (remoteT > localT);              // どちらも空 → 新しい方
+        if(pull){
+          state = Object.assign(defaultState(), remote);
+          normalizeState();
+          save({keepStamp:true, noCloud:true});
+          rerenderActive();
+          toast('クラウドから同期しました');
+        } else {
+          await cloudPush();
+        }
       }
     } else {
       await cloudPush();
@@ -1768,13 +1802,15 @@ function renderNotes(){
     bindReorder(document.getElementById('cardList'), commitCardOrder);
   }
 }
+function isLockedFolder(f){ return !!(f && f.parentId===null && ['ブックマーク','受信箱','単語','熟語','英語日記'].indexOf(f.name)>=0); }
 function folderRowEdit(f){
   const cnt=cardsInTree(f.id).length, sub=childFolders(f.id).length;
+  const locked=isLockedFolder(f);
   return `<div class="folder-row reorderable" data-rid="${f.id}">
     <div class="ico">${I.folder}</div>
     <div class="meta" style="cursor:pointer" onclick="editFolder('${f.id}')"><div class="nm">${esc(f.name)}</div><div class="ct">${cnt}枚${sub?` ・ ${sub}フォルダ`:''}・タップで編集</div></div>
     <div class="row-ctrls">
-      <button class="rc del" onclick="deleteFolder('${f.id}')" aria-label="削除">${I.trash}</button>
+      ${locked?'':`<button class="rc del" onclick="deleteFolder('${f.id}')" aria-label="削除">${I.trash}</button>`}
       <button class="rc" onclick="openMoveTo('${f.id}','folder')" aria-label="移動">${I.movef}</button>
       <div class="drag-handle" aria-label="並び替え">${I.grip}</div>
     </div>
@@ -2077,7 +2113,7 @@ function editFolder(id){
       <button class="btn btn-ghost" onclick="closeModal()">キャンセル</button>
       <button class="btn btn-primary" onclick="saveFolder('${id||''}')">${f?'保存':'作成'}</button>
     </div>
-    ${f?`<button class="del-link" onclick="deleteFolder('${id}')">このフォルダを削除</button>`:''}
+    ${(f && !isLockedFolder(f))?`<button class="del-link" onclick="deleteFolder('${id}')">このフォルダを削除</button>`:''}
   `);
   setTimeout(()=>document.getElementById('fName').focus(),250);
 }
@@ -2089,6 +2125,7 @@ function saveFolder(id){
   save(); closeModal(); renderNotes(); toast('保存しました');
 }
 function deleteFolder(id){
+  if(isLockedFolder(state.folders[id])){ toast('このフォルダは削除できません'); return; }
   const cnt=cardsInTree(id).length;
   if(!confirm(`「${state.folders[id].name}」と中身（${cnt}枚のカード）を削除しますか？`)) return;
   descendantFolderIds(id).forEach(fid=>{
@@ -4987,7 +5024,7 @@ function renderSettings(){
 
     <div class="section-title">学習</div>
     <div class="set-group">
-      <div class="set-row"><div><div class="l">1日の新規カード上限</div></div>
+      <div class="set-row"><div><div class="l">1日の新規カード上限</div><div class="d">忘却曲線モードで、1日に新しく出す“初めて学ぶカード”の上限枚数です。</div></div>
         <select id="setNew" onchange="state.settings.newPerDay=parseInt(this.value);save()">
           ${[5,10,15,20,30,50].map(n=>`<option value="${n}" ${s.newPerDay===n?'selected':''}>${n}枚</option>`).join('')}
         </select></div>
