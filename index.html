@@ -79,11 +79,7 @@ body{
   background:var(--paper);
   height:100vh;
   height:100dvh;
-  height:-webkit-fill-available;
-  height:var(--app-h, 100dvh);
   overflow:hidden;
-  display:flex;
-  flex-direction:column;
   color:var(--ink);
   font-size:16px;line-height:1.5;
   -webkit-font-smoothing:antialiased;
@@ -98,8 +94,8 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 ::selection{background:var(--amber-soft);}
 
 /* ---------- App shell ---------- */
-#app{width:100%;max-width:680px;margin:0 auto;flex:1 1 auto;min-height:0;position:relative;overflow-y:auto;overscroll-behavior-y:none;}
-.view{display:none;padding:calc(var(--safe-t) + 8px) 18px 28px;animation:fade .25s ease;}
+#app{width:100%;max-width:680px;margin:0 auto;height:100vh;height:100dvh;position:relative;overflow-y:auto;overscroll-behavior-y:none;}
+.view{display:none;padding:calc(var(--safe-t) + 8px) 18px calc(var(--tabbar-h) + var(--safe-b) + 28px);animation:fade .25s ease;}
 .view.active{display:block;}
 @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
 
@@ -516,7 +512,7 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .msg.ai .ex-item .ex-en{font-family:var(--font-en);font-size:1.02rem;line-height:1.4;}
 .msg.ai .ex-item .ex-ja{font-size:.86rem;color:var(--ink-2);margin-top:3px;}
 .msg.ai .ex-item .save-card{margin-top:8px;}
-.chat-input{position:sticky;bottom:8px;display:flex;gap:8px;align-items:flex-end;background:var(--surface);border-radius:18px;box-shadow:var(--shadow-lg);padding:8px 8px 8px 14px;}
+.chat-input{position:sticky;bottom:calc(var(--tabbar-h) + var(--safe-b) + 8px);display:flex;gap:8px;align-items:flex-end;background:var(--surface);border-radius:18px;box-shadow:var(--shadow-lg);padding:8px 8px 8px 14px;}
 .chat-input textarea{flex:1;border:none;outline:none;background:none;resize:none;max-height:120px;padding:8px 0;line-height:1.4;}
 .send-btn{background:var(--green);color:#fff;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none;transition:transform .12s;}
 .send-btn:active{transform:scale(.9);}
@@ -641,7 +637,7 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .slider-row input[type=range]{width:130px;accent-color:var(--green);}
 
 /* ---------- Bottom tab bar ---------- */
-.tabbar{flex:none;width:100%;max-width:680px;margin:0 auto;height:calc(var(--tabbar-h) + var(--safe-b));padding-bottom:var(--safe-b);background:rgba(255,255,255,.86);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border-top:1px solid var(--line);display:flex;z-index:40;}
+.tabbar{position:fixed;bottom:0;left:0;right:0;width:100%;max-width:680px;margin:0 auto;height:calc(var(--tabbar-h) + var(--safe-b));padding-bottom:var(--safe-b);background:rgba(255,255,255,.86);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border-top:1px solid var(--line);display:flex;z-index:40;}
 html[data-theme="dark"] .tabbar{background:rgba(28,33,35,.86);}
 .tabbar button{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--ink-3);font-size:.66rem;font-weight:600;}
 .tabbar button svg{width:23px;height:23px;}
@@ -1196,26 +1192,6 @@ function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.rando
    ==================================================================== */
 let currentTab='home';
 function scrollAppTop(){ const a=document.getElementById('app'); if(a) a.scrollTop=0; try{ window.scrollTo(0,0); }catch(_){} }
-// 実際に見えているビューポート高さで画面シェル高を固定（iOSのツールバー伸縮による下部の隙間対策）
-function setAppH(){
-  try{
-    const ih=window.innerHeight;
-    const vv=window.visualViewport&&window.visualViewport.height;
-    // 通常は innerHeight（ウェブビュー全体の高さ＝standaloneでセーフエリア含む実高さ）を採用。
-    // キーボード表示などで visualViewport が縮んだときのみそちらを優先。
-    let h=ih||vv;
-    if(vv && ih && vv < ih - 80) h=vv; // ソフトキーボード等で大きく縮んだ場合
-    if(h) document.documentElement.style.setProperty('--app-h', Math.round(h)+'px');
-  }catch(_){}
-}
-if(typeof window!=='undefined'){
-  setAppH();
-  window.addEventListener('resize', setAppH);
-  window.addEventListener('orientationchange', ()=>setTimeout(setAppH,250));
-  window.addEventListener('pageshow', setAppH);
-  window.addEventListener('load', ()=>{ setAppH(); setTimeout(setAppH,300); });
-  if(window.visualViewport){ window.visualViewport.addEventListener('resize', setAppH); }
-}
 function setTab(name){
   if(typeof _recog!=='undefined' && _recog){ try{ _recog.stop(); }catch(_){ } }
   if(typeof _srec!=='undefined' && _srec){ try{ _srec.stop(); }catch(_){ } _srec=null; }
