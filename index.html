@@ -202,7 +202,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 
 .section-title{font-weight:600;font-size:.82rem;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin:24px 4px 10px;}
 .set-collapse{margin-bottom:9px;}
-.set-collapse>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);box-shadow:var(--shadow);border-radius:var(--radius-sm);padding:15px 16px;font-weight:700;font-size:1rem;color:var(--ink);transition:transform .12s;}
+.set-collapse>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);box-shadow:var(--shadow);border-radius:var(--radius-sm);padding:15px 16px;font-weight:500;font-size:1rem;color:var(--ink);transition:transform .12s;}
 .set-collapse>summary:active{transform:scale(.985);}
 .set-collapse>summary::-webkit-details-marker{display:none;}
 .set-collapse>summary .set-fold-r{display:inline-flex;align-items:center;gap:8px;flex:none;}
@@ -543,6 +543,14 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 /* ---------- Settings ---------- */
 .set-group{margin-bottom:22px;}
 .auth-intro{font-size:.9rem;color:var(--ink-2);line-height:1.65;margin-bottom:16px;}
+#authGate{display:none;position:fixed;inset:0;z-index:200;background:var(--paper);overflow-y:auto;flex-direction:column;align-items:center;justify-content:flex-start;padding:calc(var(--safe-t) + 40px) 22px calc(var(--safe-b) + 40px);}
+#authGate.show{display:flex;}
+#authGate .gate-inner{width:100%;max-width:420px;margin:auto;}
+#authGate .gate-brand{display:flex;flex-direction:column;align-items:center;gap:8px;margin-bottom:22px;text-align:center;}
+#authGate .gate-brand .gb-name{font-family:var(--font-en);font-size:1.7rem;font-weight:700;color:var(--green-d);}
+#authGate .gate-brand .gb-sub{font-size:.86rem;color:var(--ink-2);}
+#authGate .gate-card{background:var(--surface);border-radius:20px;box-shadow:var(--shadow-lg);padding:24px 22px;}
+#authGate .gate-load{color:var(--ink-3);font-size:.9rem;text-align:center;margin-top:40px;}
 .auth-sent-ic{width:54px;height:54px;border-radius:50%;background:var(--green-soft);color:var(--green);display:flex;align-items:center;justify-content:center;margin:0 0 12px;}
 .auth-sent-ic svg{width:26px;height:26px;}
 .auth-h{font-family:var(--font-en);font-size:1.5rem;font-weight:600;margin:0 0 2px;}
@@ -699,6 +707,9 @@ a{color:var(--green);}
   <section class="view" id="view-settings"></section>
 </div>
 
+<!-- ===== LOGIN GATE (B案: ログイン必須) ===== -->
+<div id="authGate" aria-hidden="true"></div>
+
 <!-- ===== TAB BAR ===== -->
   <nav class="tabbar">
     <button data-tab="home" class="on">
@@ -771,7 +782,7 @@ function defaultState(){
   return {
     folders:{}, cards:{},
     threads:[], aiThreadSeed:false,
-    settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:0.9, newPerDay:20, goal:'daily', goalLevel:'B1', goalWords:20, goalIdioms:10, goalCompo:5, reviewCap:30, srsPreset:'standard', srsMaxIvl:180, saveDestWord:'auto', saveDestIdiom:'auto', saveDestReading:'auto' },
+    settings:{ aiProvider:'openai', apiKey:'', model:'gpt-4o-mini', geminiKey:'', geminiModel:'gemini-2.5-flash', dark:false, ttsRate:1.0, newPerDay:20, goal:'daily', goalLevel:'B1', goalWords:20, goalIdioms:10, goalCompo:5, reviewCap:30, srsPreset:'standard', srsMaxIvl:180, saveDestWord:'auto', saveDestIdiom:'auto', saveDestReading:'auto' },
     stats:{ reviews:{}, streak:0, lastStudy:null, time:{}, dailyCount:{date:null, words:0, idioms:0, compo:0, reviews:0} },
     history:{ compo:[], speech:[] },
     aiUsage:{ date:null, uses:0, adResets:0, proUses:0 },
@@ -882,9 +893,26 @@ const BIZ = {
   phone: '000-0000-0000',          // 請求があれば遅滞なく開示、と記載も可
   email: SUPPORT_EMAIL,
 };
-let _sb=null, account={ user:null }, _cloudTimer=null, _lastSync=0;
+let _sb=null, account={ user:null }, _cloudTimer=null, _lastSync=0, _authReady=false;
 function cloudConfigured(){ return !!(CLOUD.url && CLOUD.anonKey); }
 function loggedIn(){ return !!(account && account.user); }
+// ===== ログイン必須ゲート（B案：クラウド正本） =====
+function authGateActive(){ return cloudConfigured() && !loggedIn() && !authRecovery; }
+function renderAuthGate(){
+  const g=document.getElementById('authGate'); if(!g) return;
+  if(!_authReady){ g.classList.remove('show'); return; } // 認証状態の確認中はゲートを出さない（チラつき防止）
+  if(authGateActive()){
+    g.innerHTML=`<div class="gate-inner">
+      <div class="gate-brand"><div class="gb-name">Sprout</div><div class="gb-sub">英語を、自分のものに。</div></div>
+      <div class="gate-card">${authBoxHtml()}</div>
+    </div>`;
+    g.classList.add('show');
+    document.body.style.overflow='hidden';
+    const f=g.querySelector('input'); if(f) setTimeout(()=>{try{f.focus();}catch(_){}}, 60);
+  } else {
+    g.classList.remove('show'); g.innerHTML=''; document.body.style.overflow='';
+  }
+}
 function accountEmail(){ return loggedIn() ? (account.user.email || (account.user.user_metadata&&account.user.user_metadata.email) || 'ログイン中') : ''; }
 function loadSupabaseSDK(){
   return new Promise((res,rej)=>{
@@ -896,20 +924,24 @@ function loadSupabaseSDK(){
   });
 }
 async function cloudInit(){
-  if(!cloudConfigured()) return;
+  if(!cloudConfigured()){ _authReady=true; renderAuthGate(); return; }
   try{
     await loadSupabaseSDK();
     _sb=window.supabase.createClient(CLOUD.url, CLOUD.anonKey, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, flowType:'pkce' } });
     const { data } = await _sb.auth.getSession();
     if(data && data.session) account.user=data.session.user;
+    _authReady=true; renderAuthGate();
     _sb.auth.onAuthStateChange((_e,session)=>{
-      if(_e==='PASSWORD_RECOVERY'){ account.user=session?session.user:account.user; authRecovery=true; authView='recovery'; setTab('settings'); renderSettings(); return; }
-      const was=loggedIn(); account.user=session?session.user:null;
-      if(!was && loggedIn()){ cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); } else { renderSettings(); }
+      if(_e==='PASSWORD_RECOVERY'){ account.user=session?session.user:account.user; authRecovery=true; authView='recovery'; renderAuthGate(); setTab('settings'); renderSettings(); return; }
+      const was=loggedIn(); account.user=session?session.user:null; _authReady=true;
+      if(!was && loggedIn()){ renderAuthGate(); cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }
+      else { renderAuthGate(); renderSettings(); }
     });
     if(loggedIn()) await cloudPull();
     if(STRIPE.enabled && loggedIn()) await syncPlanFromServer();
-  }catch(e){ /* offline or SDK blocked -> stay local-only */ }
+    // オフライン中に溜まった未送信分を、再接続時に送信
+    window.addEventListener('online', ()=>{ if(loggedIn() && state._pendingSync) cloudPush(); });
+  }catch(e){ _authReady=true; renderAuthGate(); /* offline or SDK blocked */ }
   renderSettings();
 }
 function rerenderActive(){
@@ -930,62 +962,27 @@ function stateLooksEmpty(s){
   const reviews=s.stats&&s.stats.reviews&&Object.keys(s.stats.reviews).length||0;
   return prog===0 && compoSrs===0 && streak===0 && timeEntries===0 && reviews===0;
 }
-function mergeStates(local, remote){
-  // ローカルとリモートを結合（ユニオン）して、どちらの学習データも失わない
-  const a=local||{}, b=remote||{};
-  const bNewer = (b._updatedAt||0) >= (a._updatedAt||0);
-  const out = bNewer ? Object.assign({}, a, b) : Object.assign({}, b, a); // 競合スカラーは新しい方を採用
-  const mergeMap=(key)=>{ const r=Object.assign({}, a[key]||{}); const bb=b[key]||{}; Object.keys(bb).forEach(k=>{ if(!(k in r) || bNewer) r[k]=bb[k]; }); return r; };
-  out.folders = mergeMap('folders');
-  out.cards   = mergeMap('cards');
-  out.progress= mergeMap('progress');
-  out.compoSrs= mergeMap('compoSrs');
-  out.memos   = mergeMap('memos');
-  const sa=a.stats||{}, sb=b.stats||{};
-  out.stats = Object.assign({}, bNewer?sa:sb, bNewer?sb:sa);
-  out.stats.streak = Math.max(sa.streak||0, sb.streak||0);
-  const mx=(o1,o2)=>{ const r=Object.assign({}, o1||{}); Object.keys(o2||{}).forEach(k=>{ r[k]=Math.max(r[k]||0, o2[k]||0); }); return r; };
-  out.stats.time = mx(sa.time, sb.time);
-  out.stats.reviews = mx(sa.reviews, sb.reviews);
-  const ta=Array.isArray(a.threads)?a.threads:[], tb=Array.isArray(b.threads)?b.threads:[];
-  const seen={}, threads=[];
-  (bNewer?tb.concat(ta):ta.concat(tb)).forEach(t=>{ if(t&&t.id&&!seen[t.id]){ seen[t.id]=1; threads.push(t); } });
-  out.threads = threads;
-  out._updatedAt = Math.max(a._updatedAt||0, b._updatedAt||0);
-  return out;
-}
 async function cloudPull(){
   if(!_sb || !loggedIn()) return;
   try{
     const { data, error } = await _sb.from('sprout_state').select('data').eq('user_id',account.user.id).maybeSingle();
     if(error) throw error;
-    if(data && data.data){
-      const remote = (typeof data.data==='string') ? JSON.parse(data.data) : data.data;
-      const localT = state._updatedAt||0, remoteT = remote._updatedAt||0;
-      const remoteHas = !stateLooksEmpty(remote), localHas = !stateLooksEmpty(state);
-      try{ localStorage.setItem(STORE_KEY+'_bak', JSON.stringify(state)); }catch(_){} // 念のため上書き前のローカルを退避
-      if(remoteHas && localHas){
-        // 両方に学習データ → 結合して双方を保全（消失防止）。結合結果はクラウドにも反映。
-        state = mergeStates(state, remote);
-        normalizeState();
-        save({keepStamp:false});
-        rerenderActive();
-        toast('クラウドと統合しました');
-      } else {
-        let pull;
-        if(remoteHas && !localHas) pull=true;       // 端末側は未学習 → クラウドの学習データを取り込む
-        else if(localHas && !remoteHas) pull=false;  // クラウドが空に近い → ローカルを守ってアップロード
-        else pull = (remoteT > localT);              // どちらも空 → 新しい方
-        if(pull){
-          state = Object.assign(defaultState(), remote);
-          normalizeState();
-          save({keepStamp:true, noCloud:true});
-          rerenderActive();
-          toast('クラウドから同期しました');
-        } else {
-          await cloudPush();
-        }
-      }
+    const remote = (data && data.data) ? ((typeof data.data==='string') ? JSON.parse(data.data) : data.data) : null;
+    if(!remote){ await cloudPush(); _lastSync=now(); renderSettings(); return; } // クラウド未作成 → ローカルを初期アップロード
+    const localT = state._updatedAt||0, remoteT = remote._updatedAt||0;
+    const remoteHas = !stateLooksEmpty(remote), localHas = !stateLooksEmpty(state);
+    try{ localStorage.setItem(STORE_KEY+'_bak', JSON.stringify(state)); }catch(_){} // 上書き前にローカルを退避（復旧用）
+    let pull;
+    if(state._pendingSync) pull=false;            // 未送信のオフライン書き込みがある → ローカルを優先送信（失わない）
+    else if(remoteHas && !localHas) pull=true;     // 端末は未学習 → クラウドを取り込む
+    else if(localHas && !remoteHas) pull=false;    // クラウドが空 → ローカルを送信（既存ユーザーの初回移行）
+    else pull = (remoteT > localT);                // それ以外はクラウドを正本に（新しいローカルだけは保護）
+    if(pull){
+      state = Object.assign(defaultState(), remote);
+      state._pendingSync=false;
+      normalizeState();
+      save({keepStamp:true, noCloud:true});
+      rerenderActive();
     } else {
       await cloudPush();
     }
@@ -997,7 +994,11 @@ async function cloudPush(){
   try{
     await _sb.from('sprout_state').upsert({ user_id:account.user.id, data:JSON.stringify(state), updated_at:new Date().toISOString() });
     _lastSync=now();
-  }catch(e){ /* ignore */ }
+    if(state._pendingSync){ state._pendingSync=false; try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(_){} }
+  }catch(e){
+    // オフライン等：未送信としてローカルに保持（再接続時/次回起動時に送信）
+    state._pendingSync=true; try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }catch(_){}
+  }
 }
 function scheduleCloudPush(){
   if(!_sb || !loggedIn()) return;
@@ -1070,7 +1071,7 @@ async function authGoogle(){
 }
 async function authSignOut(){
   try{ await _sb.auth.signOut(); }catch(e){}
-  account.user=null; authView='menu'; authDraftEmail=''; renderSettings(); toast('ログアウトしました');
+  account.user=null; authView='menu'; authDraftEmail=''; renderAuthGate(); renderSettings(); toast('ログアウトしました');
 }
 async function deleteAccount(){
   if(!loggedIn()){ toast('ログインが必要です'); return; }
@@ -1700,13 +1701,20 @@ function resolveSaveFolder(kind,o){
   return ensureFolder(isIdiomTerm(o)?'熟語':'単語');
 }
 function saveDestOptions(cur, kind){
-  const autoLabel = kind==='word'?'単語（自動）':kind==='idiom'?'熟語（自動）':'自動（語数で判定）';
-  let html=`<option value="auto" ${(!cur||cur==='auto')?'selected':''}>${autoLabel}</option>`;
-  html+=`<option value="inbox" ${cur==='inbox'?'selected':''}>受信箱</option>`;
-  // 上位フォルダ一覧（受信箱以外）
-  Object.values(state.folders).filter(f=>f.parentId===null && f.name!=='受信箱')
-    .sort((a,b)=>(a.createdAt||0)-(b.createdAt||0))
-    .forEach(f=>{ html+=`<option value="${f.id}" ${cur===f.id?'selected':''}>${esc(f.name)}</option>`; });
+  let html='';
+  if(kind==='reading'){
+    html+=`<option value="auto" ${(!cur||cur==='auto')?'selected':''}>自動（語数で判定）</option>`;
+  }
+  const roots=Object.values(state.folders).filter(f=>f.parentId===null)
+    .sort((a,b)=>((a.order||0)-(b.order||0))||((a.createdAt||0)-(b.createdAt||0)));
+  const defName = kind==='word'?'単語':kind==='idiom'?'熟語':null;
+  const defFolder = defName?roots.find(f=>f.name===defName):null;
+  roots.forEach(f=>{
+    let sel;
+    if(kind==='reading') sel = cur===f.id;
+    else sel = (cur===f.id) || ((!cur||cur==='auto') && defFolder && f.id===defFolder.id);
+    html+=`<option value="${f.id}" ${sel?'selected':''}>${esc(f.name)}</option>`;
+  });
   return html;
 }
 function saveItemAsCard(o,kind){
@@ -4888,7 +4896,7 @@ function renderSettings(){
         </div>
         <button class="btn btn-ghost full" style="padding:11px;margin-bottom:8px" onclick="authGo('changeEmail')">メールアドレスを変更</button>
         <button class="btn btn-ghost full" style="padding:11px" onclick="authGo('changePw')">パスワードを変更</button>`)
-      : authBoxHtml()) )}
+      : `<div class="field"><div class="d">ログインが必要です。</div></div>`) )}
     </div></details>
 
     <div class="section-title">プラン・お支払い</div>
@@ -5003,6 +5011,10 @@ function renderSettings(){
           ${[90,120,180,365].map(n=>`<option value="${n}" ${s.srsMaxIvl===n?'selected':''}>${n>=365?'1年':(n+'日')}</option>`).join('')}
           <option value="0" ${(!s.srsMaxIvl||s.srsMaxIvl===0)?'selected':''}>上限なし</option>
         </select></div>
+      <div class="set-row"><div><div class="l">1日の新規カード上限</div><div class="d">忘却曲線学習で、1日に出す未学習カードの上限数です。</div></div>
+        <select id="setNew" onchange="state.settings.newPerDay=parseInt(this.value);save()">
+          ${[5,10,15,20,30,50].map(n=>`<option value="${n}" ${s.newPerDay===n?'selected':''}>${n}枚</option>`).join('')}
+        </select></div>
       <div style="color:var(--ink-3);font-size:.72rem;margin:8px 4px 2px">例）標準・上限180日のとき：新規で「かんたん」→3日後→約10日後…と伸び、最長でも180日で再出題されます。</div>
     </div>
 
@@ -5016,7 +5028,7 @@ function renderSettings(){
         <select id="setDestIdiom" onchange="state.settings.saveDestIdiom=this.value;save()">
           ${saveDestOptions(s.saveDestIdiom,'idiom')}
         </select></div>
-      <div class="set-row"><div><div class="l">リーディング・英作文など</div></div>
+      <div class="set-row"><div><div class="l">リーディングなど</div></div>
         <select id="setDestReading" onchange="state.settings.saveDestReading=this.value;save()">
           ${saveDestOptions(s.saveDestReading,'reading')}
         </select></div>
@@ -5024,12 +5036,8 @@ function renderSettings(){
 
     <div class="section-title">学習</div>
     <div class="set-group">
-      <div class="set-row"><div><div class="l">1日の新規カード上限</div><div class="d">忘却曲線モードで、1日に新しく出す“初めて学ぶカード”の上限枚数です。</div></div>
-        <select id="setNew" onchange="state.settings.newPerDay=parseInt(this.value);save()">
-          ${[5,10,15,20,30,50].map(n=>`<option value="${n}" ${s.newPerDay===n?'selected':''}>${n}枚</option>`).join('')}
-        </select></div>
       <div class="set-row slider-row"><div><div class="l">読み上げの速さ</div><div class="d">${(s.ttsRate).toFixed(1)}x</div></div>
-        <input type="range" min="0.5" max="1.3" step="0.1" value="${s.ttsRate}" oninput="state.settings.ttsRate=parseFloat(this.value);this.parentNode.querySelector('.d').textContent=parseFloat(this.value).toFixed(1)+'x';save()" /></div>
+        <input type="range" min="0.5" max="1.5" step="0.1" value="${s.ttsRate}" oninput="state.settings.ttsRate=parseFloat(this.value);this.parentNode.querySelector('.d').textContent=parseFloat(this.value).toFixed(1)+'x';save()" /></div>
       <div class="set-row"><div><div class="l">ダークモード</div></div>
         <label class="switch"><input type="checkbox" ${s.dark?'checked':''} onchange="state.settings.dark=this.checked;applyTheme();save()"><span class="sl"></span></label></div>
     </div>
@@ -5067,6 +5075,7 @@ function renderSettings(){
       <button class="btn btn-ghost full" style="padding:12px;color:var(--r-again);border:1px solid var(--line)" onclick="deleteAccount()">アカウントを削除</button>
     </div>`:''}
   `;
+  renderAuthGate();
 }
 function saveSettings(){
   const prov=document.getElementById('setProvider'); if(prov) state.settings.aiProvider=prov.value;
