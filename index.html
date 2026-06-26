@@ -79,6 +79,7 @@ body{
   background:var(--paper);
   height:100vh;
   height:100dvh;
+  height:var(--app-h, 100dvh);
   overflow:hidden;
   display:flex;
   flex-direction:column;
@@ -1188,7 +1189,22 @@ function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.rando
    NAVIGATION
    ==================================================================== */
 let currentTab='home';
-function scrollAppTop(){ const a=document.getElementById('app'); if(a) a.scrollTop=0; try{ scrollAppTop(); }catch(_){} }
+function scrollAppTop(){ const a=document.getElementById('app'); if(a) a.scrollTop=0; try{ window.scrollTo(0,0); }catch(_){} }
+// 実際に見えているビューポート高さで画面シェル高を固定（iOSのツールバー伸縮による下部の隙間対策）
+function setAppH(){
+  try{
+    const vv=window.visualViewport;
+    const h=(vv&&vv.height)?vv.height:window.innerHeight;
+    if(h) document.documentElement.style.setProperty('--app-h', Math.round(h)+'px');
+  }catch(_){}
+}
+if(typeof window!=='undefined'){
+  setAppH();
+  window.addEventListener('resize', setAppH);
+  window.addEventListener('orientationchange', ()=>setTimeout(setAppH,250));
+  window.addEventListener('pageshow', setAppH);
+  if(window.visualViewport){ window.visualViewport.addEventListener('resize', setAppH); }
+}
 function setTab(name){
   if(typeof _recog!=='undefined' && _recog){ try{ _recog.stop(); }catch(_){ } }
   if(typeof _srec!=='undefined' && _srec){ try{ _srec.stop(); }catch(_){ } _srec=null; }
@@ -3248,6 +3264,7 @@ const COMPO_PRESET={"grammar":[{"key":"be動詞","levels":[{"id":"a2","name":"A2
 
 function compoPresetSets(type){ return (COMPO_PRESET&&COMPO_PRESET[type])||[]; }
 function compoPresetPool(type, ci, li){
+  if(ci==='all') return compoPresetPoolAll(type, li);
   const set=compoPresetSets(type)[ci]; if(!set) return [];
   const levels = (li==='__all__') ? set.levels : set.levels.filter(l=>l.id===li);
   const kindLabel=(type==='grammar'?'文法：':'場面：')+set.key;
@@ -3257,6 +3274,24 @@ function compoPresetPool(type, ci, li){
   }));
   return out;
 }
+// 全セット横断のプール（文法/場面をまたいでランダム学習）
+function compoPresetPoolAll(type, li){
+  const out=[];
+  compoPresetSets(type).forEach(set=>{
+    const levels = (li==='__all__') ? set.levels : set.levels.filter(l=>l.id===li);
+    const kindLabel=(type==='grammar'?'文法：':'場面：')+set.key;
+    levels.forEach(l=>l.items.forEach(p=>{ out.push({ jp:p[0], en:p[1], kind:kindLabel, status:compoProgGet(compoSig(p[0],p[1])) }); }));
+  });
+  return out;
+}
+// 全セットに登場する難易度（CEFR順、重複排除）
+function compoAllLevels(type){
+  const order=['a1','a2','b1','b2','c1','c2'];
+  const seen={}, list=[];
+  compoPresetSets(type).forEach(set=>set.levels.forEach(l=>{ if(!seen[l.id]){ seen[l.id]=1; list.push({id:l.id,name:l.name}); } }));
+  list.sort((a,b)=>{ const ia=order.indexOf(a.id), ib=order.indexOf(b.id); return (ia<0?99:ia)-(ib<0?99:ib); });
+  return list;
+}
 function compoUnmasteredCount(pool){ return pool.filter(p=>p.status==null).length; }
 function compoReviewCount(pool){ return pool.filter(p=>p.status==='ng').length; }
 function compoSelectItems(pool, style){
@@ -3264,7 +3299,6 @@ function compoSelectItems(pool, style){
   if(style==='review') arr=pool.filter(p=>p.status==='ng');
   else if(style==='unmastered') arr=pool.filter(p=>p.status==null);
   else arr=pool.slice(); // random / order
-  if(!arr.length) arr=pool.slice();
   return shuffle(arr).slice(0,10);
 }
 function startCompoGrammarPick(){ compoCatPick('grammar'); }
@@ -3272,65 +3306,84 @@ function startCompoScenePick(){ compoCatPick('scene'); }
 function compoCatPick(type){
   const sets=compoPresetSets(type);
   const title=type==='grammar'?'文法から出題':'場面から出題';
-  const hint=type==='grammar'?'学びたい文法を選んでください。':'練習したい場面を選んでください。';
+  const allTotal=compoPresetPool(type,'all','__all__').length;
+  const allUm=compoUnmasteredCount(compoPresetPool(type,'all','__all__'));
   openModal(`
     <h2>${title}</h2>
-    <p style="color:var(--ink-2);font-size:.86rem;margin:0 0 12px">${hint}収録済みの問題から出題します。</p>
     <div class="deck-pick">
-      ${sets.map((s,i)=>{const n=s.levels.reduce((a,l)=>a+l.items.length,0);const um=compoUnmasteredCount(compoPresetPool(type,i,'__all__'));return `<div class="deck-row" onclick="compoLevelPick('${type}',${i})"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${type==='grammar'?I.book:I.chat}</div><div class="meta"><div class="nm">${esc(s.key)}</div><div class="ct">全${n}問・未学習${um}問</div></div><span class="chev">${I.chev}</span></div>`;}).join('')}
+      ${sets.map((s,i)=>{const n=s.levels.reduce((a,l)=>a+l.items.length,0);const um=compoUnmasteredCount(compoPresetPool(type,i,'__all__'));return `<div class="deck-row" onclick="compoLevelPick('${type}','${i}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${type==='grammar'?I.book:I.chat}</div><div class="meta"><div class="nm">${esc(s.key)}</div><div class="ct">全${n}問・未学習${um}問</div></div><span class="chev">${I.chev}</span></div>`;}).join('')}
+      <div class="deck-row" onclick="compoLevelPick('${type}','all')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center">${I.list}</div><div class="meta"><div class="nm">すべて</div><div class="ct">全${allTotal}問・未学習${allUm}問</div></div><span class="chev">${I.chev}</span></div>
     </div>
     <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="startCompoMenu()">← 出題方法へ戻る</button></div>`);
 }
 function compoLevelPick(type, ci){
-  const set=compoPresetSets(type)[ci]; if(!set){ toast('見つかりません'); return; }
-  const total=set.levels.reduce((a,l)=>a+l.items.length,0);
+  const isAll = (ci==='all');
+  const set = isAll ? null : compoPresetSets(type)[ci];
+  if(!isAll && !set){ toast('見つかりません'); return; }
+  const key = isAll ? 'すべて' : set.key;
+  const levels = isAll ? compoAllLevels(type) : set.levels.map(l=>({id:l.id,name:l.name}));
+  const total = compoPresetPool(type,ci,'__all__').length;
   openModal(`
-    <h2>${esc(set.key)}</h2>
+    <h2>${esc(key)}</h2>
     <div class="deck-pick">
-      ${set.levels.map(l=>`<div class="deck-row" onclick="compoStylePick('${type}',${ci},'${l.id}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center">${I.trophy}</div><div class="meta"><div class="nm">${esc(l.name)}</div><div class="ct">全${l.items.length}問・未学習${compoUnmasteredCount(compoPresetPool(type,ci,l.id))}問</div></div><span class="chev">${I.chev}</span></div>`).join('')}
-      <div class="deck-row" onclick="compoStylePick('${type}',${ci},'__all__')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${I.list}</div><div class="meta"><div class="nm">すべて</div><div class="ct">全${total}問・未学習${compoUnmasteredCount(compoPresetPool(type,ci,'__all__'))}問</div></div><span class="chev">${I.chev}</span></div>
+      ${levels.map(l=>{const lp=compoPresetPool(type,ci,l.id);return `<div class="deck-row" onclick="compoStylePick('${type}','${ci}','${l.id}')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--green-soft);color:var(--green);display:grid;place-items:center">${I.trophy}</div><div class="meta"><div class="nm">${esc(l.name)}</div><div class="ct">全${lp.length}問・未学習${compoUnmasteredCount(lp)}問</div></div><span class="chev">${I.chev}</span></div>`;}).join('')}
+      <div class="deck-row" onclick="compoStylePick('${type}','${ci}','__all__')"><div class="ico" style="width:38px;height:38px;border-radius:10px;background:var(--amber-soft);color:var(--amber-d);display:grid;place-items:center">${I.list}</div><div class="meta"><div class="nm">すべて</div><div class="ct">全${total}問・未学習${compoUnmasteredCount(compoPresetPool(type,ci,'__all__'))}問</div></div><span class="chev">${I.chev}</span></div>
     </div>
     <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="compoCatPick('${type}')">← 戻る</button></div>`);
 }
 function compoStylePick(type, ci, li){
-  const set=compoPresetSets(type)[ci]; if(!set){ toast('見つかりません'); return; }
-  const lvName = li==='__all__' ? 'すべて' : (set.levels.find(l=>l.id===li)||{}).name;
+  const isAll = (ci==='all');
+  const set = isAll ? null : compoPresetSets(type)[ci];
+  if(!isAll && !set){ toast('見つかりません'); return; }
+  const key = isAll ? 'すべて' : set.key;
+  let lvName;
+  if(li==='__all__') lvName='すべて';
+  else { const lv = isAll ? compoAllLevels(type).find(l=>l.id===li) : set.levels.find(l=>l.id===li); lvName = lv?lv.name:null; }
   if(!lvName){ toast('レベルが見つかりません'); return; }
   const pool=compoPresetPool(type,ci,li);
   const um=compoUnmasteredCount(pool), rv=compoReviewCount(pool);
   const cnt=n=>`<span class="opt-count">${n}</span>`;
   openModal(`
-    <h2>${esc(set.key)} / ${esc(lvName)}</h2>
-    <button class="opt-btn" onclick="startCompoPresetStudy('${type}',${ci},'${li}','unmastered')"><span class="oic" style="background:var(--amber-soft);color:var(--amber-d)">${I.trophy}</span><span class="ot">未学習</span>${cnt(um)}</button>
-    <button class="opt-btn" onclick="startCompoPresetStudy('${type}',${ci},'${li}','review')"><span class="oic" style="background:var(--r-again);color:#fff">${I.refresh}</span><span class="ot">復習</span>${cnt(rv)}</button>
-    <button class="opt-btn" onclick="startCompoPresetStudy('${type}',${ci},'${li}','random')"><span class="oic" style="background:var(--green-soft);color:var(--green)">${I.cardPlus}</span><span class="ot">ランダム</span></button>
-    <button class="opt-btn" onclick="showCompoList('${type}',${ci},'${li}')"><span class="oic" style="background:var(--green-soft);color:var(--green)">${I.list}</span><span class="ot">問題一覧</span><span class="opt-count">${pool.length}</span></button>
-    <div class="modal-actions" style="margin-top:8px"><button class="btn btn-ghost" onclick="compoLevelPick('${type}',${ci})">← 難易度へ戻る</button></div>`);
+    <h2>${esc(key)} / ${esc(lvName)}</h2>
+    <button class="opt-btn" onclick="startCompoPresetStudy('${type}','${ci}','${li}','unmastered')"><span class="oic" style="background:var(--amber-soft);color:var(--amber-d)">${I.trophy}</span><span class="ot">未学習</span>${cnt(um)}</button>
+    <button class="opt-btn" onclick="startCompoPresetStudy('${type}','${ci}','${li}','review')"><span class="oic" style="background:var(--r-again);color:#fff">${I.refresh}</span><span class="ot">復習</span>${cnt(rv)}</button>
+    <button class="opt-btn" onclick="startCompoPresetStudy('${type}','${ci}','${li}','random')"><span class="oic" style="background:var(--green-soft);color:var(--green)">${I.cardPlus}</span><span class="ot">ランダム</span></button>
+    <button class="opt-btn" onclick="showCompoList('${type}','${ci}','${li}')"><span class="oic" style="background:var(--green-soft);color:var(--green)">${I.list}</span><span class="ot">問題一覧</span><span class="opt-count">${pool.length}</span></button>
+    <div class="modal-actions" style="margin-top:8px"><button class="btn btn-ghost" onclick="compoLevelPick('${type}','${ci}')">← 難易度へ戻る</button></div>`);
 }
 function startCompoPresetStudy(type, ci, li, style){
-  const set=compoPresetSets(type)[ci]; if(!set){ toast('見つかりません'); return; }
+  const isAll = (ci==='all');
+  const set = isAll ? null : compoPresetSets(type)[ci];
+  if(!isAll && !set){ toast('見つかりません'); return; }
   const pool=compoPresetPool(type,ci,li);
   if(!pool.length){ toast('この問題集は準備中です'); return; }
   const picked=compoSelectItems(pool, style);
-  if(!picked.length){ toast(style==='review'?'復習対象がありません':'対象がありません'); return; }
-  const lvName = li==='__all__' ? 'すべて' : (set.levels.find(l=>l.id===li)||{}).name||'';
+  if(!picked.length){ toast(style==='review'?'復習対象がありません':(style==='unmastered'?'未学習の問題がありません':'対象がありません')); return; }
+  let lvName='';
+  if(li!=='__all__'){ const lv = isAll ? compoAllLevels(type).find(l=>l.id===li) : set.levels.find(l=>l.id===li); lvName = lv?lv.name:''; }
+  const key = isAll ? ((type==='grammar'?'文法':'場面')+' すべて') : set.key;
   const items=picked.map(p=>({jp:p.jp,en:p.en,kind:p.kind}));
   closeModal();
-  compo={ items, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:type, theme:set.key+(li!=='__all__'?(' '+lvName):'') };
+  compo={ items, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:type, theme:key+(li!=='__all__'?(' '+lvName):'') };
   renderCompo();
 }
 function showCompoList(type, ci, li){
-  const set=compoPresetSets(type)[ci]; if(!set){ toast('見つかりません'); return; }
-  const lvName = li==='__all__' ? 'すべて' : (set.levels.find(l=>l.id===li)||{}).name;
+  const isAll = (ci==='all');
+  const set = isAll ? null : compoPresetSets(type)[ci];
+  if(!isAll && !set){ toast('見つかりません'); return; }
+  const key = isAll ? 'すべて' : set.key;
+  let lvName;
+  if(li==='__all__') lvName='すべて';
+  else { const lv = isAll ? compoAllLevels(type).find(l=>l.id===li) : set.levels.find(l=>l.id===li); lvName = lv?lv.name:''; }
   const pool=compoPresetPool(type,ci,li);
   const badge=st=> st==='ok'?'<span style="font-size:.7rem;color:var(--green);font-weight:700">習得</span>': st==='ng'?'<span style="font-size:.7rem;color:var(--r-again,#c0392b);font-weight:700">復習</span>':'<span style="font-size:.7rem;color:var(--ink-2)">未学習</span>';
   const rows=pool.map(p=>`<div style="padding:10px 2px;border-bottom:1px solid var(--line,#eee)"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><div style="font-weight:600;font-size:.92rem">${esc(p.jp)}</div>${badge(p.status)}</div><div style="color:var(--ink-2);font-size:.86rem;margin-top:3px">${esc(p.en)}</div></div>`).join('');
   openModal(`
-    <h2 style="margin-bottom:4px">${esc(set.key)} / ${esc(lvName)}</h2>
+    <h2 style="margin-bottom:4px">${esc(key)} / ${esc(lvName)}</h2>
     <div style="color:var(--ink-2);font-size:.82rem;margin-bottom:10px">未学習 ${compoUnmasteredCount(pool)} ・ 復習 ${compoReviewCount(pool)} ・ 全${pool.length}問</div>
-    <button class="btn btn-primary full" style="margin-bottom:10px" onclick="startCompoPresetStudy('${type}',${ci},'${li}','random')">${I.cardPlus} この一覧から学習する</button>
+    <button class="btn btn-primary full" style="margin-bottom:10px" onclick="startCompoPresetStudy('${type}','${ci}','${li}','random')">${I.cardPlus} この一覧から学習する</button>
     <div style="max-height:46vh;overflow:auto;margin:0 -2px">${rows}</div>
-    <div class="modal-actions" style="margin-top:12px"><button class="btn btn-ghost" onclick="compoStylePick('${type}',${ci},'${li}')">← 戻る</button></div>`);
+    <div class="modal-actions" style="margin-top:12px"><button class="btn btn-ghost" onclick="compoStylePick('${type}','${ci}','${li}')">← 戻る</button></div>`);
 }
 function startCompoThemePick(){
   openModal(`
