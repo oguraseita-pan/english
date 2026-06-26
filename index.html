@@ -73,12 +73,12 @@ html[data-theme="dark"]{
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 html,body{margin:0;padding:0;}
-html{min-height:100%;background:var(--paper);}
+html{height:100%;background:var(--paper);}
 body{
   font-family:var(--font-ui);
   background:var(--paper);
-  min-height:100vh;
-  min-height:100dvh;
+  height:100%;
+  overflow:hidden;
   color:var(--ink);
   font-size:16px;line-height:1.5;
   -webkit-font-smoothing:antialiased;
@@ -93,7 +93,7 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 ::selection{background:var(--amber-soft);}
 
 /* ---------- App shell ---------- */
-#app{max-width:680px;margin:0 auto;min-height:100vh;min-height:100dvh;position:relative;}
+#app{max-width:680px;margin:0 auto;height:100vh;height:100dvh;position:relative;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-y:none;}
 .view{display:none;padding:calc(var(--safe-t) + 8px) 18px calc(var(--tabbar-h) + var(--safe-b) + 28px);animation:fade .25s ease;}
 .view.active{display:block;}
 @keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
@@ -749,6 +749,7 @@ const I = {
   speech:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.5A2.5 2.5 0 0 1 17.5 16H10l-4.2 3.3a.4.4 0 0 1-.65-.32V7.5A2.5 2.5 0 0 1 7.65 5h9.85A2.5 2.5 0 0 1 20 7.5z"/><circle cx="9" cy="10.5" r="1.05" fill="currentColor" stroke="none"/><circle cx="12.7" cy="10.5" r="1.05" fill="currentColor" stroke="none"/><circle cx="16.4" cy="10.5" r="1.05" fill="currentColor" stroke="none"/></svg>',
   cards:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7.5" width="13" height="13.5" rx="2.5"/><path d="M7 4.5h10A2.5 2.5 0 0 1 19.5 7v9.5"/></svg>',
   pencil:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16.6 3.4a2 2 0 0 1 2.83 2.83L7.6 18.06l-3.9 1.07 1.07-3.9z"/><path d="M14.3 5.7l3 3"/></svg>',
+  chat:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 14.5H6A2.5 2.5 0 0 1 3.5 12V6A2.5 2.5 0 0 1 6 3.5h8A2.5 2.5 0 0 1 16.5 6v1"/><path d="M11 9.5h7A2.5 2.5 0 0 1 20.5 12v6a2.5 2.5 0 0 1-2.5 2.5h-1.2l-3.1 2.3V20.5H11A2.5 2.5 0 0 1 8.5 18v-6A2.5 2.5 0 0 1 11 9.5z"/></svg>',
 };
 
 /* ---------- state & storage ---------- */
@@ -1183,6 +1184,7 @@ function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.rando
    NAVIGATION
    ==================================================================== */
 let currentTab='home';
+function scrollAppTop(){ const a=document.getElementById('app'); if(a) a.scrollTop=0; try{ scrollAppTop(); }catch(_){} }
 function setTab(name){
   if(typeof _recog!=='undefined' && _recog){ try{ _recog.stop(); }catch(_){ } }
   if(typeof _srec!=='undefined' && _srec){ try{ _srec.stop(); }catch(_){ } _srec=null; }
@@ -1197,7 +1199,7 @@ function setTab(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.tabbar button').forEach(b=>b.classList.toggle('on', b.dataset.tab===name));
-  window.scrollTo(0,0);
+  scrollAppTop();
   if(name==='home') renderHome();
   if(name==='notes'){ currentFolder=null; currentCardView=null; noteEditMode=false; renderNotes(); }
   if(name==='study') renderStudy();
@@ -2224,7 +2226,7 @@ function renderStudy(){
     <div class="section-title">単語・熟語学習</div>
     <div class="mode-card" onclick="originalDeckPick()">
       <div class="mc-ic" style="background:var(--green-soft);color:var(--green)">${I.folder}</div>
-      <div class="mc-body"><div class="mc-t">オリジナルデッキ</div><div class="mc-d">自分の単語で学習（忘却曲線／追加順）</div></div>
+      <div class="mc-body"><div class="mc-t">オリジナルデッキ</div><div class="mc-d">自分の単語で学習</div></div>
       <div class="badge ${ready===0?'zero':''}">${ready}</div>
     </div>
     <div class="mode-card" onclick="presetPick()">
@@ -2234,24 +2236,24 @@ function renderStudy(){
     </div>
     <div class="mode-card" onclick="idiomPick()">
       <div class="mc-ic" style="background:var(--green-soft);color:var(--green)">${I.doc}</div>
-      <div class="mc-body"><div class="mc-t">熟語学習</div><div class="mc-d">フラッシュカード＆穴埋め問題で熟語を習得</div></div>
-      <span class="chev">${I.chev}</span>
-    </div>
-    <div class="section-title" style="margin-top:22px">リーディング</div>
-    <div class="mode-card" onclick="readingSetup()">
-      <div class="mc-ic" style="background:var(--amber-soft);color:var(--amber-d)">${I.read}</div>
-      <div class="mc-body"><div class="mc-t">リーディング</div><div class="mc-d">AIが記事を生成・タップで訳＆カード化</div></div>
+      <div class="mc-body"><div class="mc-t">熟語学習</div><div class="mc-d">フラッシュカード＆穴埋め問題で学習</div></div>
       <span class="chev">${I.chev}</span>
     </div>
     <div class="section-title" style="margin-top:22px">スピーキング学習</div>
     <div class="mode-card" onclick="startCompoMenu()">
       <div class="mc-ic" style="background:var(--green-soft);color:var(--green)">${I.mic}</div>
-      <div class="mc-body"><div class="mc-t">瞬間英作文</div><div class="mc-d">日本語→英語を声で（音声入力OK）</div></div>
+      <div class="mc-body"><div class="mc-t">瞬間英作文</div><div class="mc-d">日本語→英作文練習（音声対応）</div></div>
       <span class="chev">${I.chev}</span>
     </div>
     <div class="mode-card" onclick="startSpeechMenu()">
       <div class="mc-ic" style="background:var(--amber-soft);color:var(--amber-d)">${I.speech}</div>
       <div class="mc-body"><div class="mc-t">独り言英会話（1分スピーチ）</div><div class="mc-d">お題で1分話す→AIが添削＆別表現を提案</div></div>
+      <span class="chev">${I.chev}</span>
+    </div>
+    <div class="section-title" style="margin-top:22px">リーディング</div>
+    <div class="mode-card" onclick="readingSetup()">
+      <div class="mc-ic" style="background:var(--amber-soft);color:var(--amber-d)">${I.read}</div>
+      <div class="mc-body"><div class="mc-t">リーディング</div><div class="mc-d">オリジナル記事で学習</div></div>
       <span class="chev">${I.chev}</span>
     </div>`;
 }
@@ -2514,9 +2516,9 @@ function wlBack(){
 }
 function setupWlSticky(){
   const btn=document.getElementById('wlStickyBack'); if(!btn) return;
-  const target=document.scrollingElement||document.documentElement;
+  const target=document.getElementById('app')||document.scrollingElement||document.documentElement;
   if(window.__wlScroll) window.removeEventListener('scroll', window.__wlScroll, true);
-  window.__wlScroll=()=>{ const b=document.getElementById('wlStickyBack'); if(!b) return; const y=window.scrollY||target.scrollTop||0; b.classList.toggle('show', y>200); };
+  window.__wlScroll=()=>{ const b=document.getElementById('wlStickyBack'); if(!b) return; const y=(target&&target.scrollTop)||window.scrollY||0; b.classList.toggle('show', y>200); };
   window.addEventListener('scroll', window.__wlScroll, true);
   window.__wlScroll();
 }
@@ -2747,7 +2749,7 @@ function pushIdiomLog(){
   const it=idiom.items[idiom.idx];
   idiom.log.push({ q:it.q, answer:it.answer, idiom:it.idiom||it.answer, sentence:it.sentence||idiomExample(it.q,it.answer), exja:it.exja||'', mean:it.mean, fill:!!it.fill, correct:idiom.correct, dunno:!!idiom.dunno, userAns: idiom.dunno?'（わからない）':(idiom.fmt==='fill'?(idiom.userAnsText||''):((it.choices&&it.choices[idiom.userAns])||'')) });
 }
-function nextIdiom(){ idiom.idx++; idiom.answered=false; idiom.userAns=null; idiom.userAnsText=''; idiom.correct=null; idiom.dunno=false; try{ window.scrollTo(0,0); }catch(_){} renderIdiom(); }
+function nextIdiom(){ idiom.idx++; idiom.answered=false; idiom.userAns=null; idiom.userAnsText=''; idiom.correct=null; idiom.dunno=false; try{ scrollAppTop(); }catch(_){} renderIdiom(); }
 function toggleIdiomResult(i){ if(!idiom) return; idiom.openIdx=(idiom.openIdx===i)?null:i; renderIdiom(); }
 function idiomResultRow(r,i,open){
   const full=r.sentence||idiomExample(r.q,r.answer);
@@ -2841,7 +2843,7 @@ function startStudy(pool, style, catName){
   if(!items.length){ toast(style==='review'?'復習対象（不正確で終了）がありません':(style==='unmastered'?'未習得の項目がありません':'学習できるカードがありません')); return; }
   closeModal();
   session={ items, qi:0, total:items.length, flipped:false, exShown:false, results:[], openIdx:null, catName:catName||'学習', style, pool, sourceStyle:style };
-  try{ window.scrollTo(0,0); }catch(_){}
+  try{ scrollAppTop(); }catch(_){}
   renderStudySession();
 }
 function flipCard(){
@@ -2861,7 +2863,7 @@ function gradeStudy(r){
   session.results.push({ term:c.term, mean:c.mean, pron:c.pron, exEn:c.exEn, exJa:c.exJa, pos:c.pos, other:c.other, ok:(r>=2) });
   session.qi++; session.flipped=false; session.exShown=false;
   save();
-  try{ window.scrollTo(0,0); }catch(_){}
+  try{ scrollAppTop(); }catch(_){}
   renderStudySession();
 }
 function renderStudyResult(){
