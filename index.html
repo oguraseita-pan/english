@@ -816,6 +816,13 @@ function normalizeState(){
         const id=uid(); state.folders[id]={id,name:nm,parentId:null,createdAt:now()};
       }
     });
+    // メモフォルダを用意し、ルート直下に浮いているメモをその中へ収める（追加のみ・既存データは消さない）
+    let memoF=Object.values(state.folders).find(f=>f.name==='メモ'&&f.parentId===null);
+    if(!memoF){
+      const maxOrder=Object.values(state.folders).filter(f=>f.parentId===null).reduce((m,f)=>Math.max(m,(typeof f.order==='number'?f.order:0)),-1);
+      const id=uid(); memoF={id,name:'メモ',parentId:null,order:maxOrder+1,createdAt:now()}; state.folders[id]=memoF;
+    }
+    Object.values(state.cards||{}).forEach(c=>{ if(c && c.folderId==null && c.type==='text' && c.memo===true) c.folderId=memoF.id; });
   }
   if(!state.memos || typeof state.memos!=='object') state.memos={}; // 単語/熟語へのユーザーメモ（term基準）
   if(!state.progress || typeof state.progress!=='object') state.progress = {}; // preset/idiom 学習進捗（永続SRS）
@@ -913,6 +920,16 @@ function rerenderActive(){
   else if(n==='ai'){ activeThreadId=null; renderAI(); }
   renderSettings();
 }
+function stateLooksEmpty(s){
+  // 学習の痕跡（進捗・連続日数・学習時間・復習記録）が一切なければ「未学習（初期サンプルのみ）」とみなす
+  if(!s) return true;
+  const prog=s.progress&&Object.keys(s.progress).length||0;
+  const compoSrs=s.compoSrs&&Object.keys(s.compoSrs).length||0;
+  const streak=(s.stats&&s.stats.streak)||0;
+  const timeEntries=s.stats&&s.stats.time&&Object.keys(s.stats.time).length||0;
+  const reviews=s.stats&&s.stats.reviews&&Object.keys(s.stats.reviews).length||0;
+  return prog===0 && compoSrs===0 && streak===0 && timeEntries===0 && reviews===0;
+}
 async function cloudPull(){
   if(!_sb || !loggedIn()) return;
   try{
@@ -921,7 +938,12 @@ async function cloudPull(){
     if(data && data.data){
       const remote = (typeof data.data==='string') ? JSON.parse(data.data) : data.data;
       const localT = state._updatedAt||0, remoteT = remote._updatedAt||0;
-      if(remoteT >= localT){
+      const remoteHas = !stateLooksEmpty(remote), localHas = !stateLooksEmpty(state);
+      let pull;
+      if(remoteHas && !localHas) pull=true;       // 端末側は未学習 → クラウドの学習データを取り込む（初期サンプルで上書きしない）
+      else if(localHas && !remoteHas) pull=false;  // クラウドが空に近い → ローカルの学習データを守ってアップロード
+      else pull = (remoteT > localT);              // どちらも実データあり → 新しい方を採用
+      if(pull){
         state = Object.assign(defaultState(), remote);
         normalizeState();
         save({keepStamp:true, noCloud:true});
@@ -1083,7 +1105,7 @@ function seed(){
   mk(fInbox,'leverage','/ˈlevərɪdʒ/','〜を活用する／てこ入れ','We can leverage our network.','人脈を活用できる。',['動詞','名詞'],'名詞では「てこ・影響力」の意味もある');
   // メモはメモフォルダの中に1件
   const memoId=uid();
-  state.cards[memoId]={id:memoId, type:'text', memo:true, title:'', body:'ここに自由にメモを書けます。覚えたい表現やアイデアをすぐ残しましょう。', folderId:fMemo, order:0, createdAt:now()};
+  state.cards[memoId]={id:memoId, type:'text', memo:true, title:'', body:'【サンプル】ここに自由にメモを書けます。覚えたい表現やアイデアをすぐ残しましょう。', folderId:fMemo, order:0, createdAt:now()};
   state.seeded = true;
   save();
 }
@@ -4813,7 +4835,8 @@ function renderSettings(){
     <div class="topbar"><h1>設定</h1>
       <button class="icon-btn x-btn" onclick="setTab('home')" style="box-shadow:none;background:transparent">✕</button></div>
 
-    <details class="set-collapse"><summary>アカウント<span class="set-fold-r"><span class="set-fold-hint">タップで開く</span><span class="set-caret">${I.chev}</span></span></summary>
+    <div class="section-title">アカウント</div>
+    <details class="set-collapse"><summary>アカウント<span class="set-caret">${I.chev}</span></summary>
     <div class="set-group">
       ${!cloudConfigured() ? `
         <div class="field">
@@ -4903,7 +4926,7 @@ function renderSettings(){
 
     <div class="section-title">学習の目的</div>
     <div class="set-group">
-      <div class="set-row"><div><div class="l">目標</div><div class="d">出題やAI生成の内容を、目的に合わせます</div></div>
+      <div class="set-row"><div><div class="l">目標</div></div>
         <select id="setGoal" onchange="setGoal(this.value)">
           ${GOALS.map(g=>`<option value="${g[0]}" ${s.goal===g[0]?'selected':''}>${g[1]}</option>`).join('')}
         </select></div>
@@ -4915,15 +4938,15 @@ function renderSettings(){
 
     <div class="section-title">1日の目標</div>
     <div class="set-group">
-      <div class="set-row"><div><div class="l">単語・熟語</div><div class="d">この数を学習すると「本日の単語・熟語」が完了</div></div>
+      <div class="set-row"><div><div class="l">単語・熟語</div></div>
         <select id="setGoalWords" onchange="state.settings.goalWords=parseInt(this.value);save()">
           ${[5,10,15,20,30,40,50].map(n=>`<option value="${n}" ${s.goalWords===n?'selected':''}>${n}問</option>`).join('')}
         </select></div>
-      <div class="set-row"><div><div class="l">瞬間英作文</div><div class="d">この数で「瞬間英作文」が完了</div></div>
+      <div class="set-row"><div><div class="l">瞬間英作文</div></div>
         <select id="setGoalCompo" onchange="state.settings.goalCompo=parseInt(this.value);save()">
           ${[3,5,10,15,20].map(n=>`<option value="${n}" ${s.goalCompo===n?'selected':''}>${n}問</option>`).join('')}
         </select></div>
-      <div class="set-row"><div><div class="l">本日の復習：復習数の上限</div><div class="d">これに達するか、復習をすべて終えると「本日の復習」が完了</div></div>
+      <div class="set-row"><div><div class="l">復習数</div></div>
         <select id="setReviewCap" onchange="state.settings.reviewCap=parseInt(this.value);save();renderSettings()">
           ${[20,30,40,50,60,80].map(n=>`<option value="${n}" ${s.reviewCap===n?'selected':''}>${n}問</option>`).join('')}
           <option value="0" ${(!s.reviewCap||s.reviewCap===0)?'selected':''}>上限なし</option>
@@ -4932,15 +4955,15 @@ function renderSettings(){
 
     <div class="section-title">忘却曲線（暗記の間隔）</div>
     <div class="set-group">
-      <div class="set-row"><div><div class="l">学習ペース</div><div class="d">${s.srsPreset==='slow'?'復習多め・間隔は短め（しっかり定着）':s.srsPreset==='fast'?'復習少なめ・間隔は長め（短時間で回す）':'バランス重視（おすすめ）'}</div></div>
+      <div class="set-row"><div><div class="l">学習ペース</div><div class="d">${s.srsPreset==='slow'?'復習多め':s.srsPreset==='fast'?'復習少なめ':'バランス'}</div></div>
         <select id="setSrsPreset" onchange="state.settings.srsPreset=this.value;save();renderSettings()">
           <option value="slow" ${s.srsPreset==='slow'?'selected':''}>ゆっくり</option>
           <option value="standard" ${(!s.srsPreset||s.srsPreset==='standard')?'selected':''}>標準</option>
           <option value="fast" ${s.srsPreset==='fast'?'selected':''}>ハイペース</option>
         </select></div>
-      <div class="set-row"><div><div class="l">表示間隔の上限</div><div class="d">正解を続けても、この日数以内には必ず再出題されます</div></div>
+      <div class="set-row"><div><div class="l">表示間隔の上限</div></div>
         <select id="setSrsMax" onchange="state.settings.srsMaxIvl=parseInt(this.value);save();renderSettings()">
-          ${[30,60,90,120,180,365].map(n=>`<option value="${n}" ${s.srsMaxIvl===n?'selected':''}>${n>=365?'1年':(n+'日')}</option>`).join('')}
+          ${[90,120,180,365].map(n=>`<option value="${n}" ${s.srsMaxIvl===n?'selected':''}>${n>=365?'1年':(n+'日')}</option>`).join('')}
           <option value="0" ${(!s.srsMaxIvl||s.srsMaxIvl===0)?'selected':''}>上限なし</option>
         </select></div>
       <div style="color:var(--ink-3);font-size:.72rem;margin:8px 4px 2px">例）標準・上限180日のとき：新規で「かんたん」→3日後→約10日後…と伸び、最長でも180日で再出題されます。</div>
@@ -4956,7 +4979,7 @@ function renderSettings(){
         <select id="setDestIdiom" onchange="state.settings.saveDestIdiom=this.value;save()">
           ${saveDestOptions(s.saveDestIdiom,'idiom')}
         </select></div>
-      <div class="set-row"><div><div class="l">リーディング・英作文など</div><div class="d">「自動」なら1語→単語／2語以上→熟語に振り分けます</div></div>
+      <div class="set-row"><div><div class="l">リーディング・英作文など</div></div>
         <select id="setDestReading" onchange="state.settings.saveDestReading=this.value;save()">
           ${saveDestOptions(s.saveDestReading,'reading')}
         </select></div>
@@ -4983,7 +5006,8 @@ function renderSettings(){
     <div style="color:var(--ink-3);font-size:.72rem;margin:6px 4px 0">※ログインすると自動でクラウドに保存・同期され、手動バックアップは不要になります。</div>`:''}
 
     ${(cloudConfigured()&&loggedIn()&&!authRecovery&&authView==='menu')?`
-    <details class="set-collapse"><summary>招待コード（紹介で割引）<span class="set-fold-r"><span class="set-fold-hint">タップで開く</span><span class="set-caret">${I.chev}</span></span></summary>
+    <div class="section-title">招待コード（紹介で割引）</div>
+    <details class="set-collapse"><summary>招待コード（紹介で割引）<span class="set-caret">${I.chev}</span></summary>
     <div class="set-group">${referralBoxHtml()}</div></details>`:''}
 
     <div class="section-title">情報</div>
