@@ -895,7 +895,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-6';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-7';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -909,7 +909,9 @@ let _sb=null, account={ user:null }, _cloudTimer=null, _lastSync=0, _authReady=f
 function cloudConfigured(){ return !!(CLOUD.url && CLOUD.anonKey); }
 function loggedIn(){ return !!(account && account.user); }
 // ===== ログイン必須ゲート（B案：クラウド正本） =====
-function authGateActive(){ return cloudConfigured() && !loggedIn() && !authRecovery; }
+function authGateActive(){ return cloudConfigured() && !loggedIn() && !authRecovery && !(state&&state.guest); }
+function guestContinue(){ state.guest=true; save(); authView='menu'; renderAuthGate(); renderHome(); toast('ログインせずに利用します（データはこの端末内のみに保存）'); }
+function openLoginGate(){ if(loggedIn()) return; state.guest=false; save(); authView='menu'; renderAuthGate(); }
 function renderAuthGate(){
   const g=document.getElementById('authGate'); if(!g) return;
   if(!_authReady){ g.classList.remove('show'); return; } // 認証状態の確認中はゲートを出さない（チラつき防止）
@@ -917,6 +919,7 @@ function renderAuthGate(){
     g.innerHTML=`<div class="gate-inner">
       <div class="gate-brand"><div class="gb-name">Sprout</div><div class="gb-sub">英語を、自分のものに。</div></div>
       <div class="gate-card">${authBoxHtml()}</div>
+      ${authView==='menu'?`<button class="btn btn-ghost full" style="margin-top:14px;color:var(--ink-2);background:transparent" onclick="guestContinue()">ログインせずに使う</button><div style="text-align:center;font-size:.72rem;color:var(--ink-3);margin-top:8px;line-height:1.5">データは端末内のみに保存され、他の端末と同期されません。<br>AI・継続割引・紹介割引はログイン後にご利用いただけます。</div>`:''}
     </div>`;
     g.classList.add('show');
     document.body.style.overflow='hidden';
@@ -946,7 +949,7 @@ async function cloudInit(){
     _sb.auth.onAuthStateChange((_e,session)=>{
       if(_e==='PASSWORD_RECOVERY'){ account.user=session?session.user:account.user; authRecovery=true; authView='recovery'; renderAuthGate(); setTab('settings'); renderSettings(); return; }
       const was=loggedIn(); account.user=session?session.user:null; _authReady=true;
-      if(!was && loggedIn()){ renderAuthGate(); cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }
+      if(!was && loggedIn()){ state.guest=false; renderAuthGate(); setTimeout(()=>{ cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }, 0); }
       else { renderAuthGate(); renderSettings(); }
     });
     if(loggedIn()) await cloudPull();
@@ -1071,7 +1074,10 @@ async function authSetNewPw(){
 async function authSignIn(){
   const em=((document.getElementById('authEmail')||{}).value||'').trim(), pw=(document.getElementById('authPw')||{}).value||'';
   if(!em||!pw){ toast('メールとパスワードを入力してください'); return; }
-  try{ const { error }=await _sb.auth.signInWithPassword({ email:em, password:pw }); if(error) throw error; authView='menu'; }
+  try{ const { data, error }=await _sb.auth.signInWithPassword({ email:em, password:pw }); if(error) throw error;
+    authView='menu';
+    if(data&&data.user){ account.user=data.user; state.guest=false; _authReady=true; renderAuthGate(); renderSettings(); cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }
+  }
   catch(e){ const m=(e.message||'');
     if(/confirm/i.test(m)){ authDraftEmail=em; authView='sent'; renderSettings(); toast('メール認証が未完了です。確認メールのリンクをタップしてください'); return; }
     toast('ログインに失敗：'+m); }
@@ -1629,6 +1635,15 @@ function renderHome(){
       <button class="icon-btn" onclick="setTab('settings');renderSettings()" aria-label="設定">${I.gear}</button>
     </div>
 
+    ${(!loggedIn() && cloudConfigured())?`<div class="guest-banner" onclick="openLoginGate()" style="display:flex;align-items:center;gap:11px;background:var(--amber-soft);border:1px solid var(--amber);border-radius:13px;padding:11px 13px;margin:2px 0 16px;cursor:pointer">
+      <span style="font-size:1.15rem;line-height:1">👤</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:.9rem;color:var(--ink)">ログインしていません</div>
+        <div style="font-size:.72rem;color:var(--ink-3);line-height:1.45">データはこの端末にのみ保存され、他の端末と同期されません。AI・継続割引・紹介割引も使えません。</div>
+      </div>
+      <span class="btn btn-primary" style="padding:7px 15px;font-size:.82rem;white-space:nowrap">ログイン</span>
+    </div>`:''}
+
     <div class="section-title">本日の学習</div>
     <div class="today-card">
       ${todayRow(I.flame||I.refresh,'本日の復習','単語・熟語を忘却曲線で復習',rDone,'quickReview()', rDone?`<span class="td-done">${I.check}完了</span>`:`<span class="td-go">${(rCap>0?Math.min(dueN,rCap):dueN)}問 ›</span>`)}
@@ -1655,7 +1670,7 @@ function renderHome(){
       <div class="streak-barlabel">連続学習・継続割引は<b>ログイン後に表示されます</b></div>
     </div>`; }
       const lm=loyaltyMonths(); const lpct=loyaltyDiscountPct(); const nx=loyaltyNext(); const done=lpct>=15;
-      const st=billingStart(); const sd=st?studyDaysThisCycle():studyDaysThisMonth(); const pct=Math.min(100,Math.round(sd/STREAK_GOAL_DAYS*100)); const cycleOk=sd>=STREAK_GOAL_DAYS;
+      const st=loyaltyStart(); const sd=st?studyDaysThisCycle():studyDaysThisMonth(); const pct=Math.min(100,Math.round(sd/STREAK_GOAL_DAYS*100)); const cycleOk=sd>=STREAK_GOAL_DAYS;
       const startLabel = st? new Date(st).toLocaleDateString('ja-JP') : null;
       const studiedToday=(state.stats.reviews[todayStr()]||0)>0; return `
     <div class="streak-card ${done?'done':''}" onclick="streakOpen=!streakOpen;renderHome()" style="cursor:pointer">
@@ -1672,7 +1687,7 @@ function renderHome(){
         <div class="streak-note">・30日で20日以上学習すると1回達成</div>
         <div class="streak-note" style="margin-top:4px">・${nx?`あと${Math.max(0,nx.months-lm)}回継続で<b style="color:var(--green-d)">${nx.pct}%</b>割引`:`最高ランク達成！🎉`}</div>
         <div class="streak-note" style="margin-top:4px">・継続割引は現在 <b style="color:var(--green-d)">${lpct}%</b>（連続 ${lm}回 達成）</div>
-        ${startLabel?`<div class="streak-note" style="margin-top:6px;color:var(--ink-3)">課金開始日：${startLabel}（割引は課金時点で確定）</div>`:''}
+        ${startLabel?`<div class="streak-note" style="margin-top:6px;color:var(--ink-3)">継続割引の起点：${startLabel}（割引は課金時点で確定）</div>`:''}
       </div>`:''}
     </div>`; })()}
 
@@ -4482,10 +4497,12 @@ function referralDiscountPct(){ const r=state.referral||{}; return Math.min(25,(
 // 継続割引：課金開始日から「30日サイクル」単位で判定（達成サイクルの翌サイクルから有効＝完了済みサイクルで数える）
 const CYCLE_MS=30*24*3600*1000;
 function billingStart(){ const b=state.billing; return (b&&b.startedAt)?b.startedAt:null; }
+function firstStudyDay(){ let m=null; for(const d in (state.stats.reviews||{})){ if((state.stats.reviews[d]||0)>0){ const t=new Date(d+'T00:00:00').getTime(); if(m===null||t<m) m=t; } } return m; }
+function loyaltyStart(){ const f=firstStudyDay(), b=billingStart(); if(f&&b) return Math.min(f,b); return f||b; }
 function studyDaysInRange(s,e){ let n=0; for(const d in (state.stats.reviews||{})){ if((state.stats.reviews[d]||0)>0){ const t=new Date(d+'T00:00:00').getTime(); if(t>=s && t<e) n++; } } return n; }
-function studyDaysThisCycle(){ const st=billingStart(); if(!st) return 0; const k=Math.floor((Date.now()-st)/CYCLE_MS); return studyDaysInRange(st+k*CYCLE_MS, st+(k+1)*CYCLE_MS); }
+function studyDaysThisCycle(){ const st=loyaltyStart(); if(!st) return 0; const k=Math.floor((Date.now()-st)/CYCLE_MS); return studyDaysInRange(st+k*CYCLE_MS, st+(k+1)*CYCLE_MS); }
 function loyaltyMonths(){ // ＝連続達成サイクル数
-  const st=billingStart(); if(!st) return 0; const completed=Math.floor((Date.now()-st)/CYCLE_MS); let c=0;
+  const st=loyaltyStart(); if(!st) return 0; const completed=Math.floor((Date.now()-st)/CYCLE_MS); let c=0;
   for(let k=completed;k>=1;k--){ if(studyDaysInRange(st+(k-1)*CYCLE_MS, st+k*CYCLE_MS)>=STREAK_GOAL_DAYS) c++; else break; } return c;
 }
 const LOYALTY_TIERS=[[3,5],[6,10],[12,15]];
@@ -5186,7 +5203,7 @@ function openFAQ(){
     ['パスワードを変更したい','ログイン中に、設定 → アカウントの「パスワードを変更」から、いつでも新しいパスワードに変更できます。'],
     ['AI連携は必要ですか？お金はかかりますか？','AIは任意です。オフでも、単語・熟語学習、クイズ、ノート、読み上げなどキー不要の機能はすべて使えます。ログイン中はアプリ提供のAI（無料枠）が使えます。自分のAPIキー（Gemini）を使う場合も、無料枠内なら料金はかかりません。'],
     ['割引（継続割引・紹介割引）はどう決まりますか？','割引率は「継続割引（自分の学習継続：最大15%）＋紹介割引（あなたの招待コードで友達が有料プランになるごとに＋5%、最大25%）」の合計で、最大40%です。\n\n【重要】割引は「月額（1か月）プラン」にのみ適用されます。3か月・年間プランは、もともと割引価格になっているため割引の対象外です。\n\n割引率は課金（加入・更新）した時点で確定し、その月額期間の間は変わりません。途中で連続学習が途切れても、紹介した人が解約しても、確定済みの割引には影響しません。'],
-    ['継続割引はどうやって貯まりますか？','課金開始日を起点に「30日ごと」を1サイクルとして、そのサイクル内で20日以上学習すると1回達成です。達成サイクル数に応じて、3回→5% / 6回→10% / 12回→15%（最大15%）が貯まります。\n\n貯まった割引は、次に「月額プラン」を加入・更新するときに確定して適用されます（3か月・年間プランは割引対象外です）。'],
+    ['継続割引はどうやって貯まりますか？','学習を始めた日を起点に「30日ごと」を1サイクルとして、そのサイクル内で20日以上学習すると1回達成です。達成サイクル数に応じて、3回→5% / 6回→10% / 12回→15%（最大15%）が貯まります。\n\n貯まった割引は、次に「月額プラン」を加入・更新するときに確定して適用されます（3か月・年間プランは割引対象外です）。'],
     ['バックアップはできますか？','「データ」→「バックアップを書き出す」で全データをJSONファイルとして保存できます。「読み込む」で復元（上書き）できます。ログインしていない場合は特に、定期的な書き出しをおすすめします。']
   ];
   openModal(`
