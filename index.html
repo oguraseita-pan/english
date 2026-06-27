@@ -895,7 +895,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-7';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-8';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -949,7 +949,7 @@ async function cloudInit(){
     _sb.auth.onAuthStateChange((_e,session)=>{
       if(_e==='PASSWORD_RECOVERY'){ account.user=session?session.user:account.user; authRecovery=true; authView='recovery'; renderAuthGate(); setTab('settings'); renderSettings(); return; }
       const was=loggedIn(); account.user=session?session.user:null; _authReady=true;
-      if(!was && loggedIn()){ state.guest=false; renderAuthGate(); setTimeout(()=>{ cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }, 0); }
+      if(!was && loggedIn()){ state.guest=false; renderAuthGate(); renderHome(); setTimeout(()=>{ cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }, 0); }
       else { renderAuthGate(); renderSettings(); }
     });
     if(loggedIn()) await cloudPull();
@@ -1076,7 +1076,7 @@ async function authSignIn(){
   if(!em||!pw){ toast('メールとパスワードを入力してください'); return; }
   try{ const { data, error }=await _sb.auth.signInWithPassword({ email:em, password:pw }); if(error) throw error;
     authView='menu';
-    if(data&&data.user){ account.user=data.user; state.guest=false; _authReady=true; renderAuthGate(); renderSettings(); cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }
+    if(data&&data.user){ account.user=data.user; state.guest=false; _authReady=true; renderAuthGate(); renderSettings(); renderHome(); cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }
   }
   catch(e){ const m=(e.message||'');
     if(/confirm/i.test(m)){ authDraftEmail=em; authView='sent'; renderSettings(); toast('メール認証が未完了です。確認メールのリンクをタップしてください'); return; }
@@ -1639,7 +1639,7 @@ function renderHome(){
       <span style="font-size:1.15rem;line-height:1">👤</span>
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:.9rem;color:var(--ink)">ログインしていません</div>
-        <div style="font-size:.72rem;color:var(--ink-3);line-height:1.45">データはこの端末にのみ保存され、他の端末と同期されません。AI・継続割引・紹介割引も使えません。</div>
+        <div style="font-size:.72rem;color:var(--ink-3);line-height:1.45">データはこの端末のみに保存され、他端末と同期されません。／AI機能・継続割引・紹介割引は使用できません。</div>
       </div>
       <span class="btn btn-primary" style="padding:7px 15px;font-size:.82rem;white-space:nowrap">ログイン</span>
     </div>`:''}
@@ -3165,7 +3165,7 @@ function readingExit(){ try{ speechSynthesis.cancel(); }catch(_){}; _passSpeakin
 function readingToSetup(){ if(!reading) return; try{ speechSynthesis.cancel(); }catch(_){}; _passSpeaking=false; reading.stage='setup'; renderReading(); }
 function readingSetupBack(){ if(reading&&reading.en){ reading.stage='read'; renderReading(); } else { readingExit(); } }
 async function startReading(){
-  if(!aiReady()){ toast(aiEnabled()?'設定でAPIキーを入力してください':'リーディングにはログイン（またはAI設定）が必要です'); return; }
+  if(!aiReady()){ toast(aiNeedMsg('リーディングにはAI設定が必要です')); return; }
   let topicDesc;
   if(reading.genre==='custom'){
     const c=(reading.custom||'').trim();
@@ -3246,7 +3246,7 @@ async function readingTapWord(el){
     try{ const r=await translateText(word,'JA'); reading.lookup={word, mean:r.text, loading:false}; }
     catch(e){ reading.lookup={word, mean:'(意味を取得できませんでした)', loading:false}; }
   } else {
-    reading.lookup={word, mean:'(意味の取得にはログインが必要です)', loading:false};
+    reading.lookup={word, mean:'(ログイン後にAI機能を使用できます)', loading:false};
   }
   paintReadPop();
 }
@@ -3258,7 +3258,7 @@ async function lookupPhrase(phrase){
   if(translateReady()){
     try{ const r=await translateText(phrase,'JA'); reading.lookup={word:phrase, mean:r.text, loading:false}; }
     catch(e){ reading.lookup={word:phrase, mean:'(翻訳できませんでした)', loading:false}; }
-  } else { reading.lookup={word:phrase, mean:'(翻訳にはログインが必要です)', loading:false}; }
+  } else { reading.lookup={word:phrase, mean:'(ログイン後にAI機能を使用できます)', loading:false}; }
   paintReadPop();
 }
 function paintReadPop(){
@@ -3947,6 +3947,7 @@ function aiKey(){ return aiProvider()==='gemini' ? (state.settings.geminiKey||''
 function aiEnabled(){ return aiProvider() !== 'none'; }
 function managedAI(){ return cloudConfigured() && loggedIn(); }   // ログイン中はアプリ提供のAI（キー不要）
 function aiReady(){ return managedAI() || (aiEnabled() && !!aiKey()); }
+function aiNeedMsg(fallback){ return (cloudConfigured()&&!loggedIn()) ? 'ログイン後にAI機能を使用できます' : (aiEnabled()?'設定でAPIキーを入力してください':(fallback||'設定でAIをオンにしてください')); }
 function aiProviderName(){ return aiProvider()==='gemini' ? 'Gemini' : 'OpenAI'; }
 
 function renderAI(){
@@ -4148,7 +4149,7 @@ async function sendAI(){
   const inp=document.getElementById('chatInput');
   const text=inp.value.trim();
   if(!text) return;
-  if(!aiReady()){ toast(aiEnabled()?'設定でAPIキーを入力してください':'設定でAIをオンにしてください'); return; }
+  if(!aiReady()){ toast(aiNeedMsg()); return; }
   inp.value=''; autoGrow(inp); setDraft(t.id,'');
   t.messages.push({role:'user',content:text}); save();
   await generateReply(t, text);
@@ -4433,7 +4434,7 @@ function openCardFromAI(){ /* deprecated: replaced by saveAICard */ }
 
 /* ---------- AI fill inside card editor ---------- */
 async function aiFillCard(){
-  if(!aiReady()){ toast(aiEnabled()?'設定でAPIキーを入力してください':'設定でAIをオンにしてください'); return; }
+  if(!aiReady()){ toast(aiNeedMsg()); return; }
   const term=document.getElementById('cTerm').value.trim();
   if(!term){ toast('先に単語を入力してください'); return; }
   const btn=document.getElementById('aiGenBtn'); btn.disabled=true; btn.innerHTML=I.sparkle+' 生成中…';
@@ -4961,7 +4962,7 @@ function renderSettings(){
         </div>
         <button class="btn btn-ghost full" style="padding:11px;margin-bottom:8px" onclick="authGo('changeEmail')">メールアドレスを変更</button>
         <button class="btn btn-ghost full" style="padding:11px" onclick="authGo('changePw')">パスワードを変更</button>`)
-      : `<div class="field"><div class="d">ログインが必要です。</div></div>`) )}
+      : `<div class="field"><div class="d">ログインすると、クラウド同期・AI機能・継続割引・紹介割引が利用できます。</div><button class="btn btn-primary full" style="padding:11px;margin-top:10px" onclick="openLoginGate()">ログイン / 新規登録</button></div>`) )}
     </div></details>
 
     <div class="section-title">プラン・お支払い</div>
