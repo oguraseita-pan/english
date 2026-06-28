@@ -895,7 +895,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-8';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-9';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -949,8 +949,9 @@ async function cloudInit(){
     _sb.auth.onAuthStateChange((_e,session)=>{
       if(_e==='PASSWORD_RECOVERY'){ account.user=session?session.user:account.user; authRecovery=true; authView='recovery'; renderAuthGate(); setTab('settings'); renderSettings(); return; }
       const was=loggedIn(); account.user=session?session.user:null; _authReady=true;
-      if(!was && loggedIn()){ state.guest=false; renderAuthGate(); renderHome(); setTimeout(()=>{ cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }, 0); }
-      else { renderAuthGate(); renderSettings(); }
+      if(loggedIn() && state) state.guest=false;
+      try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){}
+      if(!was && loggedIn()){ setTimeout(()=>{ cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }, 0); }
     });
     if(loggedIn()) await cloudPull();
     if(STRIPE.enabled && loggedIn()) await syncPlanFromServer();
@@ -1076,7 +1077,7 @@ async function authSignIn(){
   if(!em||!pw){ toast('メールとパスワードを入力してください'); return; }
   try{ const { data, error }=await _sb.auth.signInWithPassword({ email:em, password:pw }); if(error) throw error;
     authView='menu';
-    if(data&&data.user){ account.user=data.user; state.guest=false; _authReady=true; renderAuthGate(); renderSettings(); renderHome(); cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }
+    if(data&&data.user){ account.user=data.user; state.guest=false; _authReady=true; try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){} cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }
   }
   catch(e){ const m=(e.message||'');
     if(/confirm/i.test(m)){ authDraftEmail=em; authView='sent'; renderSettings(); toast('メール認証が未完了です。確認メールのリンクをタップしてください'); return; }
@@ -1639,7 +1640,7 @@ function renderHome(){
       <span style="font-size:1.15rem;line-height:1">👤</span>
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:.9rem;color:var(--ink)">ログインしていません</div>
-        <div style="font-size:.72rem;color:var(--ink-3);line-height:1.45">データはこの端末のみに保存され、他端末と同期されません。／AI機能・継続割引・紹介割引は使用できません。</div>
+        <div style="font-size:.72rem;color:var(--ink-3);line-height:1.45">データはこの端末のみに保存され、他端末と同期されません。AI機能・継続割引・紹介割引は使用できません。</div>
       </div>
       <span class="btn btn-primary" style="padding:7px 15px;font-size:.82rem;white-space:nowrap">ログイン</span>
     </div>`:''}
