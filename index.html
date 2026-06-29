@@ -693,6 +693,9 @@ html[data-theme="dark"] .tabbar{background:rgba(28,33,35,.86);}
 
 /* ---------- Toast ---------- */
 #toast{position:fixed;bottom:calc(var(--tabbar-h) + var(--safe-b) + 18px);left:50%;transform:translateX(-50%) translateY(20px);background:var(--ink);color:var(--paper);padding:11px 18px;border-radius:13px;font-size:.88rem;font-weight:500;z-index:9999;opacity:0;pointer-events:none;transition:.25s;box-shadow:var(--shadow-lg);max-width:90vw;text-align:center;}
+.btn-spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-top-color:transparent;border-radius:50%;vertical-align:-2px;margin-right:7px;opacity:.85;animation:btnspin .6s linear infinite;}
+@keyframes btnspin{to{transform:rotate(360deg)}}
+.btn.is-busy,button.is-busy{opacity:.9;cursor:default;}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
 .skeleton{color:var(--ink-3);font-size:.86rem;}
@@ -895,11 +898,11 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-17';  // デプロイのたびに更新（version.json と一致させる）
-const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
+const APP_BUILD = '2026.06.27-20';  // デプロイのたびに更新（version.json と一致させる）
+const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
-  seller: '〇〇〇〇（事業者名／屋号）',
+  seller: '小椋 誠太（屋号：NEXIA）',
   operator: '小椋 誠太',           // 運営統括責任者
   address: '〒000-0000 ○○県○○市○○ 0-0-0', // 請求があれば遅滞なく開示する旨でも可
   phone: '000-0000-0000',          // 請求があれば遅滞なく開示、と記載も可
@@ -1319,6 +1322,17 @@ function toast(msg){
   const el=document.getElementById('toast');
   el.textContent=msg; el.classList.add('show');
   clearTimeout(toastT); toastT=setTimeout(()=>el.classList.remove('show'),2200);
+}
+// 非同期ボタンの送信中表示＋二重タップ防止
+async function btnBusy(btn, fn, label){
+  if(!btn){ try{ await fn(); }catch(_){} return; }
+  if(btn.dataset.busy==='1') return;
+  const orig=btn.innerHTML;
+  btn.dataset.busy='1'; btn.disabled=true; btn.classList.add('is-busy');
+  btn.innerHTML='<span class="btn-spin"></span>'+(label||'送信中…');
+  try{ await fn(); }
+  catch(_){}
+  finally{ if(btn.isConnected){ btn.innerHTML=orig; btn.disabled=false; btn.dataset.busy='0'; btn.classList.remove('is-busy'); } }
 }
 function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
 
@@ -4221,6 +4235,14 @@ function retryAI(i){
   t.messages.splice(i,1); save(); // remove the error bubble
   generateReply(t, text);
 }
+// ストリーミング中のライブ表示（pre-wrapで改行も反映。完了後 renderThread が正式描画で置換）
+function streamBubbleSet(text){
+  const log=document.getElementById('chatLog'); if(!log) return;
+  const typing=document.getElementById('typing'); if(typing) typing.remove();
+  let b=document.getElementById('streamMsg');
+  if(!b){ log.insertAdjacentHTML('beforeend','<div class="msg ai" id="streamMsg"></div>'); b=document.getElementById('streamMsg'); }
+  if(b){ b.textContent=text; log.scrollTop=log.scrollHeight; }
+}
 async function generateReply(t, text){
   aiBusy=true; renderThread();
   const log=document.getElementById('chatLog');
@@ -4247,7 +4269,20 @@ async function generateReply(t, text){
       const convo = t.mode==='custom' ? true : !!AI_MODES[t.mode].convo;
       const history = convo ? t.messages.slice(-10).map(m=>({role:m.role,content:m.content})) : [{role:'user',content:text}];
       const msgs=[{role:'system',content:sys},...history];
-      const content=await callAI(msgs,{temp:0.7});
+      let content='', streamed=false;
+      if(managedAI()){
+        try{
+          content=await callAIStream(msgs,{temp:0.7},(full)=>{ streamBubbleSet(full); });
+          streamed=true;
+        }catch(e){
+          if(e&&(e.message==='AI_LIMIT'||e.message==='AI_LIMIT_FREE')) throw e;
+          // ストリーミング不可（ai-stream未デプロイ等）→ 通常呼び出しへフォールバック
+          const sm=document.getElementById('streamMsg'); if(sm) sm.remove();
+          const lg=document.getElementById('chatLog');
+          if(lg && !document.getElementById('typing')){ lg.insertAdjacentHTML('beforeend','<div class="msg ai" id="typing"><div class="typing"><span></span><span></span><span></span></div></div>'); lg.scrollTop=lg.scrollHeight; }
+        }
+      }
+      if(!streamed){ content=await callAI(msgs,{temp:0.7}); }
       t.messages.push({role:'assistant',content});
     }
   }catch(err){
@@ -4384,7 +4419,40 @@ async function callManaged(messages,opts){
   if(data && data.error) throw new Error(data.error);
   return ((data&&data.text)||'').trim();
 }
-/* ---------- かんたん翻訳（DeepL中継・アプリ共通キー・要ログイン） ---------- */
+// ストリーミング版：Edge Function `ai-stream` がテキストの差分を逐次返す前提。onChunk(全文) を都度呼ぶ。
+async function callManagedStream(messages,opts,onChunk){
+  let token='';
+  try{ const { data }=await _sb.auth.getSession(); token=(data&&data.session)?data.session.access_token:''; }catch(e){}
+  if(!token) throw new Error('NO_SESSION');
+  const res=await fetch(CLOUD.url.replace(/\/$/,'')+'/functions/v1/ai-stream',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'apikey':CLOUD.anonKey},
+    body:JSON.stringify({ messages, temp:(opts.temp!=null)?opts.temp:0.7, model:opts.model||undefined })
+  });
+  if(!res.ok || !res.body) throw new Error('stream_http_'+res.status);
+  const reader=res.body.getReader(); const dec=new TextDecoder(); let full='';
+  while(true){
+    const { done, value }=await reader.read();
+    if(done) break;
+    const chunk=dec.decode(value,{stream:true});
+    if(chunk){ full+=chunk; if(onChunk) onChunk(full); }
+  }
+  full+=dec.decode();
+  full=full.trim();
+  if(!full) throw new Error('stream_empty');
+  return full;
+}
+// 会話系のみストリーミング（cap判定・モデル選択は callAI と同じ）。失敗時は呼び出し側で callAI にフォールバック。
+async function callAIStream(messages,opts,onChunk){
+  opts=opts||{};
+  if(!managedAI()) throw new Error('NO_STREAM');
+  ensureAiDay();
+  if(aiUsesToday()>=aiDailyCap()) throw new Error(planTier()==='free'?'AI_LIMIT_FREE':'AI_LIMIT');
+  const model=aiModelFor(opts);
+  const out=await callManagedStream(messages, Object.assign({}, opts, {model}), onChunk);
+  incAiUse(opts._pro);
+  return out;
+}
 function hasJP(s){ return /[\u3040-\u30ff\u3400-\u9fff\uff66-\uff9f]/.test(s||''); }
 function translateReady(){ return cloudConfigured() && loggedIn(); }
 let transCache={};
@@ -4730,21 +4798,21 @@ function renderAccountPage(){
       <div class="d" style="margin-bottom:12px">新しいパスワードを入力してください。変更後は次回から新しいパスワードでログインします。</div>
       ${pwField("cpwNew","新しいパスワード","6文字以上","new-password")}
       ${pwField("cpwNew2","新しいパスワード（確認）","もう一度入力","new-password")}
-      <button class="btn btn-primary full" style="padding:14px" onclick="changePw()">パスワードを変更する</button>
+      <button class="btn btn-primary full" style="padding:14px" onclick="btnBusy(this,changePw,'変更中…')">パスワードを変更する</button>
     </div>`;
   } else {
     body = !emailCodeSent
       ? `<div class="set-group" style="margin-top:14px">
         <div class="field"><label>現在のメールアドレス</label><div class="auth-email-fixed">${esc(accountEmail())}</div></div>
-        <div class="field"><label>新しいメールアドレス</label><input type="email" id="newEmail" placeholder="new@example.com" autocomplete="email" /></div>
+        <div class="field"><label>新しいメールアドレス</label><input type="email" id="newEmail" placeholder="new@example.com" autocomplete="email" onblur="setTimeout(scrollAppTop,80)" /></div>
         <div class="d" style="margin:-2px 0 12px">新しいアドレスに<b>6桁の確認コード</b>をお送りします。</div>
-        <button class="btn btn-primary full" style="padding:14px" onclick="changeEmailSend()">確認コードを送信</button>
+        <button class="btn btn-primary full" style="padding:14px" onclick="btnBusy(this,changeEmailSend,'送信中…')">確認コードを送信</button>
       </div>`
       : `<div class="set-group" style="margin-top:14px">
         <div class="field"><label>新しいメールアドレス</label><div class="auth-email-fixed">${esc(pendingNewEmail)}</div></div>
         <div class="d" style="margin:-2px 0 12px">上記アドレスに届いた<b>6桁の確認コード</b>を入力してください。</div>
-        <div class="field"><label>確認コード（6桁）</label><input type="text" id="emChgCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" /></div>
-        <button class="btn btn-primary full" style="padding:14px" onclick="changeEmailVerify()">メールアドレスを変更</button>
+        <div class="field"><label>確認コード（6桁）</label><input type="text" id="emChgCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" onblur="setTimeout(scrollAppTop,80)" /></div>
+        <button class="btn btn-primary full" style="padding:14px" onclick="btnBusy(this,changeEmailVerify,'変更中…')">メールアドレスを変更</button>
         <div class="d" style="text-align:center;margin-top:12px">コードが届かない場合は <a style="color:var(--green-d);font-weight:600;cursor:pointer" onclick="changeEmailSend()">再送する</a></div>
       </div>`;
   }
@@ -4752,6 +4820,7 @@ function renderAccountPage(){
     <div class="topbar"><h1>${accountPage==='pw'?'パスワードを変更':'メールアドレスを変更'}</h1><button class="icon-btn x-btn" onclick="closeAccountPage()" style="box-shadow:none;background:transparent">✕</button></div>
     ${body}`;
   renderAuthGate();
+  try{ scrollAppTop(); }catch(_){}
 }
 function renderInvitePage(){
   const ref=referralDiscountPct(), loy=loyaltyDiscountPct(), tot=Math.min(40, ref+loy), paid=selfPaid();
@@ -4916,7 +4985,7 @@ function billingDowngrade(){
   save(); upsertPlanStatus(); billingStep=null; renderSettings(); toast('無料プランに変更しました（デモ）');
 }
 function googleBtn(label){
-  return `<button class="gbtn" onclick="authGoogle()">
+  return `<button class="gbtn" onclick="btnBusy(this,authGoogle,'接続中…')">
     <svg viewBox="0 0 24 24" width="18" height="18"><path fill="#4285F4" d="M21.6 12.2c0-.6-.1-1.2-.2-1.8H12v3.5h5.4a4.6 4.6 0 0 1-2 3v2.5h3.2c1.9-1.7 3-4.3 3-7.2z"/><path fill="#34A853" d="M12 22c2.7 0 5-.9 6.6-2.4l-3.2-2.5c-.9.6-2 1-3.4 1-2.6 0-4.8-1.7-5.6-4.1H3.1v2.6A10 10 0 0 0 12 22z"/><path fill="#FBBC05" d="M6.4 14c-.2-.6-.3-1.3-.3-2s.1-1.4.3-2V7.4H3.1A10 10 0 0 0 2 12c0 1.6.4 3.2 1.1 4.6L6.4 14z"/><path fill="#EA4335" d="M12 5.9c1.5 0 2.8.5 3.8 1.5l2.8-2.8A10 10 0 0 0 12 2 10 10 0 0 0 3.1 7.4L6.4 10c.8-2.4 3-4.1 5.6-4.1z"/></svg>
     ${label}</button>`;
 }
@@ -4942,7 +5011,7 @@ function authBoxHtml(){
       <div class="d" style="margin:2px 0 12px">新しいパスワードを入力してください。変更後は次回から新しいパスワードでログインします。</div>
       ${pwField("cpwNew","新しいパスワード","6文字以上","new-password")}
       ${pwField("cpwNew2","新しいパスワード（確認）","もう一度入力","new-password")}
-      <button class="btn btn-primary full" style="padding:14px" onclick="changePw()">パスワードを変更する</button>`;
+      <button class="btn btn-primary full" style="padding:14px" onclick="btnBusy(this,changePw,'変更中…')">パスワードを変更する</button>`;
   }
   if(authView==='changeEmail'){
     return `<button class="auth-back" onclick="authGo('menu')">‹ 戻る</button>
@@ -4963,7 +5032,7 @@ function authBoxHtml(){
       <div class="auth-h">パスワード再設定</div>
       <div class="d" style="margin:2px 0 14px">登録済みのメールアドレスを入力すると、6桁の認証コードをお送りします。</div>
       <div class="field"><label>メールアドレス</label><input type="email" id="authEmail" value="${esc(authDraftEmail||'')}" placeholder="you@example.com" autocomplete="username" /></div>
-      <button class="btn btn-primary full" style="padding:14px" onclick="authForgot()">認証コードを送信</button>`;
+      <button class="btn btn-primary full" style="padding:14px" onclick="btnBusy(this,authForgot,'送信中…')">認証コードを送信</button>`;
   }
   if(authView==='forgotCode'){
     return `<button class="auth-back" onclick="authGo('forgot')">‹ 戻る</button>
@@ -4974,7 +5043,7 @@ function authBoxHtml(){
       <div class="field"><label>認証コード（6桁）</label><input type="text" id="authCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" /></div>
       ${pwField("authNewPw","新しいパスワード","6文字以上","new-password")}
       ${pwField("authNewPw2","新しいパスワード（確認）","もう一度入力","new-password")}
-      <button class="btn btn-primary full" style="padding:14px" onclick="authForgotVerify()">パスワードを再設定</button>
+      <button class="btn btn-primary full" style="padding:14px" onclick="btnBusy(this,authForgotVerify,'設定中…')">パスワードを再設定</button>
       <div class="d" style="text-align:center;margin-top:12px">コードが届かない場合は <a style="color:var(--green-d);font-weight:600;cursor:pointer" onclick="authForgotResend()">再送する</a></div>`;
   }
   if(authView==='login'){
@@ -4983,7 +5052,7 @@ function authBoxHtml(){
       <div class="field"><label>メールアドレス</label><input type="email" id="authEmail" value="${esc(authDraftEmail||'')}" placeholder="you@example.com" autocomplete="username" /></div>
       ${pwField("authPw","パスワード","パスワード","current-password")}
       <div style="text-align:right;margin:-4px 0 12px"><a style="color:var(--ink-3);font-size:.85rem;cursor:pointer" onclick="authGo('forgot')">パスワードをお忘れですか？</a></div>
-      <button class="btn btn-primary full" style="padding:14px" onclick="authSignIn()">ログイン</button>
+      <button class="btn btn-primary full" style="padding:14px" onclick="btnBusy(this,authSignIn,'ログイン中…')">ログイン</button>
       <div class="auth-or"><span>または</span></div>
       ${googleBtn('Googleでログイン')}
       <div class="d" style="text-align:center;margin-top:12px">アカウントがない方は <a style="color:var(--green-d);font-weight:600;cursor:pointer" onclick="authGo('signup1')">新規登録</a></div>`;
@@ -4993,7 +5062,7 @@ function authBoxHtml(){
       <div class="auth-h">新規登録</div>
       <div class="auth-step">ステップ 1 / 2 ・ メールアドレス</div>
       <div class="field"><label>メールアドレス</label><input type="email" id="authEmail" value="${esc(authDraftEmail)}" placeholder="you@example.com" autocomplete="username" /></div>
-      <button class="btn btn-primary full" style="padding:14px" onclick="authNextSignup()">認証コードを送信</button>
+      <button class="btn btn-primary full" style="padding:14px" onclick="btnBusy(this,authNextSignup,'送信中…')">認証コードを送信</button>
       <div class="auth-or"><span>または</span></div>
       ${googleBtn('Googleで登録')}
       <div class="d" style="text-align:center;margin-top:12px">すでにアカウントをお持ちの方は <a style="color:var(--green-d);font-weight:600;cursor:pointer" onclick="authGo('login')">ログイン</a></div>`;
@@ -5007,7 +5076,7 @@ function authBoxHtml(){
       <div class="field"><label>認証コード（6桁）</label><input type="text" id="authCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" /></div>
       ${pwField("authPw","パスワード","6文字以上","new-password")}
       ${pwField("authPw2","パスワード（確認）","もう一度入力","new-password")}
-      <button class="btn btn-primary full" style="padding:14px" onclick="authVerifyRegister()">登録する</button>
+      <button class="btn btn-primary full" style="padding:14px" onclick="btnBusy(this,authVerifyRegister,'登録中…')">登録する</button>
       <div class="d" style="text-align:center;margin-top:12px">コードが届かない場合は <a style="color:var(--green-d);font-weight:600;cursor:pointer" onclick="authSendCode()">再送する</a></div>`;
   }
   if(authView==='signup2'){
@@ -5449,7 +5518,7 @@ function openTokushoho(){
         ${row('所在地', esc(BIZ.address)+'<br><span class="tk-note">（ご請求があれば遅滞なく開示します）</span>')}
         ${row('電話番号', esc(BIZ.phone)+'<br><span class="tk-note">（ご請求があれば遅滞なく開示します）</span>')}
         ${row('連絡先', esc(BIZ.email))}
-        ${row('販売価格', 'ライトプラン：月額500円〜（契約期間により500円／800円／1,200円）<br>プレミアムプラン：月額1,500円〜（契約期間により1,500円／2,400円／3,600円）<br><span class="tk-note">表示価格は税込です。</span>')}
+        ${row('販売価格', 'ライトプラン：月額980円（1ヶ月）／3ヶ月プラン 総額2,400円（月あたり800円）／年間プラン 総額7,800円（月あたり650円）<br>プレミアムプラン：月額2,480円（1ヶ月）／3ヶ月プラン 総額6,300円（月あたり2,100円）／年間プラン 総額19,800円（月あたり1,650円）<br><span class="tk-note">表示価格は税込です。継続割引・紹介割引が適用される場合があります。</span>')}
         ${row('商品代金以外の必要料金', '通信料金はお客様のご負担となります。')}
         ${row('お支払い方法', 'クレジットカード')}
         ${row('お支払い時期', 'お申し込み時に課金され、以後は契約期間ごとに自動更新・課金されます。')}
@@ -5457,7 +5526,7 @@ function openTokushoho(){
         ${row('解約について', 'いつでも解約できます。解約後は次回更新日以降の課金は発生しません。')}
         ${row('返品・返金について', 'サービスの性質上、購入後のお客様都合による返金は承っておりません。')}
       </div>
-      <div class="tk-note" style="margin-top:14px">※本表記は雛形です。有料プランを公開する前に、必ず実際の事業者情報・価格・条件に修正してください（コード内の BIZ 定数）。</div>
+      <div class="tk-note" style="margin-top:14px">※所在地・電話番号は「ご請求があれば遅滞なく開示します」としています。この記載方法で要件を満たすか、また連絡先メールが実際に受信できるかを、公開前に必ずご確認ください。</div>
     </div>
     <div class="modal-actions" style="margin-top:12px"><button class="btn btn-ghost" onclick="closeModal()">閉じる</button></div>`);
 }
