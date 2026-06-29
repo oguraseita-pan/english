@@ -895,7 +895,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-10';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-11';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -905,7 +905,7 @@ const BIZ = {
   phone: '000-0000-0000',          // 請求があれば遅滞なく開示、と記載も可
   email: SUPPORT_EMAIL,
 };
-let _sb=null, account={ user:null }, _cloudTimer=null, _lastSync=0, _authReady=false;
+let _sb=null, account={ user:null }, _cloudTimer=null, _lastSync=0, _authReady=false, _authLanding=null;
 function cloudConfigured(){ return !!(CLOUD.url && CLOUD.anonKey); }
 function loggedIn(){ return !!(account && account.user); }
 // ===== ログイン必須ゲート（B案：クラウド正本） =====
@@ -946,6 +946,12 @@ async function cloudInit(){
     const { data } = await _sb.auth.getSession();
     if(data && data.session) account.user=data.session.user;
     _authReady=true; renderAuthGate();
+    if(_authLanding){
+      const lp=_authLanding; _authLanding=null;
+      if(lp.error){ authView='login'; renderAuthGate(); toast(/expire|invalid|used|otp_expired|not_found/i.test(lp.error+lp.desc) ? 'リンクの有効期限切れ／使用済みです。確認メールを再送してください' : '認証に失敗しました：'+(lp.desc||lp.error)); }
+      else if(lp.code){ if(loggedIn()){ toast('メール認証が完了しました'); } else { authView='confirmed'; renderAuthGate(); } }
+      try{ if(history.replaceState) history.replaceState(null,'',location.pathname); }catch(_){}
+    }
     _sb.auth.onAuthStateChange((_e,session)=>{
       if(_e==='PASSWORD_RECOVERY'){ account.user=session?session.user:account.user; authRecovery=true; authView='recovery'; renderAuthGate(); setTab('settings'); renderSettings(); return; }
       const was=loggedIn(); account.user=session?session.user:null; _authReady=true;
@@ -1029,7 +1035,7 @@ async function authSignUp(){
   if(!pw || pw.length<6){ toast('パスワードは6文字以上にしてください'); return; }
   if(pw2!=null && pw!==pw2){ toast('パスワードが一致しません'); return; }
   if(!_sb){ toast('準備中です。少し待って再度お試しください（通信環境をご確認ください）'); return; }
-  try{ const { data, error }=await _sb.auth.signUp({ email:em, password:pw }); if(error) throw error;
+  try{ const { data, error }=await _sb.auth.signUp({ email:em, password:pw, options:{ emailRedirectTo: location.origin + location.pathname } }); if(error) throw error;
     // 確認メール有効時、既存メールは identities が空配列で返る（列挙防止のためエラーにはならない）
     if(data && data.user && Array.isArray(data.user.identities) && data.user.identities.length===0){
       toast('このメールアドレスは既に登録されています'); authDraftEmail=em; authView='login'; renderSettings(); return;
@@ -1083,6 +1089,8 @@ async function authSignIn(){
   }
   catch(e){ const m=(e.message||'');
     if(/confirm/i.test(m)){ authDraftEmail=em; authView='sent'; renderSettings(); toast('メール認証が未完了です。確認メールのリンクをタップしてください'); return; }
+    if(/invalid login|invalid credentials|invalid.*(email|password)/i.test(m)){ toast('メールアドレスまたはパスワードが正しくありません'); return; }
+    if(/rate|too many|429/i.test(m)){ toast('試行回数が多すぎます。少し時間をおいて再度お試しください'); return; }
     toast('ログインに失敗：'+m); }
 }
 async function authGoogle(){
@@ -4771,6 +4779,12 @@ function googleBtn(label){
     ${label}</button>`;
 }
 function authBoxHtml(){
+  if(authView==='confirmed'){
+    return `<div class="auth-sent-ic">${I.check||I.send}</div>
+      <div class="auth-h">メール認証が完了しました</div>
+      <div class="d" style="margin:6px 0 16px">アカウントが有効になりました。続けてログインしてください。</div>
+      <button class="btn btn-primary full" style="padding:13px" onclick="authGo('login')">ログインへ進む</button>`;
+  }
   if(authView==='sent'){
     return `<div class="auth-sent-ic">${I.send||I.check}</div>
       <div class="auth-h">確認メールを送信しました</div>
@@ -5413,6 +5427,7 @@ function setupAutoUpdate(){
   setInterval(()=>{ if(document.visibilityState==='visible') checkForUpdate('periodic'); }, 5*60*1000);
 }
 function init(){
+  try{ const _q=new URLSearchParams(location.search||''); const _h=new URLSearchParams((location.hash||'').replace(/^#/,'')); const _code=_q.get('code')||_h.get('access_token'); const _err=_q.get('error')||_h.get('error')||_q.get('error_code')||_h.get('error_code'); if((_code||_err) && !_q.get('checkout') && !_q.get('portal')) _authLanding={ code:!!_code, error:_err||'', desc:(_q.get('error_description')||_h.get('error_description')||'') }; }catch(_){}
   load();
   if(!state.seeded) seed();
   ensureThreads();
