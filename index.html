@@ -895,7 +895,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-11';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-14';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -943,24 +943,26 @@ async function cloudInit(){
   try{
     await loadSupabaseSDK();
     _sb=window.supabase.createClient(CLOUD.url, CLOUD.anonKey, { auth:{ persistSession:true, autoRefreshToken:true, detectSessionInUrl:true, flowType:'pkce' } });
-    const { data } = await _sb.auth.getSession();
-    if(data && data.session) account.user=data.session.user;
-    _authReady=true; renderAuthGate();
-    if(_authLanding){
-      const lp=_authLanding; _authLanding=null;
-      if(lp.error){ authView='login'; renderAuthGate(); toast(/expire|invalid|used|otp_expired|not_found/i.test(lp.error+lp.desc) ? 'リンクの有効期限切れ／使用済みです。確認メールを再送してください' : '認証に失敗しました：'+(lp.desc||lp.error)); }
-      else if(lp.code){ if(loggedIn()){ toast('メール認証が完了しました'); } else { authView='confirmed'; renderAuthGate(); } }
-      try{ if(history.replaceState) history.replaceState(null,'',location.pathname); }catch(_){}
-    }
+    // URL駆動の認証イベント（PASSWORD_RECOVERY / SIGNED_IN）を取りこぼさないよう getSession より前に登録
     _sb.auth.onAuthStateChange((_e,session)=>{
-      if(_e==='PASSWORD_RECOVERY'){ account.user=session?session.user:account.user; authRecovery=true; authView='recovery'; renderAuthGate(); setTab('settings'); renderSettings(); return; }
+      if(_e==='PASSWORD_RECOVERY'){ _authLanding=null; account.user=session?session.user:account.user; authRecovery=true; authView='recovery'; renderAuthGate(); setTab('settings'); renderSettings(); return; }
       const was=loggedIn(); account.user=session?session.user:null; _authReady=true;
       if(loggedIn() && state) state.guest=false;
       try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){}
-      if(!was && loggedIn()){ setTimeout(()=>{ cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }, 0); }
+      if(_e!=='INITIAL_SESSION' && !was && loggedIn() && !authRecovery){ setTimeout(()=>{ cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }, 0); }
     });
-    if(loggedIn()) await cloudPull();
-    if(STRIPE.enabled && loggedIn()) await syncPlanFromServer();
+    const { data } = await _sb.auth.getSession();
+    if(data && data.session && !authRecovery) account.user=data.session.user;
+    _authReady=true; renderAuthGate();
+    if(_authLanding && !authRecovery){
+      const lp=_authLanding; _authLanding=null;
+      if(lp.recovery){ if(data&&data.session) account.user=data.session.user; authRecovery=true; authView='recovery'; renderAuthGate(); setTab('settings'); renderSettings(); }
+      else if(lp.error){ authView='login'; renderAuthGate(); toast(/expire|invalid|used|otp_expired|not_found/i.test(lp.error+lp.desc) ? 'リンクの有効期限切れ／使用済みです。確認メールを再送してください' : '認証に失敗しました：'+(lp.desc||lp.error)); }
+      else if(lp.code){ if(loggedIn()){ toast('メール認証が完了しました'); } else { authView='confirmed'; renderAuthGate(); } }
+      try{ if(history.replaceState) history.replaceState(null,'',location.pathname); }catch(_){}
+    }
+    if(loggedIn() && !authRecovery) await cloudPull();
+    if(STRIPE.enabled && loggedIn() && !authRecovery) await syncPlanFromServer();
     // オフライン中に溜まった未送信分を、再接続時に送信
     window.addEventListener('online', ()=>{ if(loggedIn() && state._pendingSync) cloudPush(); });
   }catch(e){ _authReady=true; renderAuthGate(); /* offline or SDK blocked */ }
@@ -1063,7 +1065,7 @@ async function authForgot(){
   const em=((document.getElementById('authEmail')||{}).value||'').trim();
   if(!em || !/^.+@.+\..+$/.test(em)){ toast('メールアドレスを正しく入力してください'); return; }
   if(!_sb){ toast('準備中です。少し待って再度お試しください'); return; }
-  try{ const { error }=await _sb.auth.resetPasswordForEmail(em, { redirectTo: location.origin + location.pathname });
+  try{ const { error }=await _sb.auth.resetPasswordForEmail(em, { redirectTo: location.origin + location.pathname + '?type=recovery' });
     if(error) throw error;
     authView='menu'; renderSettings();
     toast('再設定メールを送信しました。メール内のリンクから新しいパスワードを設定してください'); }
@@ -4496,10 +4498,48 @@ function pwField(id, label, ph, ac){
     </div></div>`;
 }
 function togglePw(id, btn){ const el=document.getElementById(id); if(!el) return; const show=el.type==='password'; el.type=show?'text':'password'; btn.innerHTML=show?EYE_OFF_SVG:EYE_SVG; btn.setAttribute('aria-label', show?'パスワードを隠す':'パスワードを表示'); }
-function authNextSignup(){
-  const em=((document.getElementById('authEmail')||{}).value||'').trim();
+async function authNextSignup(){
+  const em=((document.getElementById('authEmail')||{}).value||'').trim() || authDraftEmail;
   if(!em || !/^.+@.+\..+$/.test(em)){ toast('メールアドレスを正しく入力してください'); return; }
-  authDraftEmail=em; authView='signup2'; renderSettings();
+  if(!_sb){ toast('準備中です。少し待って再度お試しください（通信環境をご確認ください）'); return; }
+  try{ const { error }=await _sb.auth.signInWithOtp({ email:em, options:{ shouldCreateUser:true } }); if(error) throw error;
+    authDraftEmail=em; authView='signupCode'; renderAuthGate(); renderSettings(); toast('認証コードを送信しました');
+  }catch(e){ const m=(e.message||'')+'';
+    if(/rate|too many|429|sending|smtp|email/i.test(m)) toast('コードを送れませんでした。時間をおいて再度お試しください（送信上限の可能性）');
+    else if(/signups?\s*(are\s*)?(not\s*allowed|disabled)/i.test(m)) toast('現在、新規登録を受け付けていません');
+    else toast('コード送信に失敗：'+m);
+  }
+}
+async function authSendCode(){
+  const em=authDraftEmail; if(!em){ toast('メールアドレスがわかりません'); return; }
+  if(!_sb){ toast('準備中です。少し待って再度お試しください'); return; }
+  try{ const { error }=await _sb.auth.signInWithOtp({ email:em, options:{ shouldCreateUser:true } }); if(error) throw error; toast('認証コードを再送しました'); }
+  catch(e){ toast('再送に失敗：'+(e.message||'')); }
+}
+async function authVerifyRegister(){
+  const em=authDraftEmail || ((document.getElementById('authEmail')||{}).value||'').trim();
+  const code=((document.getElementById('authCode')||{}).value||'').replace(/\s/g,'');
+  const pw=(document.getElementById('authPw')||{}).value||'';
+  const pw2=(document.getElementById('authPw2')||{}).value;
+  if(!em){ toast('メールアドレスがわかりません'); authView='signup1'; renderAuthGate(); renderSettings(); return; }
+  if(!/^\d{6}$/.test(code)){ toast('6桁の認証コードを入力してください'); return; }
+  if(!pw || pw.length<6){ toast('パスワードは6文字以上にしてください'); return; }
+  if(pw2!=null && pw!==pw2){ toast('パスワードが一致しません'); return; }
+  if(!_sb){ toast('準備中です。少し待って再度お試しください（通信環境をご確認ください）'); return; }
+  try{
+    const { data, error }=await _sb.auth.verifyOtp({ email:em, token:code, type:'email' }); if(error) throw error;
+    try{ await _sb.auth.updateUser({ password:pw }); }catch(_){}
+    authView='menu';
+    if(data && data.user){ account.user=data.user; }
+    else { try{ const { data:s }=await _sb.auth.getSession(); if(s&&s.session) account.user=s.session.user; }catch(_){} }
+    state.guest=false; _authReady=true;
+    try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){}
+    cloudPull(); if(STRIPE.enabled) syncPlanFromServer();
+    toast('登録が完了しました');
+  }catch(e){ const m=(e.message||'')+'';
+    if(/expired|invalid|token|otp|not found/i.test(m)) toast('認証コードが正しくないか期限切れです。再送してお試しください');
+    else toast('登録に失敗：'+m);
+  }
 }
 function planLabel(){ const b=state.billing||{}; const p=PLAN_INFO[b.plan]||PLAN_INFO.free; return b.plan==='free'?p.name:(p.name+'（'+(TERM_INFO[b.term]?TERM_INFO[b.term].label:'')+'）'); }
 // ===== 紹介システム =====
@@ -4839,10 +4879,22 @@ function authBoxHtml(){
       <div class="auth-h">新規登録</div>
       <div class="auth-step">ステップ 1 / 2 ・ メールアドレス</div>
       <div class="field"><label>メールアドレス</label><input type="email" id="authEmail" value="${esc(authDraftEmail)}" placeholder="you@example.com" autocomplete="username" /></div>
-      <button class="btn btn-primary full" style="padding:14px" onclick="authNextSignup()">次へ</button>
+      <button class="btn btn-primary full" style="padding:14px" onclick="authNextSignup()">認証コードを送信</button>
       <div class="auth-or"><span>または</span></div>
       ${googleBtn('Googleで登録')}
       <div class="d" style="text-align:center;margin-top:12px">すでにアカウントをお持ちの方は <a style="color:var(--green-d);font-weight:600;cursor:pointer" onclick="authGo('login')">ログイン</a></div>`;
+  }
+  if(authView==='signupCode'){
+    return `<button class="auth-back" onclick="authGo('signup1')">‹ 戻る</button>
+      <div class="auth-h">新規登録</div>
+      <div class="auth-step">ステップ 2 / 2 ・ コードとパスワード</div>
+      <div class="field"><label>メールアドレス</label><div class="auth-email-fixed">${esc(authDraftEmail||'')}</div></div>
+      <div class="d" style="margin:-2px 0 12px">上記アドレスに届いた<b>6桁の認証コード</b>と、設定したいパスワードを入力してください。</div>
+      <div class="field"><label>認証コード（6桁）</label><input type="text" id="authCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" /></div>
+      ${pwField("authPw","パスワード","6文字以上","new-password")}
+      ${pwField("authPw2","パスワード（確認）","もう一度入力","new-password")}
+      <button class="btn btn-primary full" style="padding:14px" onclick="authVerifyRegister()">登録する</button>
+      <div class="d" style="text-align:center;margin-top:12px">コードが届かない場合は <a style="color:var(--green-d);font-weight:600;cursor:pointer" onclick="authSendCode()">再送する</a></div>`;
   }
   if(authView==='signup2'){
     return `<button class="auth-back" onclick="authGo('signup1')">‹ 戻る</button>
@@ -5427,7 +5479,7 @@ function setupAutoUpdate(){
   setInterval(()=>{ if(document.visibilityState==='visible') checkForUpdate('periodic'); }, 5*60*1000);
 }
 function init(){
-  try{ const _q=new URLSearchParams(location.search||''); const _h=new URLSearchParams((location.hash||'').replace(/^#/,'')); const _code=_q.get('code')||_h.get('access_token'); const _err=_q.get('error')||_h.get('error')||_q.get('error_code')||_h.get('error_code'); if((_code||_err) && !_q.get('checkout') && !_q.get('portal')) _authLanding={ code:!!_code, error:_err||'', desc:(_q.get('error_description')||_h.get('error_description')||'') }; }catch(_){}
+  try{ const _q=new URLSearchParams(location.search||''); const _h=new URLSearchParams((location.hash||'').replace(/^#/,'')); const _code=_q.get('code')||_h.get('access_token'); const _err=_q.get('error')||_h.get('error')||_q.get('error_code')||_h.get('error_code'); const _type=_q.get('type')||_h.get('type'); if((_code||_err||_type==='recovery') && !_q.get('checkout') && !_q.get('portal')) _authLanding={ code:!!_code, error:_err||'', desc:(_q.get('error_description')||_h.get('error_description')||''), recovery:(_type==='recovery') }; }catch(_){}
   load();
   if(!state.seeded) seed();
   ensureThreads();
