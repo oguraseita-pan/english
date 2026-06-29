@@ -895,7 +895,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-16';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-17';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -1173,10 +1173,19 @@ async function changePw(){
   if(pw!==pw2){ toast('パスワードが一致しません'); return; }
   try{ const { error }=await _sb.auth.updateUser({ password:pw }); if(error) throw error;
     accountPage=null; authView='menu'; renderSettings();
-    toast('パスワードを変更しました'); }
+    notifyChange('password'); toast('パスワードを変更しました'); }
   catch(e){ toast('変更に失敗：'+(e.message||'')); }
 }
 async function cloudSyncNow(){ if(!loggedIn()){ toast('ログインが必要です'); return; } toast('同期中…'); await cloudPull(); }
+// 変更完了メール（Supabase Edge Function "notify-change" を呼ぶ。未デプロイでも無害に素通り）
+async function notifyChange(type){
+  try{
+    if(!_sb || !loggedIn() || !cloudConfigured()) return;
+    const { data }=await _sb.auth.getSession(); const tok=(data&&data.session)?data.session.access_token:'';
+    if(!tok) return;
+    await fetch(CLOUD.url + '/functions/v1/notify-change', { method:'POST', headers:{ 'Authorization':'Bearer '+tok, 'apikey':CLOUD.anonKey, 'Content-Type':'application/json' }, body:JSON.stringify({ type }) });
+  }catch(_){}
+}
 
 const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const todayStr = ()=> new Date().toISOString().slice(0,10);
@@ -4708,7 +4717,7 @@ async function changeEmailVerify(){
   try{ const { data, error }=await _sb.auth.verifyOtp({ email:em, token:code, type:'email_change' }); if(error) throw error;
     if(data&&data.user) account.user=data.user;
     accountPage=null; emailCodeSent=false; pendingNewEmail=''; renderSettings(); try{ rerenderActive(); }catch(_){}
-    toast('メールアドレスを変更しました');
+    notifyChange('email'); toast('メールアドレスを変更しました');
   }catch(e){ const m=(e.message||'')+'';
     if(/expired|invalid|token|otp|not found/i.test(m)) toast('確認コードが正しくないか期限切れです。再送してお試しください');
     else toast('変更に失敗：'+m);
