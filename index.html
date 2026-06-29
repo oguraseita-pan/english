@@ -895,7 +895,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-15';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-16';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -1172,7 +1172,7 @@ async function changePw(){
   if(!pw || pw.length<6){ toast('パスワードは6文字以上にしてください'); return; }
   if(pw!==pw2){ toast('パスワードが一致しません'); return; }
   try{ const { error }=await _sb.auth.updateUser({ password:pw }); if(error) throw error;
-    authView='menu'; renderSettings();
+    accountPage=null; authView='menu'; renderSettings();
     toast('パスワードを変更しました'); }
   catch(e){ toast('変更に失敗：'+(e.message||'')); }
 }
@@ -1326,7 +1326,7 @@ function setTab(name){
   // 学習中の経過時間を記録してから遷移し、各タブは「最初のページ」に戻す
   if(session||compo||diaryS){ try{ recordTime(); }catch(_){ } }
   session=null; reading=null; idiom=null; compo=null; speech=null; diaryS=null; wordList=null; histView=null;
-  invitePage=false;
+  invitePage=false; accountPage=null; emailCodeSent=false; pendingNewEmail='';
   currentTab=name;
   noteSearchActive=false;
   closeModal();
@@ -4513,6 +4513,7 @@ let authRecovery=false;
 let authDraftEmail='';
 let billingStep=null;       // null | 'plans' | 'checkout'
 let invitePage=false;       // 招待コードを別ページ表示
+let accountPage=null, emailCodeSent=false, pendingNewEmail='';  // アカウント変更を別ページ表示
 let billingSel={plan:'light', term:'12m'};
 const PLAN_INFO={
   free:{name:'無料プラン'},
@@ -4684,6 +4685,65 @@ function referralBoxHtml(){
 }
 function openInvite(){ invitePage=true; refreshReferral(); renderSettings(); }
 function closeInvite(){ invitePage=false; renderSettings(); }
+function openAccountPage(p){ if(!loggedIn()){ toast('ログインが必要です'); return; } accountPage=p; emailCodeSent=false; pendingNewEmail=''; renderSettings(); }
+function closeAccountPage(){ accountPage=null; emailCodeSent=false; pendingNewEmail=''; renderSettings(); }
+async function changeEmailSend(){
+  if(!loggedIn()){ toast('ログインが必要です'); return; }
+  const em=((document.getElementById('newEmail')||{}).value||'').trim();
+  if(!em || !/^.+@.+\..+$/.test(em)){ toast('メールアドレスを正しく入力してください'); return; }
+  if(!_sb){ toast('準備中です。少し待って再度お試しください'); return; }
+  try{ const { error }=await _sb.auth.updateUser({ email:em }); if(error) throw error;
+    pendingNewEmail=em; emailCodeSent=true; renderSettings(); toast('確認コードを送信しました');
+  }catch(e){ const m=(e.message||'')+'';
+    if(/already|registered|exists|taken/i.test(m)) toast('このメールアドレスは既に使用されています');
+    else if(/rate|too many|429|sending|smtp/i.test(m)) toast('コードを送れませんでした。時間をおいて再度お試しください（送信上限の可能性）');
+    else toast('送信に失敗：'+m);
+  }
+}
+async function changeEmailVerify(){
+  const em=pendingNewEmail; if(!em){ emailCodeSent=false; renderSettings(); return; }
+  const code=((document.getElementById('emChgCode')||{}).value||'').replace(/\s/g,'');
+  if(!/^\d{6}$/.test(code)){ toast('6桁の確認コードを入力してください'); return; }
+  if(!_sb){ toast('準備中です'); return; }
+  try{ const { data, error }=await _sb.auth.verifyOtp({ email:em, token:code, type:'email_change' }); if(error) throw error;
+    if(data&&data.user) account.user=data.user;
+    accountPage=null; emailCodeSent=false; pendingNewEmail=''; renderSettings(); try{ rerenderActive(); }catch(_){}
+    toast('メールアドレスを変更しました');
+  }catch(e){ const m=(e.message||'')+'';
+    if(/expired|invalid|token|otp|not found/i.test(m)) toast('確認コードが正しくないか期限切れです。再送してお試しください');
+    else toast('変更に失敗：'+m);
+  }
+}
+function renderAccountPage(){
+  let body='';
+  if(accountPage==='pw'){
+    body=`<div class="set-group" style="margin-top:14px">
+      <div class="d" style="margin-bottom:12px">新しいパスワードを入力してください。変更後は次回から新しいパスワードでログインします。</div>
+      ${pwField("cpwNew","新しいパスワード","6文字以上","new-password")}
+      ${pwField("cpwNew2","新しいパスワード（確認）","もう一度入力","new-password")}
+      <button class="btn btn-primary full" style="padding:14px" onclick="changePw()">パスワードを変更する</button>
+    </div>`;
+  } else {
+    body = !emailCodeSent
+      ? `<div class="set-group" style="margin-top:14px">
+        <div class="field"><label>現在のメールアドレス</label><div class="auth-email-fixed">${esc(accountEmail())}</div></div>
+        <div class="field"><label>新しいメールアドレス</label><input type="email" id="newEmail" placeholder="new@example.com" autocomplete="email" /></div>
+        <div class="d" style="margin:-2px 0 12px">新しいアドレスに<b>6桁の確認コード</b>をお送りします。</div>
+        <button class="btn btn-primary full" style="padding:14px" onclick="changeEmailSend()">確認コードを送信</button>
+      </div>`
+      : `<div class="set-group" style="margin-top:14px">
+        <div class="field"><label>新しいメールアドレス</label><div class="auth-email-fixed">${esc(pendingNewEmail)}</div></div>
+        <div class="d" style="margin:-2px 0 12px">上記アドレスに届いた<b>6桁の確認コード</b>を入力してください。</div>
+        <div class="field"><label>確認コード（6桁）</label><input type="text" id="emChgCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" /></div>
+        <button class="btn btn-primary full" style="padding:14px" onclick="changeEmailVerify()">メールアドレスを変更</button>
+        <div class="d" style="text-align:center;margin-top:12px">コードが届かない場合は <a style="color:var(--green-d);font-weight:600;cursor:pointer" onclick="changeEmailSend()">再送する</a></div>
+      </div>`;
+  }
+  document.getElementById('view-settings').innerHTML=`
+    <div class="topbar"><h1>${accountPage==='pw'?'パスワードを変更':'メールアドレスを変更'}</h1><button class="icon-btn x-btn" onclick="closeAccountPage()" style="box-shadow:none;background:transparent">✕</button></div>
+    ${body}`;
+  renderAuthGate();
+}
 function renderInvitePage(){
   const ref=referralDiscountPct(), loy=loyaltyDiscountPct(), tot=Math.min(40, ref+loy), paid=selfPaid();
   document.getElementById('view-settings').innerHTML=`
@@ -5055,6 +5115,7 @@ function billingToPlans(){ billingStep='plans'; renderSettings(); }
 function renderSettings(){
   if(billingStep){ renderBilling(); return; }
   if(invitePage){ renderInvitePage(); return; }
+  if(accountPage && loggedIn()){ renderAccountPage(); return; }
   const s=state.settings;
   document.getElementById('view-settings').innerHTML=`
     <div class="topbar"><h1>設定</h1>
@@ -5074,8 +5135,8 @@ function renderSettings(){
           <div class="key-set"><span class="lbl">${I.check} ${esc(accountEmail())}</span><button class="btn btn-ghost" style="padding:7px 13px" onclick="authSignOut()">ログアウト</button></div>
           <div class="d">${_lastSync?('最終同期：'+new Date(_lastSync).toLocaleString('ja-JP')):'データは自動でクラウドに同期されます。'}</div>
         </div>
-        <button class="btn btn-ghost full" style="padding:11px;margin-bottom:8px" onclick="authGo('changeEmail')">メールアドレスを変更</button>
-        <button class="btn btn-ghost full" style="padding:11px" onclick="authGo('changePw')">パスワードを変更</button>`)
+        <button class="btn btn-ghost full" style="padding:11px;margin-bottom:8px" onclick="openAccountPage('email')">メールアドレスを変更</button>
+        <button class="btn btn-ghost full" style="padding:11px" onclick="openAccountPage('pw')">パスワードを変更</button>`)
       : `<div class="field"><div class="d">ログインすると、クラウド同期・AI機能・継続割引・紹介割引が利用できます。</div><button class="btn btn-primary full" style="padding:11px;margin-top:10px" onclick="openLoginGate()">ログイン / 新規登録</button></div>`) )}
     </div></details>
 
