@@ -895,7 +895,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-14';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-15';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@example.com'; // ← 公開前にご自身の連絡先メールに変更してください
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -1062,14 +1062,47 @@ async function authResend(){
   catch(e){ toast('再送に失敗：'+(e.message||'')); }
 }
 async function authForgot(){
-  const em=((document.getElementById('authEmail')||{}).value||'').trim();
+  const em=((document.getElementById('authEmail')||{}).value||'').trim() || authDraftEmail;
   if(!em || !/^.+@.+\..+$/.test(em)){ toast('メールアドレスを正しく入力してください'); return; }
   if(!_sb){ toast('準備中です。少し待って再度お試しください'); return; }
-  try{ const { error }=await _sb.auth.resetPasswordForEmail(em, { redirectTo: location.origin + location.pathname + '?type=recovery' });
-    if(error) throw error;
-    authView='menu'; renderSettings();
-    toast('再設定メールを送信しました。メール内のリンクから新しいパスワードを設定してください'); }
-  catch(e){ toast('送信に失敗：'+(e.message||'')); }
+  try{ const { error }=await _sb.auth.signInWithOtp({ email:em, options:{ shouldCreateUser:false } }); if(error) throw error;
+    authDraftEmail=em; authView='forgotCode'; renderAuthGate(); renderSettings(); toast('認証コードを送信しました');
+  }catch(e){ const m=(e.message||'')+'';
+    if(/not\s*found|no\s*user|signups?\s*(are\s*)?(not\s*allowed|disabled)|otp_disabled/i.test(m)) toast('このメールアドレスは登録されていません');
+    else if(/rate|too many|429|sending|smtp|email/i.test(m)) toast('コードを送れませんでした。時間をおいて再度お試しください（送信上限の可能性）');
+    else toast('コード送信に失敗：'+m);
+  }
+}
+async function authForgotResend(){
+  const em=authDraftEmail; if(!em){ toast('メールアドレスがわかりません'); return; }
+  if(!_sb){ toast('準備中です'); return; }
+  try{ const { error }=await _sb.auth.signInWithOtp({ email:em, options:{ shouldCreateUser:false } }); if(error) throw error; toast('認証コードを再送しました'); }
+  catch(e){ toast('再送に失敗：'+(e.message||'')); }
+}
+async function authForgotVerify(){
+  const em=authDraftEmail || ((document.getElementById('authEmail')||{}).value||'').trim();
+  const code=((document.getElementById('authCode')||{}).value||'').replace(/\s/g,'');
+  const pw=(document.getElementById('authNewPw')||{}).value||'';
+  const pw2=(document.getElementById('authNewPw2')||{}).value;
+  if(!em){ toast('メールアドレスがわかりません'); authView='forgot'; renderAuthGate(); renderSettings(); return; }
+  if(!/^\d{6}$/.test(code)){ toast('6桁の認証コードを入力してください'); return; }
+  if(!pw || pw.length<6){ toast('パスワードは6文字以上にしてください'); return; }
+  if(pw!==pw2){ toast('パスワードが一致しません'); return; }
+  if(!_sb){ toast('準備中です。少し待って再度お試しください'); return; }
+  try{
+    const { data, error }=await _sb.auth.verifyOtp({ email:em, token:code, type:'email' }); if(error) throw error;
+    const { error:upErr }=await _sb.auth.updateUser({ password:pw }); if(upErr) throw upErr;
+    authRecovery=false; authView='menu';
+    if(data && data.user){ account.user=data.user; }
+    else { try{ const { data:s }=await _sb.auth.getSession(); if(s&&s.session) account.user=s.session.user; }catch(_){} }
+    state.guest=false; _authReady=true;
+    try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){}
+    cloudPull(); if(STRIPE.enabled) syncPlanFromServer();
+    toast('パスワードを再設定しました');
+  }catch(e){ const m=(e.message||'')+'';
+    if(/expired|invalid|token|otp|not found/i.test(m)) toast('認証コードが正しくないか期限切れです。再送してお試しください');
+    else toast('再設定に失敗：'+m);
+  }
 }
 async function authSetNewPw(){
   const pw=(document.getElementById('authNewPw')||{}).value||'';
@@ -4859,9 +4892,21 @@ function authBoxHtml(){
   if(authView==='forgot'){
     return `<button class="auth-back" onclick="authGo('login')">‹ 戻る</button>
       <div class="auth-h">パスワード再設定</div>
-      <div class="d" style="margin:2px 0 14px">登録済みのメールアドレスを入力すると、パスワード再設定用のリンクをお送りします。</div>
+      <div class="d" style="margin:2px 0 14px">登録済みのメールアドレスを入力すると、6桁の認証コードをお送りします。</div>
       <div class="field"><label>メールアドレス</label><input type="email" id="authEmail" value="${esc(authDraftEmail||'')}" placeholder="you@example.com" autocomplete="username" /></div>
-      <button class="btn btn-primary full" style="padding:14px" onclick="authForgot()">再設定メールを送信</button>`;
+      <button class="btn btn-primary full" style="padding:14px" onclick="authForgot()">認証コードを送信</button>`;
+  }
+  if(authView==='forgotCode'){
+    return `<button class="auth-back" onclick="authGo('forgot')">‹ 戻る</button>
+      <div class="auth-h">パスワード再設定</div>
+      <div class="auth-step">コードと新しいパスワード</div>
+      <div class="field"><label>メールアドレス</label><div class="auth-email-fixed">${esc(authDraftEmail||'')}</div></div>
+      <div class="d" style="margin:-2px 0 12px">上記アドレスに届いた<b>6桁の認証コード</b>と、新しいパスワードを入力してください。</div>
+      <div class="field"><label>認証コード（6桁）</label><input type="text" id="authCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" /></div>
+      ${pwField("authNewPw","新しいパスワード","6文字以上","new-password")}
+      ${pwField("authNewPw2","新しいパスワード（確認）","もう一度入力","new-password")}
+      <button class="btn btn-primary full" style="padding:14px" onclick="authForgotVerify()">パスワードを再設定</button>
+      <div class="d" style="text-align:center;margin-top:12px">コードが届かない場合は <a style="color:var(--green-d);font-weight:600;cursor:pointer" onclick="authForgotResend()">再送する</a></div>`;
   }
   if(authView==='login'){
     return `<button class="auth-back" onclick="authGo('menu')">‹ 戻る</button>
