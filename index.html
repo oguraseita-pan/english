@@ -72,7 +72,7 @@ html[data-theme="dark"]{
   --shadow-lg:0 8px 40px rgba(0,0,0,.5);
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{margin:0;padding:0;}
+html,body{margin:0;padding:0;overflow-x:clip;}
 html{min-height:100%;background:var(--paper);}
 body{
   font-family:var(--font-ui);
@@ -679,7 +679,7 @@ html[data-theme="dark"] .tabbar{background:rgba(28,33,35,.86);}
 /* ---------- Modal ---------- */
 .modal-bg{position:fixed;inset:0;background:rgba(20,24,22,.45);backdrop-filter:blur(2px);z-index:60;display:none;align-items:flex-end;justify-content:center;}
 .modal-bg.open{display:flex;animation:fade .2s;}
-.modal{position:relative;background:var(--paper);width:100%;max-width:680px;border-radius:24px 24px 0 0;padding:8px 18px calc(22px + var(--safe-b));max-height:92vh;overflow-y:auto;animation:slideup .28s cubic-bezier(.2,.7,.2,1);}
+.modal{position:relative;background:var(--paper);width:100%;max-width:680px;border-radius:24px 24px 0 0;padding:8px 18px calc(22px + var(--safe-b));max-height:92vh;overflow-y:auto;overflow-x:clip;animation:slideup .28s cubic-bezier(.2,.7,.2,1);}
 .modal-close{position:absolute;top:14px;right:14px;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-size:1.45rem;line-height:1;color:var(--ink-2);background:var(--surface-2);z-index:6;}
 .modal-close:active{transform:scale(.92);}
 .x-btn{font-size:1.6rem;width:46px;height:46px;line-height:1;}
@@ -688,7 +688,8 @@ html[data-theme="dark"] .tabbar{background:rgba(28,33,35,.86);}
 .modal h2{font-family:var(--font-en);font-weight:600;font-size:1.3rem;margin:0 0 4px;}
 .modal .mfield{margin-bottom:13px;}
 .modal .mfield label{display:block;font-size:.8rem;font-weight:600;color:var(--ink-2);margin-bottom:6px;}
-.modal .mfield input,.modal .mfield textarea,.modal .mfield select{width:100%;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:12px 13px;outline:none;transition:border-color .15s;}
+.modal .mfield input,.modal .mfield textarea,.modal .mfield select{width:100%;max-width:100%;min-width:0;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:12px 13px;outline:none;transition:border-color .15s;}
+.mfield input[type="date"],.mfield input[type="time"],.field input[type="date"],.field input[type="time"]{-webkit-appearance:none;appearance:none;}
 .modal .mfield input:focus,.modal .mfield textarea:focus{border-color:var(--green);}
 .modal .mfield textarea{resize:vertical;min-height:64px;line-height:1.4;}
 .modal .term-input{font-family:var(--font-en);font-size:1.2rem !important;}
@@ -909,7 +910,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-22';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-23';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -5409,6 +5410,7 @@ function renderSettings(){
 
     <div class="section-title">忘却曲線の学習設定</div>
     <div class="set-group">
+      <div class="set-row" style="cursor:pointer" onclick="openNoStudyList()"><div><div class="l">学習しない単語・熟語</div><div class="d">除外中：<span id="nsCount">${noStudyCount()}</span>件 ・ タップで一覧・解除</div></div><span class="chev" style="color:var(--ink-3)">${I.chev}</span></div>
       <div class="set-row"><div><div class="l">学習ペース</div><div class="d">${s.srsPreset==='slow'?'復習多め':s.srsPreset==='fast'?'復習少なめ':'バランス'}</div></div>
         <select id="setSrsPreset" onchange="state.settings.srsPreset=this.value;save();renderSettings()">
           <option value="slow" ${s.srsPreset==='slow'?'selected':''}>ゆっくり</option>
@@ -5425,7 +5427,6 @@ function renderSettings(){
           <option value="0" ${(!s.srsMaxIvl||s.srsMaxIvl===0)?'selected':''}>上限なし</option>
         </select></div>
       <div style="color:var(--ink-3);font-size:.72rem;margin:8px 4px 2px">例）標準・上限180日のとき：新規で「かんたん」→3日後→約10日後…と伸び、最長でも180日で再出題されます。</div>
-      <div class="set-row" style="cursor:pointer" onclick="openNoStudyList()"><div><div class="l">学習しない単語・熟語</div><div class="d">除外中：<span id="nsCount">${noStudyCount()}</span>件 ・ タップで一覧・解除</div></div><span class="chev" style="color:var(--ink-3)">${I.chev}</span></div>
     </div>
 
     <div class="section-title">カードの保存先</div>
