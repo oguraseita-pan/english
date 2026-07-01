@@ -910,7 +910,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-23';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-24';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -1203,7 +1203,7 @@ async function notifyChange(type){
 }
 
 const uid = ()=> Date.now().toString(36)+Math.random().toString(36).slice(2,7);
-const todayStr = ()=> new Date().toISOString().slice(0,10);
+const todayStr = ()=>{ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
 const now = ()=> Date.now();
 const DAY = 86400000;
 
@@ -1393,7 +1393,7 @@ function goalContext(){
   return `The learner's goal is ${map[state.settings.goal]||'general English'} at about the ${goalLevelLabel()||'intermediate'} level. Tailor the topic, vocabulary and difficulty accordingly.`;
 }
 function studyDaysThisMonth(){
-  const ym=new Date().toISOString().slice(0,7);
+  const ym=todayStr().slice(0,7);
   return Object.keys(state.stats.reviews||{}).filter(d=>d.slice(0,7)===ym && (state.stats.reviews[d]||0)>0).length;
 }
 const STREAK_GOAL_DAYS=20;
@@ -1660,6 +1660,7 @@ async function submitDiary(){
   diaryS.text=text;
   // 保存（添削なしでもノートに残す）
   saveDiaryCard();
+  markStudyDay();
   if(!aiReady()){ toast('保存しました（AIをオンにすると添削できます）'); finishDiary(); return; }
   diaryS.loading=true; renderDiary();
   try{
@@ -3220,12 +3221,14 @@ function saveStudyResult(i){ const r=session&&session.results[i]; if(r){ const o
 function updateStreak(){
   const t=todayStr();
   if(state.stats.lastStudy===t) return;
-  const y=new Date(Date.now()-DAY).toISOString().slice(0,10);
+  const y=(()=>{ const d=new Date(Date.now()-DAY); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); })();
   if(state.stats.lastStudy===y) state.stats.streak++;
   else state.stats.streak=1;
   state.stats.lastStudy=t;
   _streakJustUp=true;
 }
+// その日を「学習した日」として記録し連続記録を更新（フラッシュカード以外の学習からも呼ぶ）
+function markStudyDay(){ const d=todayStr(); if(!state.stats.reviews) state.stats.reviews={}; state.stats.reviews[d]=(state.stats.reviews[d]||0)+1; updateStreak(); save(); }
 function endSessionEarly(){ recordTime(); const home=session&&session.fromHome; session=null; if(home){ setTab('home'); renderHome(); } else renderStudy(); }
 
 /* ---------- Quiz ---------- */
@@ -3333,6 +3336,7 @@ async function startReading(){
     reading.title=o.title||''; reading.en=String(o.en); reading.ja=o.ja||'';
     reading.words=Array.isArray(o.words)?o.words.filter(w=>w&&w.term):[];
     reading.stage='read';
+    markStudyDay();
   }catch(err){
     const m=(err&&err.message)||'';
     toast('生成に失敗: '+(/NO_SESSION|auth/i.test(m)?'ログインが必要':/429/.test(m)?'AI提供側が混雑中（少し待って再試行）':/50[0234]/.test(m)?'サーバー混雑（再試行を）':/empty|JSON/i.test(m)?'もう一度お試しを':'通信エラー'));
@@ -3700,6 +3704,7 @@ function nextCompo(){
     recordCompoSrs(it, verdict);
     compoProgSet(compoSig(it.jp,it.en), verdict==='○');
     incDaily('compo');
+    markStudyDay();
   }
   stopDictation();
   compo.idx++; compo.revealed=false; compo.verdict=null; compo.fb=null; compo.checking=false; compo.userAns='';
@@ -3977,6 +3982,7 @@ async function gradeSpeech(){
     speech.fb={corrected:'',points:['添削に失敗：'+(/429/.test(m)?'AI提供側が混雑中（少し待って再試行）':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')],richer:[]};
   }
   speech.phase='result';
+  markStudyDay();
   pushSpeechHistory();
   renderSpeech();
 }
