@@ -909,7 +909,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-21';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-22';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -1666,7 +1666,7 @@ async function submitDiary(){
     let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
     if(j && j.corrected){ diaryS.fb={corrected:j.corrected, ja:j.ja||'', feedback:Array.isArray(j.feedback)?j.feedback:[]}; saveDiaryCard(); }
     else { toast('添削結果を取得できませんでした'); }
-  }catch(e){ if(isAiLimit(e)){ diaryS.loading=false; renderDiary(); openAiLimit(e.message==='AI_LIMIT_FREE'?'free':'paid'); return; } const m=String(e&&e.message||e); toast('添削に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')); }
+  }catch(e){ if(isAiLimit(e)){ diaryS.loading=false; renderDiary(); openAiLimit(e.message==='AI_LIMIT_FREE'?'free':'paid'); return; } const m=String(e&&e.message||e); toast('添削に失敗：'+(/429/.test(m)?'AI提供側が混雑中（少し待って再試行）':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')); }
   diaryS.loading=false; renderDiary();
 }
 function saveDiaryCard(){
@@ -2112,7 +2112,7 @@ async function diaryCorrectInEdit(btn){
       } else { toast('添削結果を取得できませんでした'); }
     }catch(e){
       if(isAiLimit(e)){ toast('本日のAI利用が上限に達しています'); return; }
-      const m=String(e&&e.message||e); toast('添削に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー'));
+      const m=String(e&&e.message||e); toast('添削に失敗：'+(/429/.test(m)?'AI提供側が混雑中（少し待って再試行）':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー'));
     }
   }, '添削中…');
 }
@@ -3334,7 +3334,7 @@ async function startReading(){
     reading.stage='read';
   }catch(err){
     const m=(err&&err.message)||'';
-    toast('生成に失敗: '+(/NO_SESSION|auth/i.test(m)?'ログインが必要':/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑（再試行を）':/empty|JSON/i.test(m)?'もう一度お試しを':'通信エラー'));
+    toast('生成に失敗: '+(/NO_SESSION|auth/i.test(m)?'ログインが必要':/429/.test(m)?'AI提供側が混雑中（少し待って再試行）':/50[0234]/.test(m)?'サーバー混雑（再試行を）':/empty|JSON/i.test(m)?'もう一度お試しを':'通信エラー'));
     reading.stage=reading.en?'read':'setup';
   }
   renderReading();
@@ -3681,7 +3681,7 @@ async function genTheme(theme){
     if(!compo) return;
     if(isAiLimit(err)){ compo=null; renderStudy(); openAiLimit(err.message==='AI_LIMIT_FREE'?'free':'paid'); return; }
     const m=err.message||'';
-    toast('生成に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー'));
+    toast('生成に失敗：'+(/429/.test(m)?'AI提供側が混雑中（少し待って再試行）':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー'));
     compo=null; renderStudy();
   }
 }
@@ -3874,7 +3874,7 @@ async function gradeCompoAI(myIdx){
   }catch(err){
     if(isAiLimit(err)){ compo.checking=false; renderCompo(); openAiLimit(err.message==='AI_LIMIT_FREE'?'free':'paid'); return; }
     const m=err.message||'';
-    fb={verdict:'', comment:'AI添削に失敗（'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')+'）。お手本と見比べて自己採点してください。', fixed:'', alts:[]};
+    fb={verdict:'', comment:'AI添削に失敗（'+(/429/.test(m)?'AI提供側が混雑中（少し待って再試行）':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')+'）。お手本と見比べて自己採点してください。', fixed:'', alts:[]};
   }
   if(!compo || compo.idx!==myIdx || !compo.revealed) return; // 離脱/進行した
   compo.fb=fb; compo.checking=false;
@@ -3973,7 +3973,7 @@ async function gradeSpeech(){
     if(!speech) return;
     if(isAiLimit(err)){ speech.phase='speak'; renderSpeech(); openAiLimit(err.message==='AI_LIMIT_FREE'?'free':'paid'); return; }
     const m=err.message||'';
-    speech.fb={corrected:'',points:['添削に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')],richer:[]};
+    speech.fb={corrected:'',points:['添削に失敗：'+(/429/.test(m)?'AI提供側が混雑中（少し待って再試行）':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')],richer:[]};
   }
   speech.phase='result';
   pushSpeechHistory();
@@ -4475,7 +4475,17 @@ async function callAI(messages,opts){
     ensureAiDay();
     if(aiUsesToday()>=aiDailyCap()) throw new Error(planTier()==='free'?'AI_LIMIT_FREE':'AI_LIMIT');
     const model=aiModelFor(opts);
-    const out=await callManaged(messages, Object.assign({}, opts, {model}));
+    let out;
+    try{
+      out=await callManaged(messages, Object.assign({}, opts, {model}));
+    }catch(e){
+      const m=String(e&&e.message||e);
+      // モデル起因（Pro無料枠未対応／レート・クォータ）なら Flash-Lite で自動リトライ
+      if(model!==AI_MODEL_LITE && /429|404|400|quota|resource_exhausted|model|not ?found|unavailable|permission/i.test(m)){
+        opts._pro=false;
+        out=await callManaged(messages, Object.assign({}, opts, {model:AI_MODEL_LITE}));
+      } else { throw e; }
+    }
     incAiUse(opts._pro);
     return out;
   }
@@ -5263,7 +5273,7 @@ function currentPlanCardHtml(){
     <div class="cpc-ai">
       <div class="cpc-ai-head"><span>本日のAI利用（残り）</span><span class="cpc-ai-reset">0:00にリセット</span></div>
       <div class="cpc-ai-bar"><div class="cpc-ai-fill${low?' low':''}" style="width:${pct}%"></div></div>
-      <div class="cpc-ai-scale"><span>残り ${rem.toLocaleString()} / ${cap.toLocaleString()} 回</span><span>${pct}%</span></div>
+      <div class="cpc-ai-scale" style="justify-content:flex-end"><span>残り ${pct}%</span></div>
       ${low?`<div class="cpc-ai-low">そろそろ本日の上限に近づいています</div>`:''}
     </div>
     <button class="btn btn-ghost full" style="padding:12px;margin-top:14px" onclick="openCustomerPortal()">プラン変更・解約（管理ページ）</button>
