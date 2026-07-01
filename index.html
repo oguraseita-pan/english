@@ -154,6 +154,15 @@ input,textarea,select{font-family:inherit;font-size:16px;color:inherit;}
 .ex-peek-sen{background:var(--green-soft);border-radius:12px;padding:12px 16px;font-family:var(--font-en);font-size:1.05rem;color:var(--ink);text-align:center;width:100%;line-height:1.55;}
 .ex-peek-btn{background:var(--surface);border:1.5px solid var(--green);color:var(--green-d);font-weight:700;font-size:.95rem;padding:10px 22px;border-radius:999px;}
 .card-btn-row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:6px;}
+.wl-nostudy{opacity:.55;}
+.wl-nostudy .rr-jp{text-decoration:line-through;text-decoration-color:var(--ink-3);}
+.ns-chip{display:inline-block;font-size:.62rem;font-weight:700;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:1px 7px;vertical-align:2px;margin-left:4px;letter-spacing:.02em;text-decoration:none;}
+.ns-list{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto;}
+.ns-row{display:flex;align-items:center;gap:10px;background:var(--surface-2);border-radius:12px;padding:10px 12px;}
+.ns-info{flex:1;min-width:0;}
+.ns-term{font-family:var(--font-en);font-weight:600;font-size:1rem;}
+.ns-mean{font-size:.82rem;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.ns-restore{padding:7px 14px;font-size:.82rem;flex:none;}
 .dunno-btn{display:block;width:100%;margin-top:12px;padding:13px;border:1.5px solid var(--line);border-radius:14px;background:var(--surface);color:var(--ink-2);font-weight:600;font-size:.92rem;}
 .dunno-btn:active{background:var(--paper);}
 .save-mini:active{background:var(--green-soft);}
@@ -594,6 +603,7 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .cpc-ai-fill{height:100%;border-radius:999px;background:var(--green);transition:width .4s ease;}
 .cpc-ai-fill.low{background:var(--amber-d);}
 .cpc-ai-low{font-size:.74rem;color:var(--amber-d);margin-top:6px;}
+.cpc-ai-scale{display:flex;justify-content:space-between;font-size:.74rem;color:var(--ink-3);margin-top:6px;}
 .pw-wrap{position:relative;}
 .pw-wrap input{width:100%;padding-right:46px;}
 .pw-eye{position:absolute;top:50%;right:6px;transform:translateY(-50%);border:none;background:transparent;color:var(--ink-3);cursor:pointer;padding:8px;display:flex;align-items:center;border-radius:8px;}
@@ -850,6 +860,7 @@ function normalizeState(){
     Object.values(state.cards||{}).forEach(c=>{ if(c && c.folderId==null && c.type==='text' && c.memo===true) c.folderId=memoF.id; });
   }
   if(!state.memos || typeof state.memos!=='object') state.memos={}; // 単語/熟語へのユーザーメモ（term基準）
+  if(!state.noStudy || typeof state.noStudy!=='object') state.noStudy={}; // 学習しない単語/熟語（term基準）
   if(!state.progress || typeof state.progress!=='object') state.progress = {}; // preset/idiom 学習進捗（永続SRS）
   if(!state.history || typeof state.history!=='object') state.history = {compo:[],speech:[]};
   if(!state.billing || typeof state.billing!=='object') state.billing = {plan:'free', term:null, since:null, card:null};
@@ -898,7 +909,7 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-20';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-21';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -912,7 +923,7 @@ let _sb=null, account={ user:null }, _cloudTimer=null, _lastSync=0, _authReady=f
 function cloudConfigured(){ return !!(CLOUD.url && CLOUD.anonKey); }
 function loggedIn(){ return !!(account && account.user); }
 // ===== ログイン必須ゲート（B案：クラウド正本） =====
-function authGateActive(){ return cloudConfigured() && !loggedIn() && !authRecovery && !(state&&state.guest); }
+function authGateActive(){ return _authReady && cloudConfigured() && !loggedIn() && !authRecovery && !(state&&state.guest); }
 function guestContinue(){ state.guest=true; save(); authView='menu'; renderAuthGate(); renderHome(); toast('ログインせずに利用します（データはこの端末内のみに保存）'); }
 function openLoginGate(){ if(loggedIn()) return; state.guest=false; save(); authView='menu'; renderAuthGate(); }
 function renderAuthGate(){
@@ -1704,7 +1715,7 @@ function renderHome(){
       <button class="icon-btn" onclick="setTab('settings');renderSettings()" aria-label="設定">${I.gear}</button>
     </div>
 
-    ${(!loggedIn() && cloudConfigured())?`<div class="guest-banner" onclick="openLoginGate()" style="display:flex;align-items:center;gap:11px;background:var(--amber-soft);border:1px solid var(--amber);border-radius:13px;padding:11px 13px;margin:2px 0 16px;cursor:pointer">
+    ${(_authReady && !loggedIn() && cloudConfigured())?`<div class="guest-banner" onclick="openLoginGate()" style="display:flex;align-items:center;gap:11px;background:var(--amber-soft);border:1px solid var(--amber);border-radius:13px;padding:11px 13px;margin:2px 0 16px;cursor:pointer">
       <span style="font-size:1.15rem;line-height:1">👤</span>
       <div style="flex:1;min-width:0">
         <div style="font-weight:700;font-size:.9rem;color:var(--ink)">ログインしていません</div>
@@ -2074,6 +2085,7 @@ function editDiary(id, prefill){
     <div class="mfield"><label>日付</label><input id="dDate" type="date" value="${esc(date)}" /></div>
     <div class="mfield"><label>タイトル</label><input id="dTitle" value="${esc(c.title||'')}" placeholder="例：A busy day" /></div>
     <div class="mfield"><label>英語（自分の文）</label><textarea id="dEn" rows="5" placeholder="Today I went to ...">${esc(c.en||'')}</textarea></div>
+    <button class="btn btn-ghost full" style="padding:11px;margin:-2px 0 12px" onclick="diaryCorrectInEdit(this)">✨ AIで添削（修正後の英語・訳を自動入力）</button>
     <div class="mfield"><label>修正後の英語（任意）</label><textarea id="dFixed" rows="5" placeholder="添削された英語">${esc(c.enFixed||'')}</textarea></div>
     <div class="mfield"><label>修正後の日本語訳（任意）</label><textarea id="dJa" rows="4" placeholder="修正後の英語の日本語訳">${esc(c.ja||'')}</textarea></div>
     <div class="mfield"><label>保存先フォルダ</label><select id="dFolder">${folderOpts}</select></div>
@@ -2083,6 +2095,26 @@ function editDiary(id, prefill){
     </div>
     ${id?`<button class="del-link" onclick="deleteCard('${id}')">この日記を削除</button>`:''}
   `);
+}
+async function diaryCorrectInEdit(btn){
+  const enEl=document.getElementById('dEn');
+  const en=(enEl?enEl.value:'').trim();
+  if(!en){ toast('先に英文を入力してください'); return; }
+  if(!aiReady()){ toast('AIがオフです。設定でオンにしてください'); return; }
+  await btnBusy(btn, async()=>{
+    try{
+      const content=await callAI([{role:'system',content:DIARY_SYS},{role:'user',content:en}],{json:true,temp:0.4,hard:true});
+      let j=null; try{ j=JSON.parse(content); }catch(e){ j=null; }
+      if(j && j.corrected){
+        const f=document.getElementById('dFixed'); if(f) f.value=j.corrected;
+        const ja=document.getElementById('dJa'); if(ja && j.ja) ja.value=j.ja;
+        toast('添削しました。内容を確認して保存してください');
+      } else { toast('添削結果を取得できませんでした'); }
+    }catch(e){
+      if(isAiLimit(e)){ toast('本日のAI利用が上限に達しています'); return; }
+      const m=String(e&&e.message||e); toast('添削に失敗：'+(/429/.test(m)?'利用上限の可能性':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー'));
+    }
+  }, '添削中…');
 }
 function saveDiary(id){
   const diaryDate=document.getElementById('dDate').value||todayISO();
@@ -2607,6 +2639,7 @@ function srsTodayCount(pool){ const t=now(); let due=0,nw=0; pool.forEach(p=>{ c
 // select up to 10 items from a pool (each item carries .srs) by learning style
 function selectItems(pool, style){
   const t=now();
+  pool = pool.filter(p=>!isNoStudy(p.term)); // 「学習しない」を全スタイルから除外
   let arr;
   if(style==='random'){ arr=shuffle(pool.slice()); }
   else if(style==='unmastered'){ arr=pool.filter(p=>isUnmastered(p.srs)).sort((a,b)=>rankUnmastered(a.srs)-rankUnmastered(b.srs)); if(!arr.length) arr=pool.slice().sort((a,b)=>rankUnmastered(a.srs)-rankUnmastered(b.srs)); }
@@ -2740,11 +2773,12 @@ function setupWlSticky(){
 }
 function wordListRow(c,i,open,num){
   const ml=masteryLabel(c.srs), lab=ml[0], col=ml[1];
-  return `<div class="result-row">
+  const ns=isNoStudy(c.term);
+  return `<div class="result-row${ns?' wl-nostudy':''}">
     <div class="rr-head" onclick="toggleWordList(${i})">
       <span class="wl-num">${num}</span>
-      <span style="width:11px;height:11px;border-radius:50%;background:${col};flex:none;display:inline-block"></span>
-      <div class="rr-meta" style="flex:1"><div class="rr-jp" style="font-family:var(--font-en);font-weight:600;font-size:1.05rem">${esc(c.term)}</div><div class="rr-ans">${esc(c.mean)}</div></div>
+      <span style="width:11px;height:11px;border-radius:50%;background:${ns?'var(--ink-3)':col};flex:none;display:inline-block"></span>
+      <div class="rr-meta" style="flex:1"><div class="rr-jp" style="font-family:var(--font-en);font-weight:600;font-size:1.05rem">${esc(c.term)}${ns?' <span class="ns-chip">学習しない</span>':''}</div><div class="rr-ans">${esc(c.mean)}</div></div>
       ${spkBtn(c.term,26)}
       <span class="chev">${I.chev}</span>
     </div>
@@ -2753,8 +2787,15 @@ function wordListRow(c,i,open,num){
       ${c.exEn?`<div class="blk"><div class="lab">例文</div><div class="en">${esc(c.exEn)} ${spkBtn(c.exEn,24)}</div>${c.exJa?`<div style="color:var(--ink-2)">${esc(c.exJa)}</div>`:''}</div>`:''}
       <div class="blk"><div class="lab">進捗</div><div style="color:${col};font-weight:600">${lab}</div></div>
       <button class="btn btn-ghost full wl-save" style="margin-top:10px;padding:10px" onclick="event.stopPropagation();saveWordListItem(${i})">${I.plus||''} カードに保存</button>
+      <button class="btn btn-ghost full" style="margin-top:8px;padding:10px;color:${ns?'var(--green-d)':'var(--ink-2)'}" onclick="event.stopPropagation();toggleWordListNoStudy(${i})">${ns?'↩︎ 学習対象に戻す':'🚫 学習しない'}</button>
     </div>`:''}
   </div>`;
+}
+function toggleWordListNoStudy(i){
+  if(!wordList) return; const c=wordList.pool[i]; if(!c) return;
+  const on=toggleNoStudy({term:c.term, mean:c.mean, pos:c.pos});
+  toast(on?'今後の学習から除外しました':'学習対象に戻しました');
+  renderWordList();
 }
 function saveWordListItem(i){
   if(!wordList) return;
@@ -3026,6 +3067,7 @@ function renderStudySession(){
             <div class="card-btn-row">
               <button class="save-mini" onclick="event.stopPropagation();saveCurrentStudyCard()">${I.plus} 保存</button>
               <button class="save-mini" onclick="event.stopPropagation();toggleBookmarkStudy()">${isBookmarked(c.term)?'★ ブックマーク済':'☆ ブックマーク'}</button>
+              <button class="save-mini ns-btn" onclick="event.stopPropagation();excludeCurrentStudyCard()">🚫 学習しない</button>
             </div>
           </div>
         </div>
@@ -3051,6 +3093,43 @@ function toggleBookmarkItem(o){
   save(); toast('「'+o.term+'」をブックマークに追加'); return true;
 }
 function toggleBookmarkStudy(){ const c=session&&session.items[session.qi]; if(!c) return; toggleBookmarkItem({term:c.term,pron:c.pron,mean:c.mean,exEn:c.exEn,exJa:c.exJa,pos:c.pos,other:c.other}); renderStudySession(); }
+// ===== 学習しない（term基準で除外。忘却曲線／復習／未学習／本日の学習から除外） =====
+function nsKey(term){ return String(term||'').trim().toLowerCase(); }
+function nsKind(o){ return (o&&Array.isArray(o.pos)&&o.pos.indexOf('熟語')>=0)?'idiom':(isIdiomTerm(o)?'idiom':'word'); }
+function isNoStudy(term){ return !!(state.noStudy && state.noStudy[nsKey(term)]); }
+function addNoStudy(o){ if(!o||!o.term) return; if(!state.noStudy) state.noStudy={}; state.noStudy[nsKey(o.term)]={term:String(o.term), mean:o.mean||'', type:nsKind(o), at:now()}; save(); }
+function removeNoStudy(term){ if(state.noStudy){ delete state.noStudy[nsKey(term)]; save(); } }
+function toggleNoStudy(o){ if(isNoStudy(o&&o.term)){ removeNoStudy(o.term); return false; } addNoStudy(o); return true; }
+// フラッシュカードで「学習しない」→ 除外＋このセッションの残りから同語を取り除いて次へ
+function excludeCurrentStudyCard(){
+  if(!session) return;
+  const c=session.items[session.qi]; if(!c) return;
+  addNoStudy(c);
+  const key=nsKey(c.term), cur=session.qi;
+  session.items=session.items.filter((it,idx)=> idx<cur ? true : nsKey(it.term)!==key );
+  session.total=session.items.length;
+  session.flipped=false; session.exShown=false;
+  toast('「'+c.term+'」を今後の学習から除外しました');
+  save();
+  try{ scrollAppTop(); }catch(_){}
+  renderStudySession();
+}
+function noStudyCount(){ return Object.keys(state.noStudy||{}).length; }
+function openNoStudyList(){
+  const items=Object.values(state.noStudy||{}).sort((a,b)=>(b.at||0)-(a.at||0));
+  const rows = items.length ? items.map(it=>`
+    <div class="ns-row">
+      <div class="ns-info"><div class="ns-term">${esc(it.term)}${it.type==='idiom'?' <span class="ns-chip">熟語</span>':''}</div>${it.mean?`<div class="ns-mean">${esc(it.mean)}</div>`:''}</div>
+      <button class="btn btn-ghost ns-restore" onclick="restoreNoStudy(${esc(JSON.stringify(it.term))})">戻す</button>
+    </div>`).join('')
+    : `<div style="color:var(--ink-3);text-align:center;padding:22px 0">除外中の単語・熟語はありません</div>`;
+  openModal(`
+    <h2>学習しない単語・熟語</h2>
+    <div style="color:var(--ink-2);font-size:.84rem;margin:-4px 0 10px">「戻す」を押すと、また学習に出るようになります。</div>
+    <div class="ns-list">${rows}</div>
+    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">閉じる</button></div>`);
+}
+function restoreNoStudy(term){ removeNoStudy(term); toast('学習対象に戻しました'); const el=document.getElementById('nsCount'); if(el) el.textContent=noStudyCount(); openNoStudyList(); }
 // ===== 例文プレビュー（裏返す前に例文を見て意味を予測）=====
 function peekExample(){ if(!session) return; session.exShown=!session.exShown; const c=session.items[session.qi]; if(session.exShown && c){ const isId=c.pos&&c.pos.indexOf('熟語')>=0; if(isId && c.exEn) speak(c.exEn); } renderStudySession(); }
 function startStudy(pool, style, catName){
@@ -5182,8 +5261,9 @@ function currentPlanCardHtml(){
     </div>
     ${cancelling?`<div class="cpc-cancel-note">期間終了まで利用できます。終了後は自動で無料プランになります。</div>`:''}
     <div class="cpc-ai">
-      <div class="cpc-ai-head"><span>本日のAI利用</span><span class="cpc-ai-reset">0:00にリセット</span></div>
+      <div class="cpc-ai-head"><span>本日のAI利用（残り）</span><span class="cpc-ai-reset">0:00にリセット</span></div>
       <div class="cpc-ai-bar"><div class="cpc-ai-fill${low?' low':''}" style="width:${pct}%"></div></div>
+      <div class="cpc-ai-scale"><span>残り ${rem.toLocaleString()} / ${cap.toLocaleString()} 回</span><span>${pct}%</span></div>
       ${low?`<div class="cpc-ai-low">そろそろ本日の上限に近づいています</div>`:''}
     </div>
     <button class="btn btn-ghost full" style="padding:12px;margin-top:14px" onclick="openCustomerPortal()">プラン変更・解約（管理ページ）</button>
@@ -5335,6 +5415,7 @@ function renderSettings(){
           <option value="0" ${(!s.srsMaxIvl||s.srsMaxIvl===0)?'selected':''}>上限なし</option>
         </select></div>
       <div style="color:var(--ink-3);font-size:.72rem;margin:8px 4px 2px">例）標準・上限180日のとき：新規で「かんたん」→3日後→約10日後…と伸び、最長でも180日で再出題されます。</div>
+      <div class="set-row" style="cursor:pointer" onclick="openNoStudyList()"><div><div class="l">学習しない単語・熟語</div><div class="d">除外中：<span id="nsCount">${noStudyCount()}</span>件 ・ タップで一覧・解除</div></div><span class="chev" style="color:var(--ink-3)">${I.chev}</span></div>
     </div>
 
     <div class="section-title">カードの保存先</div>
