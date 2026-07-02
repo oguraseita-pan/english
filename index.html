@@ -915,7 +915,7 @@ const PUSH = { vapidPublicKey:'BLzqM9-aezCcp-zELFMvrE3jKyuPc56qaCKf1C5GHQcht6C67
 // English Lab（精密レベル診断）連携。URLを設定すると診断結果画面にリンクを表示
 const EN_LAB = { url:'' };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-28';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-29';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -998,13 +998,101 @@ function rerenderActive(){
 }
 function stateLooksEmpty(s){
   // 学習の痕跡（進捗・連続日数・学習時間・復習記録）が一切なければ「未学習（初期サンプルのみ）」とみなす
+  // ★重要：getProg()は「見ただけ」でも state.progress にstate:'new'のプレースホルダーを書き込むため、
+  //   reps===0のまま（＝実際に一度も解答していない）エントリは「実データ」として数えない
   if(!s) return true;
-  const prog=s.progress&&Object.keys(s.progress).length||0;
-  const compoSrs=s.compoSrs&&Object.keys(s.compoSrs).length||0;
+  const touched=p=>p && (p.reps>0 || p.lapses>0 || (p.state && p.state!=='new'));
+  const prog=s.progress ? Object.values(s.progress).filter(touched).length : 0;
+  const compoSrs=s.compoSrs ? Object.values(s.compoSrs).filter(v=>touched(v&&v.srs)).length : 0;
   const streak=(s.stats&&s.stats.streak)||0;
   const timeEntries=s.stats&&s.stats.time&&Object.keys(s.stats.time).length||0;
   const reviews=s.stats&&s.stats.reviews&&Object.keys(s.stats.reviews).length||0;
-  return prog===0 && compoSrs===0 && streak===0 && timeEntries===0 && reviews===0;
+  const cardsAdded=s.cards?Object.keys(s.cards).length:0; // 受信箱サンプル3件＋メモ1件=4件が初期値
+  return prog===0 && compoSrs===0 && streak===0 && timeEntries===0 && reviews===0 && cardsAdded<=4;
+}
+// ===== 複数端末のデータを「上書き」ではなく「統合」する =====
+// 単純な新しい方勝ちのタイムスタンプ比較だと、端末Aで学習した内容が端末Bのログイン時に消えてしまう事故が起きるため、
+// 学習記録は基本的に「両方を足し合わせる」方式でマージする（データを失うより、多少重複が残る方が安全という判断）。
+function _moreAdvancedSrs(a,b){ // より学習が進んでいる方（解答回数が多い方）を残す
+  if(!a) return b; if(!b) return a;
+  const ra=a.reps||0, rb=b.reps||0;
+  if(ra!==rb) return ra>rb?a:b;
+  return (a.interval||0)>=(b.interval||0) ? a : b;
+}
+function mergeProgress(localP, remoteP){
+  const out={}; const keys=new Set([...Object.keys(localP||{}), ...Object.keys(remoteP||{})]);
+  keys.forEach(k=>{ out[k]=_moreAdvancedSrs((localP||{})[k], (remoteP||{})[k]); });
+  return out;
+}
+function mergeCompoSrs(localC, remoteC){
+  const out={}; const keys=new Set([...Object.keys(localC||{}), ...Object.keys(remoteC||{})]);
+  keys.forEach(k=>{
+    const a=(localC||{})[k], b=(remoteC||{})[k];
+    if(!a){ out[k]=b; return; } if(!b){ out[k]=a; return; }
+    out[k] = (a.srs&&b.srs) ? { ...(( (a.srs.reps||0)>=(b.srs.reps||0) )?a:b) } : (a||b);
+  });
+  return out;
+}
+function mergeById(localArrObj, remoteArrObj){ // {id:obj} 形式（folders/cards）を id で統合。両方に同じidがあればremote優先
+  const out=Object.assign({}, localArrObj||{});
+  Object.entries(remoteArrObj||{}).forEach(([id,v])=>{ out[id]=v; });
+  return out;
+}
+function mergeByIdArray(localArr, remoteArr){ // [{id,...}] 形式（threads）を id で統合
+  const map={}; (localArr||[]).forEach(t=>{ if(t&&t.id) map[t.id]=t; });
+  (remoteArr||[]).forEach(t=>{ if(t&&t.id) map[t.id]=t; });
+  return Object.values(map);
+}
+function mergeHistoryList(localArr, remoteArr){ // 学習履歴ログ：重複除去して統合、最大50件・新しい順
+  const seen=new Set(); const out=[];
+  [...(localArr||[]), ...(remoteArr||[])]
+    .sort((a,b)=>(b.ts||0)-(a.ts||0))
+    .forEach(item=>{ const key=JSON.stringify(item); if(seen.has(key)) return; seen.add(key); if(out.length<50) out.push(item); });
+  return out;
+}
+function mergeCountMap(localM, remoteM){ // 日付→回数 のようなマップを、日付ごとに大きい方の値で統合
+  const out={}; const keys=new Set([...Object.keys(localM||{}), ...Object.keys(remoteM||{})]);
+  keys.forEach(k=>{ out[k]=Math.max((localM||{})[k]||0, (remoteM||{})[k]||0); });
+  return out;
+}
+function recomputeStreakFromReviews(reviews){
+  // 統合後のreviewsから連続記録を再計算（ローカル/リモートどちらかのstreak値をそのまま信じない）
+  const days=Object.keys(reviews||{}).filter(d=>(reviews[d]||0)>0).sort();
+  if(!days.length) return {streak:0,lastStudy:null};
+  const last=days[days.length-1];
+  let streak=1;
+  for(let i=days.length-1;i>0;i--){
+    const cur=new Date(days[i]+'T00:00:00').getTime(), prev=new Date(days[i-1]+'T00:00:00').getTime();
+    if(cur-prev===DAY) streak++; else break;
+  }
+  // 今日／昨日のいずれかで途切れていなければ有効な連続記録として扱う
+  const today=todayStr();
+  const y=(()=>{ const d=new Date(Date.now()-DAY); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); })();
+  if(last!==today && last!==y) streak=(reviews[today]>0)?1:0;
+  return {streak, lastStudy:last};
+}
+function mergeState(local, remote){
+  const merged = Object.assign({}, remote, local); // まず単純フィールド（settings/billing/referral等）は新しい方優先の土台を作る
+  const newerSideIsLocal = (local._updatedAt||0) >= (remote._updatedAt||0);
+  ['settings','billing','referral','aiUsage','diag','seeded','guest'].forEach(k=>{
+    merged[k] = newerSideIsLocal ? (local[k]!==undefined?local[k]:remote[k]) : (remote[k]!==undefined?remote[k]:local[k]);
+  });
+  merged.progress = mergeProgress(local.progress, remote.progress);
+  merged.compoSrs = mergeCompoSrs(local.compoSrs, remote.compoSrs);
+  merged.folders = mergeById(local.folders, remote.folders);
+  merged.cards = mergeById(local.cards, remote.cards);
+  merged.threads = mergeByIdArray(local.threads, remote.threads);
+  merged.noStudy = mergeById(local.noStudy, remote.noStudy);
+  const lh=local.history||{compo:[],speech:[]}, rh=remote.history||{compo:[],speech:[]};
+  merged.history = { compo: mergeHistoryList(lh.compo, rh.compo), speech: mergeHistoryList(lh.speech, rh.speech) };
+  const ls=local.stats||{}, rs=remote.stats||{};
+  const mergedReviews = mergeCountMap(ls.reviews, rs.reviews);
+  const mergedTime = mergeCountMap(ls.time, rs.time);
+  const { streak, lastStudy } = recomputeStreakFromReviews(mergedReviews);
+  merged.stats = { reviews:mergedReviews, time:mergedTime, streak, lastStudy,
+    dailyCount: (newerSideIsLocal?ls.dailyCount:rs.dailyCount) || {date:null,words:0,idioms:0,compo:0,reviews:0} };
+  merged._updatedAt = Math.max(local._updatedAt||0, remote._updatedAt||0);
+  return merged;
 }
 async function cloudPull(){
   if(!_sb || !loggedIn()) return;
@@ -1013,22 +1101,24 @@ async function cloudPull(){
     if(error) throw error;
     const remote = (data && data.data) ? ((typeof data.data==='string') ? JSON.parse(data.data) : data.data) : null;
     if(!remote){ await cloudPush(); _lastSync=now(); renderSettings(); return; } // クラウド未作成 → ローカルを初期アップロード
-    const localT = state._updatedAt||0, remoteT = remote._updatedAt||0;
     const remoteHas = !stateLooksEmpty(remote), localHas = !stateLooksEmpty(state);
     try{ localStorage.setItem(STORE_KEY+'_bak', JSON.stringify(state)); }catch(_){} // 上書き前にローカルを退避（復旧用）
-    let pull;
-    if(state._pendingSync) pull=false;            // 未送信のオフライン書き込みがある → ローカルを優先送信（失わない）
-    else if(remoteHas && !localHas) pull=true;     // 端末は未学習 → クラウドを取り込む
-    else if(localHas && !remoteHas) pull=false;    // クラウドが空 → ローカルを送信（既存ユーザーの初回移行）
-    else pull = (remoteT > localT);                // それ以外はクラウドを正本に（新しいローカルだけは保護）
-    if(pull){
+    if(!remoteHas && !localHas){
+      // どちらも実質未学習（プレースホルダーのみ）→ 単純にクラウドへ合わせる（軽量化のため）
       state = Object.assign(defaultState(), remote);
-      state._pendingSync=false;
-      normalizeState();
-      save({keepStamp:true, noCloud:true});
-      rerenderActive();
+      state._pendingSync=false; normalizeState(); save({keepStamp:true, noCloud:true}); rerenderActive();
     } else {
-      await cloudPush();
+      // ★重要：どちらか一方だけを採用するのではなく、学習記録は必ず「統合」する。
+      //   端末Aの進捗と端末Bの進捗を両方保持したまま1つにまとめるので、
+      //   「新しい方が勝って古い方のデータが消える」という事故が起きない。
+      const merged = mergeState(state, remote);
+      const base = Object.assign(defaultState(), merged);
+      base._pendingSync=false;
+      state = base;
+      normalizeState();
+      save({keepStamp:true, noCloud:true}); // まずローカルへ反映
+      await cloudPush();                     // 統合結果をクラウドにも書き戻す（片方だけ古いままにしない）
+      rerenderActive();
     }
     _lastSync=now(); renderSettings();
   }catch(e){ /* ignore network errors */ }
