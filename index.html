@@ -523,6 +523,7 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .msg.user{align-self:flex-end;background:var(--green);color:#fff;border-bottom-right-radius:5px;}
 .msg.ai{align-self:flex-start;background:var(--surface);box-shadow:var(--shadow);border-bottom-left-radius:5px;}
 .msg.ai .save-card{margin-top:10px;display:inline-flex;align-items:center;gap:6px;background:var(--amber);color:#3a2e0c;font-weight:700;font-size:.8rem;padding:7px 12px;border-radius:10px;}
+.msg.ai .save-card svg{width:15px;height:15px;}
 .msg.ai .retry-btn{margin-top:10px;display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);color:var(--ink);font-weight:600;font-size:.82rem;padding:7px 12px;border-radius:10px;}
 .msg.ai .retry-btn svg{width:15px;height:15px;}
 .msg.ai .ex-list{display:flex;flex-direction:column;gap:13px;}
@@ -532,6 +533,7 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .chat-input{position:sticky;bottom:calc(var(--tabbar-h) + var(--safe-b) + 8px);display:flex;gap:8px;align-items:flex-end;background:var(--surface);border-radius:18px;box-shadow:var(--shadow-lg);padding:8px 8px 8px 14px;}
 .chat-input textarea{flex:1;border:none;outline:none;background:none;resize:none;max-height:120px;padding:8px 0;line-height:1.4;}
 .send-btn{background:var(--green);color:#fff;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none;transition:transform .12s;}
+.send-btn svg{width:19px;height:19px;}
 .send-btn:active{transform:scale(.9);}
 .send-btn:disabled{opacity:.4;}
 .ai-hint{font-size:.84rem;color:var(--ink-2);background:var(--amber-soft);border-radius:12px;padding:12px 14px;margin-bottom:14px;}
@@ -699,7 +701,8 @@ html[data-theme="dark"] .tabbar{background:rgba(28,33,35,.86);}
 .key-set{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface-2);border-radius:12px;padding:11px 14px;font-size:.9rem;color:var(--ink);}
 .key-set .lbl{display:inline-flex;align-items:center;gap:7px;}
 .key-set svg{width:16px;height:16px;color:var(--green);}
-.ai-gen-btn{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:600;color:var(--green);background:var(--green-soft);padding:6px 11px;border-radius:9px;margin-top:6px;}
+.ai-gen-btn{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:600;color:var(--green);background:var(--green-soft);padding:6px 11px;border-radius:9px;margin-top:6px;white-space:nowrap;width:max-content;max-width:100%;}
+.ai-gen-btn svg{width:15px;height:15px;flex:none;}
 .ai-gen-btn:disabled{opacity:.5;}
 
 /* ---------- Toast ---------- */
@@ -1055,7 +1058,7 @@ const PUSH = { vapidPublicKey:'BLzqM9-aezCcp-zELFMvrE3jKyuPc56qaCKf1C5GHQcht6C67
 // English Lab（精密レベル診断）連携。URLを設定すると診断結果画面にリンクを表示
 const EN_LAB = { url:'' };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-35';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-36';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
