@@ -876,6 +876,42 @@ function normalizeState(){
     if(!Array.isArray(c.pos)) c.pos = Array.isArray(c.tags) ? c.tags.slice() : [];
     if(typeof c.other !== 'string') c.other = c.note || '';
   });
+  dedupeDefaultFolders();
+  dedupeSeedThreads();
+}
+// ★バグ修正：複数端末それぞれが「初回起動時に同じ初期フォルダ/AIスレッドをIDだけ別で作成」してしまい、
+//   端末間同期（union merge）の際に同じ名前のものが複数できてしまう問題への自動修復。
+//   normalizeState()の中で毎回呼ばれるので、load()のたびに既存の重複も自動的に統合される。
+const DEFAULT_ROOT_FOLDER_NAMES=['受信箱','単語','熟語','ブックマーク','英語日記','メモ'];
+function dedupeDefaultFolders(){
+  if(!state.folders) return;
+  DEFAULT_ROOT_FOLDER_NAMES.forEach(nm=>{
+    const dups=Object.values(state.folders).filter(f=>f && f.parentId===null && f.name===nm)
+      .sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    if(dups.length<=1) return;
+    const canonical=dups[0];
+    dups.slice(1).forEach(dup=>{
+      Object.values(state.cards||{}).forEach(c=>{ if(c && c.folderId===dup.id) c.folderId=canonical.id; });
+      Object.values(state.folders||{}).forEach(f=>{ if(f && f.parentId===dup.id) f.parentId=canonical.id; });
+      ['saveDestWord','saveDestIdiom','saveDestReading'].forEach(k=>{ if(state.settings && state.settings[k]===dup.id) state.settings[k]=canonical.id; });
+      delete state.folders[dup.id];
+    });
+  });
+}
+function dedupeSeedThreads(){
+  if(!Array.isArray(state.threads) || !state.threads.length) return;
+  const seedModes=['chat','card','example','correct','translate'];
+  seedModes.forEach(mode=>{
+    // 「一度もメッセージを送っていない、初期ラベルのまま」の未使用スレッドだけを重複統合対象にする
+    // （ユーザーが自分で作った同じmodeの会話は messages が入っている/タイトルを変えているので絶対に触らない）
+    const untouched=state.threads.filter(t=>t && t.mode===mode && (!t.messages||t.messages.length===0) && t.title===((AI_MODES[mode]||{}).label));
+    if(untouched.length<=1) return;
+    untouched.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    const canonicalId=untouched[0].id;
+    const dropIds=new Set(untouched.slice(1).map(t=>t.id));
+    state.threads = state.threads.filter(t=>!dropIds.has(t.id));
+    if(typeof activeThreadId!=='undefined' && dropIds.has(activeThreadId)) activeThreadId=canonicalId;
+  });
 }
 function load(){
   try{
@@ -915,7 +951,7 @@ const PUSH = { vapidPublicKey:'BLzqM9-aezCcp-zELFMvrE3jKyuPc56qaCKf1C5GHQcht6C67
 // English Lab（精密レベル診断）連携。URLを設定すると診断結果画面にリンクを表示
 const EN_LAB = { url:'' };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-29';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-31';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -4999,34 +5035,52 @@ async function upsertPlanStatus(){
 }
 async function refreshReferral(){
   if(!loggedIn()||!_sb) return;
+  const me=account.user.id;
+  // ★各クエリを独立させる：どれか1つが失敗しても、自分の招待コード取得だけは他に影響されないようにする
+  try{ await upsertPlanStatus(); }catch(_){}
   try{
-    const me=account.user.id;
-    await upsertPlanStatus(); // 自分のプラン状態をサーバーに反映
     const mc=await _sb.from('referral_codes').select('code').eq('user_id',me).maybeSingle();
+    state.referral.myCode=(mc&&mc.data&&mc.data.code)||state.referral.myCode||null;
+  }catch(_){}
+  try{
     const used=await _sb.from('referrals').select('referrer_code,referrer_user_id').eq('referee_user_id',me).maybeSingle();
-    const refs=await _sb.from('referrals').select('referee_user_id').eq('referrer_user_id',me);
-    state.referral.myCode=(mc&&mc.data&&mc.data.code)||null;
-    state.referral.usedCode=(used&&used.data&&used.data.referrer_code)||null;
+    state.referral.usedCode=(used&&used.data&&used.data.referrer_code)||state.referral.usedCode||null;
     const referrerId=used&&used.data&&used.data.referrer_user_id;
+    if(referrerId){
+      try{ const rp=await _sb.from('plan_status').select('plan').eq('user_id',referrerId).maybeSingle(); state.referral.usedCodeReferrerPaid=!!(rp&&rp.data&&rp.data.plan&&rp.data.plan!=='free'); }catch(_){}
+    }
+  }catch(_){}
+  try{
+    const refs=await _sb.from('referrals').select('referee_user_id').eq('referrer_user_id',me);
     const refRows=(refs&&refs.data)||[];
     state.referral.referredCount=refRows.length;
-    // 相手の課金状態を plan_status で突き合わせ（両者有料が条件）
     let paidIds=new Set();
     const ids=refRows.map(r=>r.referee_user_id);
     if(ids.length){ const ps=await _sb.from('plan_status').select('user_id,plan').in('user_id',ids); ((ps&&ps.data)||[]).forEach(p=>{ if(p.plan&&p.plan!=='free') paidIds.add(p.user_id); }); }
     state.referral.referredPaidCount=paidIds.size;
-    state.referral.usedCodeReferrerPaid=false;
-    if(referrerId){ const rp=await _sb.from('plan_status').select('plan').eq('user_id',referrerId).maybeSingle(); state.referral.usedCodeReferrerPaid=!!(rp&&rp.data&&rp.data.plan&&rp.data.plan!=='free'); }
-    save();
-  }catch(e){}
+  }catch(_){}
+  save();
 }
 async function claimReferralCode(){
   if(!loggedIn()){ toast('ログインが必要です'); return; }
+  if(!_sb){ toast('準備中です。少し待って再度お試しください'); return; }
   const code=normCode((document.getElementById('myCodeInput')||{}).value);
   if(code.length<4||code.length>20){ toast('コードは英数字4〜20文字にしてください'); return; }
   try{
     const { error }=await _sb.from('referral_codes').insert({ code, user_id:account.user.id });
-    if(error){ toast(/duplicate|unique|conflict|exists/i.test(error.message||'')?'そのコードは既に使われています':('発行に失敗：'+error.message)); return; }
+    if(error){
+      // ★バグ修正：エラーの正体を確認せず「既に使われています」とだけ出すと、
+      //   実は「自分が既に発行済み」だった場合に自分のコードがどこにも表示されず迷子になる。
+      //   まず自分のuser_idで既存の行がないか確認し、あればそれを正しく表示する。
+      const mine=await _sb.from('referral_codes').select('code').eq('user_id',account.user.id).maybeSingle();
+      if(mine && mine.data && mine.data.code){
+        state.referral.myCode=mine.data.code; save(); renderSettings();
+        toast('あなたの招待コードは発行済みです：'+mine.data.code);
+        return;
+      }
+      toast(/duplicate|unique|conflict|exists/i.test(error.message||'')?'そのコードは他の人が使用中です。別のコードをお試しください':('発行に失敗：'+error.message));
+      return;
+    }
     state.referral.myCode=code; save(); toast('招待コードを発行しました'); renderSettings();
   }catch(e){ toast('発行に失敗：'+(e.message||'')); }
 }
