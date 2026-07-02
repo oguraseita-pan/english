@@ -711,6 +711,77 @@ html[data-theme="dark"] .tabbar{background:rgba(28,33,35,.86);}
 
 .skeleton{color:var(--ink-3);font-size:.86rem;}
 a{color:var(--green);}
+
+/* =========================================================
+   Responsive — tablet (>=768px) & desktop (>=1024px)
+   モバイルのレイアウトはそのまま。広い画面でのみ適応。
+   ========================================================= */
+:root{--rail-w:0px;}
+.rail-brand,.rail-spacer{display:none;}
+.tabbar .rail-only{display:none;}
+
+/* --- マウス環境のみホバー演出 --- */
+@media (hover:hover) and (pointer:fine){
+  .mode-card:hover,.folder-row:hover,.card-row:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(0,0,0,.10);}
+  .today-row:hover{background:var(--surface-2);}
+  .icon-btn:hover{background:var(--surface-2);color:var(--ink);}
+  .qa-btn:hover,.hero .cta:hover{filter:brightness(1.06);}
+  .deck-row:hover,.key-set:hover{background:var(--surface-2);}
+  .tabbar button:hover{color:var(--green);}
+  .modal-close:hover{background:var(--line);}
+}
+
+/* --- タブレット（iPad縦など） --- */
+@media (min-width:768px){
+  #app{max-width:768px;}
+  .tabbar{max-width:768px;}
+  .read-pop{max-width:768px;}
+  .view{padding-left:28px;padding-right:28px;}
+  .thread-top{margin-left:-28px;margin-right:-28px;padding-left:28px;padding-right:28px;}
+
+  /* モーダル：下からのシートではなく中央ダイアログに */
+  .modal-bg{align-items:center;padding:30px 24px;}
+  .modal{max-width:560px;border-radius:22px;padding:20px 26px 26px;max-height:86vh;box-shadow:0 28px 70px rgba(0,0,0,.28);animation:popin .22s cubic-bezier(.2,.7,.2,1);}
+  .modal .grip{display:none;}
+
+  /* 学習メニュー：2カラム */
+  #view-study.active:has(> .mode-card){display:grid;grid-template-columns:1fr 1fr;gap:0 14px;align-content:start;}
+  #view-study.active:has(> .mode-card) .topbar,
+  #view-study.active:has(> .mode-card) .section-title{grid-column:1/-1;}
+
+  /* AIチャットの吹き出し幅を抑える */
+  .msg{max-width:min(80%,540px);}
+}
+@keyframes popin{from{opacity:0;transform:translateY(16px) scale(.98);}to{opacity:1;transform:none;}}
+
+/* --- デスクトップ / iPad横：左サイドバー化 --- */
+@media (min-width:1024px){
+  :root{--rail-w:230px;--tabbar-h:0px;}
+  body{padding-left:var(--rail-w);}
+  #app{max-width:820px;}
+  .view{padding-top:calc(var(--safe-t) + 26px);padding-bottom:64px;}
+  .thread-top{margin-top:calc(-1 * (var(--safe-t) + 26px));padding-top:calc(var(--safe-t) + 14px);}
+
+  /* 下タブバー → 左レール */
+  .tabbar{top:0;bottom:0;left:0;right:auto;width:var(--rail-w);max-width:none;height:100dvh;margin:0;padding:calc(18px + var(--safe-t)) 12px calc(16px + var(--safe-b));flex-direction:column;align-items:stretch;gap:3px;border-top:none;border-right:1px solid var(--line);overflow-y:auto;}
+  .tabbar button{flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:12px;padding:12px 14px;border-radius:12px;font-size:.94rem;color:var(--ink-2);transition:background .15s,color .15s;}
+  .tabbar button svg{width:21px;height:21px;}
+  .tabbar button.on{background:var(--green-soft);color:var(--green-d);}
+  html[data-theme="dark"] .tabbar button.on{color:var(--green);}
+  .rail-brand{display:flex;align-items:center;gap:10px;padding:8px 12px 20px;font-family:var(--font-en);font-weight:600;font-size:1.32rem;letter-spacing:-.01em;color:var(--ink);}
+  .rail-spacer{display:block;flex:1;}
+  .tabbar .rail-only{display:flex;}
+
+  /* 画面固定要素をコンテンツ領域の中心に合わせる */
+  #toast,.update-banner,.checkout-banner{left:calc(50% + var(--rail-w)/2);}
+  .read-pop{left:var(--rail-w);max-width:680px;border-radius:20px 20px 0 0;}
+  .wl-sticky-back{left:calc(var(--rail-w) + 14px);}
+  .modal{max-width:600px;}
+
+  /* 余白を活かした微調整 */
+  .hero{padding:26px 28px;}
+  .hero .due-num{font-size:4rem;}
+}
 </style>
 </head>
 <body>
@@ -737,6 +808,10 @@ a{color:var(--green);}
 
 <!-- ===== TAB BAR ===== -->
   <nav class="tabbar">
+    <div class="rail-brand" aria-hidden="true">
+      <svg width="30" height="30" viewBox="0 0 120 120" fill="none" style="flex:none"><path d="M60 100V52" stroke="var(--green)" stroke-width="7" stroke-linecap="round"/><path d="M60 62C60 40 76 28 96 28C96 50 80 62 60 62Z" fill="var(--amber)"/><path d="M60 74C60 56 46 46 28 46C28 64 44 74 60 74Z" fill="var(--green)"/></svg>
+      Sprout
+    </div>
     <button data-tab="home" class="on">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
       ホーム
@@ -752,6 +827,11 @@ a{color:var(--green);}
     <button data-tab="ai">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v2M12 19v2M5 12H3M21 12h-2"/><rect x="6" y="6" width="12" height="12" rx="3.5"/><circle cx="9.5" cy="11.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="14.5" cy="11.5" r="1.2" fill="currentColor" stroke="none"/></svg>
       AI
+    </button>
+    <div class="rail-spacer" aria-hidden="true"></div>
+    <button data-tab="settings" class="rail-only">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.2A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 0 1 0-4h.2A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 0 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.6 1.6 0 0 0 21.4 9H22a2 2 0 0 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1z"/></svg>
+      設定
     </button>
   </nav>
 
@@ -877,6 +957,7 @@ function normalizeState(){
     if(typeof c.other !== 'string') c.other = c.note || '';
   });
   dedupeDefaultFolders();
+  dedupeExactCards();
   dedupeSeedThreads();
 }
 // ★バグ修正：複数端末それぞれが「初回起動時に同じ初期フォルダ/AIスレッドをIDだけ別で作成」してしまい、
@@ -896,6 +977,29 @@ function dedupeDefaultFolders(){
       ['saveDestWord','saveDestIdiom','saveDestReading'].forEach(k=>{ if(state.settings && state.settings[k]===dup.id) state.settings[k]=canonical.id; });
       delete state.folders[dup.id];
     });
+  });
+}
+// ★カード（単語/熟語メモ）の重複統合：フォルダ統合により同じフォルダに集まった、
+//   内容が完全に一致するカード（用語・意味・例文まで同一）だけを対象に統合する。
+//   ・メモ（memo:true）は本文が異なる可能性が高いため自動統合の対象外
+//   ・学習が進んでいる方（reps=解答回数が多い方）を残し、進捗が失われないようにする
+function cardDupSignature(c){
+  if(!c || c.memo) return null;
+  return [ (c.term||'').trim().toLowerCase(), (c.mean||'').trim(), (c.exEn||'').trim(), (c.exJa||'').trim() ].join('\u0001');
+}
+function dedupeExactCards(){
+  if(!state.cards) return;
+  const groups={};
+  Object.values(state.cards).forEach(c=>{
+    const sig=cardDupSignature(c);
+    if(sig==null) return;
+    const key=(c.folderId||'')+'|'+sig;
+    (groups[key]=groups[key]||[]).push(c);
+  });
+  Object.values(groups).forEach(list=>{
+    if(list.length<=1) return;
+    list.sort((a,b)=> ((b.srs&&b.srs.reps)||0)-((a.srs&&a.srs.reps)||0) || (a.createdAt||0)-(b.createdAt||0));
+    list.slice(1).forEach(c=>{ delete state.cards[c.id]; });
   });
 }
 function dedupeSeedThreads(){
@@ -951,7 +1055,7 @@ const PUSH = { vapidPublicKey:'BLzqM9-aezCcp-zELFMvrE3jKyuPc56qaCKf1C5GHQcht6C67
 // English Lab（精密レベル診断）連携。URLを設定すると診断結果画面にリンクを表示
 const EN_LAB = { url:'' };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-31';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-35';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -1069,9 +1173,33 @@ function mergeCompoSrs(localC, remoteC){
   });
   return out;
 }
-function mergeById(localArrObj, remoteArrObj){ // {id:obj} 形式（folders/cards）を id で統合。両方に同じidがあればremote優先
+function mergeById(localArrObj, remoteArrObj){ // {id:obj} 形式（folders）を id で統合。両方に同じidがあればremote優先
   const out=Object.assign({}, localArrObj||{});
   Object.entries(remoteArrObj||{}).forEach(([id,v])=>{ out[id]=v; });
+  return out;
+}
+// ★カード（単語カード・自由記述メモ・日記など）は「新しい方勝ち」ではなく、
+//   各カードの updatedAt（編集のたびに更新）を比較し、実際に新しく編集された方を残す。
+//   単純にremote優先にすると、端末Aで今しがた書いたメモが、端末Bの古い版に上書きされて消える事故が起きるため。
+function mergeCardsById(localCards, remoteCards){
+  const out={}; const ids=new Set([...Object.keys(localCards||{}), ...Object.keys(remoteCards||{})]);
+  ids.forEach(id=>{
+    const l=(localCards||{})[id], r=(remoteCards||{})[id];
+    if(!l){ out[id]=r; return; } if(!r){ out[id]=l; return; }
+    const lt=l.updatedAt||l.createdAt||0, rt=r.updatedAt||r.createdAt||0;
+    out[id] = rt>lt ? r : l;
+  });
+  return out;
+}
+// 単語カードの学習中メモ（term基準の自由記述）を統合。編集時刻がある方を優先
+function mergeMemos(localM, remoteM){
+  const out={}; const keys=new Set([...Object.keys(localM||{}), ...Object.keys(remoteM||{})]);
+  keys.forEach(k=>{
+    const l=(localM||{})[k], r=(remoteM||{})[k];
+    if(!l){ out[k]=r; return; } if(!r){ out[k]=l; return; }
+    const lt=(typeof l==='object'?l.updatedAt:0)||0, rt=(typeof r==='object'?r.updatedAt:0)||0;
+    out[k] = rt>=lt ? r : l;
+  });
   return out;
 }
 function mergeByIdArray(localArr, remoteArr){ // [{id,...}] 形式（threads）を id で統合
@@ -1116,7 +1244,8 @@ function mergeState(local, remote){
   merged.progress = mergeProgress(local.progress, remote.progress);
   merged.compoSrs = mergeCompoSrs(local.compoSrs, remote.compoSrs);
   merged.folders = mergeById(local.folders, remote.folders);
-  merged.cards = mergeById(local.cards, remote.cards);
+  merged.cards = mergeCardsById(local.cards, remote.cards);
+  merged.memos = mergeMemos(local.memos, remote.memos);
   merged.threads = mergeByIdArray(local.threads, remote.threads);
   merged.noStudy = mergeById(local.noStudy, remote.noStudy);
   const lh=local.history||{compo:[],speech:[]}, rh=remote.history||{compo:[],speech:[]};
@@ -1519,6 +1648,7 @@ function setTab(name){
   if(name==='notes'){ currentFolder=null; currentCardView=null; noteEditMode=false; renderNotes(); }
   if(name==='study') renderStudy();
   if(name==='ai'){ activeThreadId=null; aiEditMode=false; renderAI(); }
+  if(name==='settings') renderSettings();
 }
 
 /* ====================================================================
@@ -2097,11 +2227,13 @@ function quickAdd(){
   const inp=document.getElementById('qaInput');
   const term=inp.value.trim();
   if(!term) return;
+  const dup=findExistingTermCard(term);
+  if(dup){ inp.value=''; toast('「'+term+'」は既に登録済みです'); currentCardView=dup.id; return; }
   let inbox = Object.values(state.folders).find(f=>f.name==='受信箱'&&f.parentId===null);
   if(!inbox){ const id=uid(); state.folders[id]={id,name:'受信箱',parentId:null,createdAt:now()}; inbox=state.folders[id]; }
   const id=uid();
   state.cards[id]={id,folderId:inbox.id,term,pron:'',mean:'',exEn:'',exJa:'',other:'',pos:[],
-    srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now()};
+    srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now(),updatedAt:now()};
   save(); inp.value=''; toast('「'+term+'」を受信箱に追加');
   renderHome();
 }
@@ -2114,6 +2246,8 @@ let noteSearch='';
 let noteSearchActive=false;
 let currentCardView=null; // card id when viewing detail
 let noteEditMode=false;
+let noteSelectMode=false;   // 複数選択モード（一括移動・一括削除用）
+let noteSelectedIds=new Set();
 
 function renderNotes(){
   const v=document.getElementById('view-notes');
@@ -2129,7 +2263,7 @@ function renderNotes(){
   const folders=childFolders(currentFolder);
   const cards=folderCards(currentFolder);
   const hasItems = folders.length+cards.length>0;
-  if(noteSearch) noteEditMode=false;
+  if(noteSearch){ noteEditMode=false; noteSelectMode=false; }
 
   let body;
   if(noteSearch){
@@ -2144,6 +2278,9 @@ function renderNotes(){
       `<div class="empty">${I.search}<div class="t">見つかりません</div><div class="d">別のキーワードで試してください</div></div>`;
   } else if(!hasItems){
     body=`<div class="empty">${I.inbox}<div class="t">まだ空です</div><div class="d">右上の「追加」から<br>フォルダやカードを作成しましょう</div></div>`;
+  } else if(noteSelectMode){
+    body=`<div class="list">${cards.map(cardRowSelect).join('')}</div>
+      ${!cards.length?`<div style="text-align:center;color:var(--ink-3);font-size:.74rem;margin-top:14px">このフォルダに選択できるカードがありません</div>`:''}`;
   } else if(noteEditMode){
     body=`
       ${folders.length?`<div class="list" id="folderList">${folders.map(folderRowEdit).join('')}</div>`:''}
@@ -2157,18 +2294,29 @@ function renderNotes(){
   }
 
   const atRoot = !currentFolder;
+  const selCount=noteSelectedIds.size;
   v.innerHTML=`
     <div class="topbar"><h1>ノート</h1></div>
     <div class="searchbar">${I.search}<input placeholder="単語・意味・品詞を検索" value="${esc(noteSearch)}" onfocus="noteSearchActive=true" oninput="noteSearch=this.value;renderNotes()" />${noteSearch?`<button onclick="noteSearch='';noteSearchActive=false;renderNotes()" style="color:var(--ink-3)">✕</button>`:''}</div>
     ${noteSearch?'':`<div class="note-actions">
-      ${noteEditMode
-        ? `<button class="btn btn-primary" onclick="noteEditMode=false;renderNotes()">完了</button>`
-        : `<button class="btn btn-ghost" onclick="goUpFolder()" ${atRoot?'disabled style="opacity:.4"':''}>${I.back} 戻る</button>`}
+      ${noteSelectMode
+        ? `<button class="btn btn-ghost" onclick="cancelNoteSelect()">キャンセル</button>`
+        : (noteEditMode
+          ? `<button class="btn btn-primary" onclick="noteEditMode=false;renderNotes()">完了</button>`
+          : `<button class="btn btn-ghost" onclick="goUpFolder()" ${atRoot?'disabled style="opacity:.4"':''}>${I.back} 戻る</button>`)}
       <div style="flex:1"></div>
-      ${(hasItems&&!noteEditMode)?`<button class="btn btn-ghost" onclick="noteEditMode=true;renderNotes()">編集</button>`:''}
-      <button class="btn btn-primary" onclick="openAddMenu()">${I.plus} 追加</button>
+      ${(hasItems&&!noteEditMode&&!noteSelectMode&&cards.length)?`<button class="btn btn-ghost" onclick="noteSelectMode=true;noteSelectedIds=new Set();renderNotes()">選択</button>`:''}
+      ${(hasItems&&!noteEditMode&&!noteSelectMode)?`<button class="btn btn-ghost" onclick="noteEditMode=true;renderNotes()">編集</button>`:''}
+      ${noteSelectMode?'':`<button class="btn btn-primary" onclick="openAddMenu()">${I.plus} 追加</button>`}
     </div>`}
-    ${(noteSearch||noteEditMode)?'':crumbs}
+    ${(noteSearch||noteEditMode||noteSelectMode)?'':crumbs}
+    ${noteSelectMode?`<div style="display:flex;align-items:center;gap:8px;margin:2px 0 12px;font-size:.82rem;color:var(--ink-2)">
+      <span>${selCount}件選択中</span>
+      <button class="btn btn-ghost" style="padding:6px 12px;font-size:.78rem" onclick="toggleSelectAllNotes()">${(cards.length&&selCount===cards.length)?'全解除':'全選択'}</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-ghost" style="padding:6px 12px;font-size:.78rem" ${selCount?'':'disabled style="opacity:.4;padding:6px 12px;font-size:.78rem"'} onclick="openBulkMove()">${I.movef} 移動</button>
+      <button class="btn btn-ghost" style="padding:6px 12px;font-size:.78rem;color:#c0564f" ${selCount?'':'disabled style="opacity:.4;padding:6px 12px;font-size:.78rem;color:#c0564f"'} onclick="bulkDeleteSelected()">${I.trash} 削除</button>
+    </div>`:''}
     ${body}`;
   const si=v.querySelector('.searchbar input'); if((noteSearch||noteSearchActive)&&si){ si.focus(); si.setSelectionRange(si.value.length,si.value.length); }
   if(noteEditMode && !noteSearch){
@@ -2221,6 +2369,61 @@ function cardRowEdit(c){
       <div class="drag-handle" aria-label="並び替え">${I.grip}</div>
     </div>
   </div>`;
+}
+// ===== 複数選択 → 一括移動・一括削除 =====
+function cardRowSelect(c){
+  const isText=c.type==='text';
+  const checked=noteSelectedIds.has(c.id);
+  const title = isText?(c.diary?(esc(c.title)||'(無題)'):(c.memo?(esc((c.body||'').slice(0,30))||'(空のメモ)'):(esc(c.title)||'(無題)'))):esc(c.term);
+  const sub = isText
+    ? (c.diary?('📔 英語日記 ・ '+esc(c.diaryDate||'')) : (esc((c.body||'').slice(0,40))||'<span style=color:var(--ink-3)>本文なし</span>'))
+    : (esc(c.mean)||'<span style=color:var(--ink-3)>意味は未入力</span>');
+  return `<div class="card-row" style="cursor:pointer" onclick="toggleNoteSelect('${c.id}')">
+    <div class="ico" style="width:26px;height:26px;border-radius:7px;border:2px solid ${checked?'var(--green)':'var(--line)'};background:${checked?'var(--green)':'transparent'};color:#fff;display:grid;place-items:center;flex-shrink:0">${checked?'✓':''}</div>
+    <div class="term-wrap" style="margin-left:10px">
+      <div class="term"${isText?' style="font-family:var(--font-jp);font-size:1rem"':''}>${title}</div>
+      <div class="mean">${sub}</div>
+    </div>
+  </div>`;
+}
+function toggleNoteSelect(id){ if(noteSelectedIds.has(id)) noteSelectedIds.delete(id); else noteSelectedIds.add(id); renderNotes(); }
+function toggleSelectAllNotes(){
+  const cards=folderCards(currentFolder);
+  if(cards.length && noteSelectedIds.size===cards.length){ noteSelectedIds=new Set(); }
+  else { noteSelectedIds=new Set(cards.map(c=>c.id)); }
+  renderNotes();
+}
+function cancelNoteSelect(){ noteSelectMode=false; noteSelectedIds=new Set(); renderNotes(); }
+function openBulkMove(){
+  if(!noteSelectedIds.size) return;
+  const exclude=new Set();
+  const all=Object.values(state.folders).filter(f=>!exclude.has(f.id));
+  const path=f=>{ let names=[],x=f; while(x){ names.unshift(x.name); x=x.parentId?state.folders[x.parentId]:null; } return names.join(' › '); };
+  all.sort((a,b)=>path(a).localeCompare(path(b),'ja'));
+  const rowH=(val,label,depth)=>`<div class="deck-row" onclick="doBulkMove('${val}')">
+      <div class="ico" style="width:34px;height:34px;border-radius:9px;background:var(--green-soft);color:var(--green);display:grid;place-items:center;margin-left:${depth*14}px">${I.folder}</div>
+      <div class="meta"><div class="nm">${esc(label)}</div></div><span class="chev">${I.chev}</span></div>`;
+  const list=[ rowH('', '最上位（ルート）', 0) ].concat(all.map(f=>rowH(f.id, f.name, folderDepth(f.id))));
+  openModal(`
+    <h2>移動先を選ぶ</h2>
+    <p class="d" style="margin:0 0 12px;font-size:.85rem">選択した${noteSelectedIds.size}件の移動先フォルダを選んでください。</p>
+    <div class="deck-pick" style="max-height:50vh;overflow:auto">${list.join('')}</div>
+    <div class="modal-actions" style="margin-top:14px"><button class="btn btn-ghost" onclick="closeModal()">キャンセル</button></div>`);
+}
+function doBulkMove(dest){
+  const target=dest||null;
+  noteSelectedIds.forEach(id=>{ if(state.cards[id]) state.cards[id].folderId=target; });
+  const n=noteSelectedIds.size;
+  save(); closeModal(); cancelNoteSelect();
+  toast(n+'件を移動しました');
+}
+function bulkDeleteSelected(){
+  if(!noteSelectedIds.size) return;
+  if(!confirm('選択した'+noteSelectedIds.size+'件を削除しますか？')) return;
+  const n=noteSelectedIds.size;
+  noteSelectedIds.forEach(id=>{ delete state.cards[id]; });
+  save(); cancelNoteSelect();
+  toast(n+'件を削除しました');
 }
 function folderDepth(fid){ let d=0,f=state.folders[fid]; while(f&&f.parentId){ d++; f=state.folders[f.parentId]; } return d; }
 function openMoveTo(id, kind){
@@ -2292,8 +2495,8 @@ function saveText(id){
   const body=document.getElementById('tBody').value.trim();
   if(!title && !body){ toast('タイトルか本文を入力してください'); return; }
   const folderId=document.getElementById('tFolder').value;
-  if(id){ Object.assign(state.cards[id], {title, body, folderId, type:'text'}); }
-  else { const nid=uid(); state.cards[nid]={id:nid, type:'text', title, body, folderId, createdAt:now()}; }
+  if(id){ Object.assign(state.cards[id], {title, body, folderId, type:'text', updatedAt:now()}); }
+  else { const nid=uid(); state.cards[nid]={id:nid, type:'text', title, body, folderId, createdAt:now(), updatedAt:now()}; }
   save(); closeModal();
   if(currentTab==='notes'){ if(id && !noteEditMode) currentCardView=id; renderNotes(); } else if(currentTab==='ai'){ renderAI(); } else renderHome();
   toast('ノートに保存しました');
@@ -2317,8 +2520,8 @@ function saveMemo(id){
   const body=document.getElementById('mBody').value.trim();
   if(!body){ toast('メモを入力してください'); return; }
   const folderId=document.getElementById('mFolder').value;
-  if(id){ Object.assign(state.cards[id], {body, folderId, type:'text', memo:true, title:''}); }
-  else { const nid=uid(); state.cards[nid]={id:nid, type:'text', memo:true, title:'', body, folderId, createdAt:now()}; }
+  if(id){ Object.assign(state.cards[id], {body, folderId, type:'text', memo:true, title:'', updatedAt:now()}); }
+  else { const nid=uid(); state.cards[nid]={id:nid, type:'text', memo:true, title:'', body, folderId, createdAt:now(), updatedAt:now()}; }
   save(); closeModal();
   if(currentTab==='notes'){ if(id && !noteEditMode) currentCardView=id; renderNotes(); } else renderHome();
   toast('メモを保存しました');
@@ -2374,8 +2577,8 @@ function saveDiary(id){
   const ja=document.getElementById('dJa').value.trim();
   if(!title && !en && !enFixed){ toast('タイトルか英文を入力してください'); return; }
   const folderId=document.getElementById('dFolder').value;
-  if(id){ Object.assign(state.cards[id], {type:'text', diary:true, diaryDate, title, en, enFixed, ja, folderId}); }
-  else { const nid=uid(); state.cards[nid]={id:nid, type:'text', diary:true, diaryDate, title, en, enFixed, ja, folderId, createdAt:now()}; }
+  if(id){ Object.assign(state.cards[id], {type:'text', diary:true, diaryDate, title, en, enFixed, ja, folderId, updatedAt:now()}); }
+  else { const nid=uid(); state.cards[nid]={id:nid, type:'text', diary:true, diaryDate, title, en, enFixed, ja, folderId, createdAt:now(), updatedAt:now()}; }
   save(); closeModal();
   if(currentTab==='notes'){ if(id && !noteEditMode) currentCardView=id; renderNotes(); } else if(currentTab==='ai'){ renderAI(); } else renderHome();
   toast('英語日記を保存しました');
@@ -2584,6 +2787,11 @@ function folderSelectOptions(sel){
   walk(null,0);
   return html;
 }
+function findExistingTermCard(term, excludeId){
+  const norm=String(term||'').trim().toLowerCase();
+  if(!norm) return null;
+  return Object.values(state.cards).find(c=>c && c.type!=='text' && c.id!==excludeId && String(c.term||'').trim().toLowerCase()===norm) || null;
+}
 function saveCard(id){
   const term=document.getElementById('cTerm').value.trim();
   if(!term){ toast('単語を入力してください'); return; }
@@ -2597,8 +2805,20 @@ function saveCard(id){
     other:document.getElementById('cOther').value.trim(),
     pos, folderId
   };
-  if(id){ Object.assign(state.cards[id], data); }
-  else { const nid=uid(); state.cards[nid]={id:nid,...data,srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now()}; }
+  if(id){ Object.assign(state.cards[id], data, {updatedAt:now()}); }
+  else {
+    const dup=findExistingTermCard(term);
+    if(dup){
+      ['pron','mean','exEn','exJa','other'].forEach(k=>{ if(!dup[k] && data[k]) dup[k]=data[k]; });
+      if(data.pos.length && (!dup.pos||!dup.pos.length)) dup.pos=data.pos;
+      dup.updatedAt=now();
+      save(); closeModal();
+      if(currentTab==='notes'){ currentCardView=dup.id; renderNotes(); } else renderHome();
+      toast('「'+term+'」は既に登録済みでした。内容を統合しました');
+      return;
+    }
+    const nid=uid(); state.cards[nid]={id:nid,...data,srs:{state:'new',due:now(),interval:0,ease:2.5,reps:0,lapses:0},createdAt:now(),updatedAt:now()};
+  }
   save(); closeModal();
   if(currentTab==='notes'){ if(id && !noteEditMode) currentCardView=id; renderNotes(); } else if(currentTab==='ai'){ renderAI(); } else renderHome();
   toast('ノートに保存しました');
@@ -3328,8 +3548,13 @@ function renderStudySession(){
 function saveCurrentStudyCard(){ const c=session&&session.items[session.qi]; if(c){ const o={term:c.term, mean:c.mean, pron:c.pron, exEn:c.exEn, exJa:c.exJa, pos:c.pos, other:c.other}; saveItemAsCard(o, isIdiomTerm(o)?'idiom':'word'); } }
 // ===== メモ（term基準でユーザーメモを保存）=====
 function memoKey(c){ return 'm|'+String((c&&c.term)||'').toLowerCase(); }
-function getMemo(c){ return (state.memos&&state.memos[memoKey(c)])||''; }
-function setMemoFor(c,txt){ if(!state.memos) state.memos={}; const k=memoKey(c); txt=String(txt||'').trim(); if(txt) state.memos[k]=txt; else delete state.memos[k]; save(); }
+function getMemo(c){ const v=state.memos&&state.memos[memoKey(c)]; if(!v) return ''; return typeof v==='string' ? v : (v.text||''); }
+function setMemoFor(c,txt){
+  if(!state.memos) state.memos={};
+  const k=memoKey(c); txt=String(txt||'').trim();
+  if(txt) state.memos[k]={text:txt, updatedAt:now()}; else delete state.memos[k];
+  save();
+}
 function onStudyMemoInput(el){ const c=session&&session.items[session.qi]; if(c) setMemoFor(c, el.value); }
 // ===== ブックマーク（ノートの「ブックマーク」フォルダに保存）=====
 function isBookmarked(term){ const f=Object.values(state.folders).find(x=>x.name==='ブックマーク'&&x.parentId===null); if(!f) return false; return Object.values(state.cards).some(c=>c.type!=='text'&&c.folderId===f.id&&String(c.term||'').toLowerCase()===String(term||'').toLowerCase()); }
