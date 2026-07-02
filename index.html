@@ -915,7 +915,7 @@ const PUSH = { vapidPublicKey:'BLzqM9-aezCcp-zELFMvrE3jKyuPc56qaCKf1C5GHQcht6C67
 // English Lab（精密レベル診断）連携。URLを設定すると診断結果画面にリンクを表示
 const EN_LAB = { url:'' };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-26';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-28';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -969,10 +969,10 @@ async function cloudInit(){
       const was=loggedIn(); account.user=session?session.user:null; _authReady=true;
       if(loggedIn() && state) state.guest=false;
       try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){}
-      if(_e!=='INITIAL_SESSION' && !was && loggedIn() && !authRecovery){ setTimeout(()=>{ cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }, 0); }
+      if(_e!=='INITIAL_SESSION' && !was && loggedIn() && !authRecovery){ setTimeout(()=>{ cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); relinkPushUser(); }, 0); }
     });
     const { data } = await _sb.auth.getSession();
-    if(data && data.session && !authRecovery) account.user=data.session.user;
+    if(data && data.session && !authRecovery){ account.user=data.session.user; relinkPushUser(); }
     _authReady=true; renderAuthGate();
     if(_authLanding && !authRecovery){
       const lp=_authLanding; _authLanding=null;
@@ -1140,7 +1140,7 @@ async function authSignIn(){
   if(!_sb){ toast('準備中です。少し待って再度お試しください（通信環境をご確認ください）'); return; }
   try{ const { data, error }=await _sb.auth.signInWithPassword({ email:em, password:pw }); if(error) throw error;
     authView='menu';
-    if(data&&data.user){ account.user=data.user; state.guest=false; _authReady=true; try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){} cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); track('auth_login'); }
+    if(data&&data.user){ account.user=data.user; state.guest=false; _authReady=true; try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){} cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); track('auth_login'); relinkPushUser(); }
   }
   catch(e){ const m=(e.message||'');
     if(/confirm/i.test(m)){ authDraftEmail=em; authView='sent'; renderSettings(); toast('メール認証が未完了です。確認メールのリンクをタップしてください'); return; }
@@ -1750,6 +1750,7 @@ function diagPick(i){
   renderDiag();
   setTimeout(()=>{
     if(!diagS) return;
+    if(!document.getElementById('modalBg').classList.contains('open')){ diagS=null; return; } // ユーザーが閉じた → 診断を中断
     diagS.idx++; diagS.picked=null;
     if(diagS.idx>=diagS.qs.length) diagFinish(); else renderDiag();
   }, 620);
@@ -4865,6 +4866,7 @@ async function authVerifyRegister(){
     try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){}
     cloudPull(); if(STRIPE.enabled) syncPlanFromServer();
     track('auth_signup');
+    relinkPushUser();
     toast('登録が完了しました');
   }catch(e){ const m=(e.message||'')+'';
     if(/expired|invalid|token|otp|not found/i.test(m)) toast('認証コードが正しくないか期限切れです。再送してお試しください');
@@ -4954,6 +4956,38 @@ async function applyReferralCode(){
     state.referral.usedCode=code; save(); toast('招待コードを適用しました'); renderSettings();
   }catch(e){ toast('適用に失敗：'+(e.message||'')); }
 }
+// ログイン後、この端末のプッシュ購読に user_id を紐付け直す（通知文言のパーソナライズ用）
+async function relinkPushUser(){
+  try{
+    if(!loggedIn() || !_sb || !('serviceWorker' in navigator)) return;
+    const reg=await navigator.serviceWorker.getRegistration(); if(!reg) return;
+    const sub=await reg.pushManager.getSubscription(); if(!sub) return;
+    await _sb.from('push_subs').update({ user_id:account.user.id }).eq('endpoint',sub.endpoint);
+  }catch(_){ }
+}
+// ===== 招待コードのシェア =====
+function referralShareText(){
+  const code=state.referral&&state.referral.myCode;
+  return `英語学習アプリ「Sprout🌱」を一緒に使いませんか？\n単語・瞬間英作文・AI添削がぜんぶ入って月980円から。\n招待コード「${code}」を登録時に入力してね！\nhttps://app.sproutenglish.jp`;
+}
+function shareReferralX(){
+  const t=encodeURIComponent(referralShareText());
+  window.open('https://twitter.com/intent/tweet?text='+t,'_blank','noopener');
+  track('referral_share',{via:'x'});
+}
+function shareReferralLine(){
+  const t=encodeURIComponent(referralShareText());
+  window.open('https://line.me/R/share?text='+t,'_blank','noopener');
+  track('referral_share',{via:'line'});
+}
+async function shareReferralNative(){
+  const text=referralShareText();
+  try{
+    if(navigator.share){ await navigator.share({ text }); track('referral_share',{via:'native'}); return; }
+  }catch(e){ if(e && e.name==='AbortError') return; }
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(text).then(()=>toast('紹介文をコピーしました'),()=>toast('コピーできませんでした')); }
+  else toast('この環境では共有できません');
+}
 function referralBoxHtml(){
   const r=state.referral||{}; const pct=referralDiscountPct(); const paid=selfPaid();
   const active=paid && pct>0;
@@ -4968,6 +5002,11 @@ function referralBoxHtml(){
     </div>
     <div class="field" style="margin-top:14px"><label>あなたの招待コード</label>
       ${r.myCode?`<div class="key-set"><span class="lbl" style="font-family:var(--font-en);font-weight:700;letter-spacing:.05em">${esc(r.myCode)}</span><button class="btn btn-ghost" style="padding:7px 13px" onclick="navigator.clipboard&&navigator.clipboard.writeText('${esc(r.myCode)}');toast('コピーしました')">コピー</button></div>
+      <div style="display:flex;gap:8px;margin-top:9px">
+        <button class="btn" style="flex:1;padding:10px 0;font-size:.84rem" onclick="shareReferralX()">𝕏 でシェア</button>
+        <button class="btn" style="flex:1;padding:10px 0;font-size:.84rem;color:#06C755;border-color:#06C755" onclick="shareReferralLine()">LINE で送る</button>
+        <button class="btn" style="flex:1;padding:10px 0;font-size:.84rem" onclick="shareReferralNative()">その他…</button>
+      </div>
       <div class="d">友達にこのコードを使ってもらい、その人が有料プランになると、あなたの割引が5%増えます（最大25%）。</div>`
       :`<div style="display:flex;gap:8px"><input id="myCodeInput" placeholder="好きなコード（英数字4〜20）" style="flex:1" /><button class="btn btn-primary" style="padding:10px 16px" onclick="claimReferralCode()">発行</button></div>
       <div class="d">重複していなければ、好きな文字列を設定できます。</div>`}
