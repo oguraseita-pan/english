@@ -866,6 +866,7 @@ function normalizeState(){
   if(!state.history || typeof state.history!=='object') state.history = {compo:[],speech:[]};
   if(!state.billing || typeof state.billing!=='object') state.billing = {plan:'free', term:null, since:null, card:null};
   if(!state.referral || typeof state.referral!=='object') state.referral = {myCode:null, usedCode:null, referredCount:0};
+  if(!state.diag || typeof state.diag!=='object') state.diag = {done:false, level:null, at:null, score:null}; // レベル診断結果
   if(!state.compoSrs || typeof state.compoSrs!=='object') state.compoSrs = {}; // 瞬間英作文の忘却曲線（誤答プール）
   if(!Array.isArray(state.history.compo)) state.history.compo=[];
   if(!Array.isArray(state.history.speech)) state.history.speech=[];
@@ -909,8 +910,12 @@ const CLOUD = { url:'https://lfjlrokehorsnfaytkgx.supabase.co', anonKey:'sb_publ
 // Stripe本番フラグ。create-checkout / stripe-webhook をデプロイし、Price IDを設定したら true に。
 // false の間は従来どおりデモ課金画面（実決済なし）。
 const STRIPE = { enabled:true };
+// Web Push（学習リマインダー）。VAPID公開鍵を設定すると設定画面から通知をオンにできる
+const PUSH = { vapidPublicKey:'' };
+// English Lab（精密レベル診断）連携。URLを設定すると診断結果画面にリンクを表示
+const EN_LAB = { url:'' };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-24';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-25';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -1135,7 +1140,7 @@ async function authSignIn(){
   if(!_sb){ toast('準備中です。少し待って再度お試しください（通信環境をご確認ください）'); return; }
   try{ const { data, error }=await _sb.auth.signInWithPassword({ email:em, password:pw }); if(error) throw error;
     authView='menu';
-    if(data&&data.user){ account.user=data.user; state.guest=false; _authReady=true; try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){} cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); }
+    if(data&&data.user){ account.user=data.user; state.guest=false; _authReady=true; try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){} cloudPull(); if(STRIPE.enabled) syncPlanFromServer(); track('auth_login'); }
   }
   catch(e){ const m=(e.message||'');
     if(/confirm/i.test(m)){ authDraftEmail=em; authView='sent'; renderSettings(); toast('メール認証が未完了です。確認メールのリンクをタップしてください'); return; }
@@ -1235,6 +1240,21 @@ function seed(){
 
 /* ---------- helpers ---------- */
 function esc(s){ return (s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+// ===== 匿名イベント計測（Supabase eventsテーブルへ送信。失敗は無視・オフラインでは何もしない）=====
+function deviceId(){ try{ let d=localStorage.getItem('sprout_did'); if(!d){ d=uid(); localStorage.setItem('sprout_did',d); } return d; }catch(_){ return 'unknown'; } }
+function track(name, props){
+  try{
+    if(!cloudConfigured() || location.protocol==='file:') return;
+    fetch(CLOUD.url+'/rest/v1/events',{ method:'POST', keepalive:true,
+      headers:{ 'apikey':CLOUD.anonKey, 'Authorization':'Bearer '+CLOUD.anonKey, 'Content-Type':'application/json', 'Prefer':'return=minimal' },
+      body:JSON.stringify({ device_id:deviceId(), user_id:(typeof account!=='undefined'&&account.user&&account.user.id)||null, build:APP_BUILD, name, props:props||{} })
+    }).catch(()=>{});
+  }catch(_){ }
+}
+// 1日1回だけ送る系（機能利用・学習日）
+function featOnce(kind){ try{ const k='sprout_feat_'+todayStr(); const o=JSON.parse(localStorage.getItem(k)||'{}'); if(o[kind]) return; o[kind]=1; localStorage.setItem(k,JSON.stringify(o)); track('feature',{kind}); }catch(_){ } }
+function trackStudyDayOnce(){ try{ const k='sprout_sd_'+todayStr(); if(localStorage.getItem(k)) return; localStorage.setItem(k,'1'); track('study_day',{streak:(state.stats&&state.stats.streak)||0}); }catch(_){ } }
+function cleanupDailyFlags(){ try{ const today=todayStr(); const rm=[]; for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i); if(k && (k.startsWith('sprout_feat_')||k.startsWith('sprout_sd_')) && !k.endsWith(today)) rm.push(k); } rm.forEach(k=>localStorage.removeItem(k)); }catch(_){ } }
 function spkBtn(text,size){ size=size||30; return `<button class="spk" style="display:inline-grid;vertical-align:middle;width:${size}px;height:${size}px" onclick='speak(${esc(JSON.stringify(String(text||"")))})' aria-label="読み上げ">${I.speaker}</button>`; }
 
 /* ---------- generic drag-to-reorder (pointer: touch+mouse) ---------- */
@@ -1660,7 +1680,7 @@ async function submitDiary(){
   diaryS.text=text;
   // 保存（添削なしでもノートに残す）
   saveDiaryCard();
-  markStudyDay();
+  markStudyDay('diary');
   if(!aiReady()){ toast('保存しました（AIをオンにすると添削できます）'); finishDiary(); return; }
   diaryS.loading=true; renderDiary();
   try{
@@ -1680,6 +1700,98 @@ function saveDiaryCard(){
 }
 function finishDiary(){ saveDiaryCard(); recordTime(); diaryS=null; setTab('home'); renderHome(); toast('英語日記を保存しました'); }
 function exitDiary(){ if(diaryS && (diaryS.text||'').trim()) saveDiaryCard(); recordTime(); diaryS=null; setTab('home'); renderHome(); }
+
+// ===== レベル診断（12問ミニテスト → 目標レベルを自動設定）=====
+let diagS=null;
+function _shuf(a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function diagPool(lv){ const c=PRESET_LIB.find(x=>x.id==='daily'); const l=c&&c.levels.find(x=>x.id===lv); return l?l.words:[]; }
+function buildDiagQs(){
+  const qs=[];
+  ['a2','b1','b2','c1'].forEach(lv=>{
+    const pool=_shuf(diagPool(lv).slice());
+    pool.slice(0,3).forEach(w=>{
+      const ds=_shuf(pool.slice(3).filter(x=>x[1]!==w[1]).slice(0,24)).slice(0,3).map(x=>x[1]);
+      const opts=_shuf([w[1],...ds]);
+      qs.push({ lv, term:w[0], ans:w[1], opts });
+    });
+  });
+  return qs;
+}
+function startDiag(){ closeModal(); diagS={ qs:buildDiagQs(), idx:0, score:{a2:0,b1:0,b2:0,c1:0}, picked:null }; renderDiag(); }
+function renderDiag(){
+  if(!diagS) return;
+  const q=diagS.qs[diagS.idx];
+  const n=diagS.qs.length;
+  const pct=Math.round(diagS.idx/n*100);
+  openModal(`
+    <h2 style="margin-bottom:4px">レベル診断</h2>
+    <div style="font-size:.76rem;color:var(--ink-3);margin-bottom:10px">${diagS.idx+1} / ${n} 問 ・ 意味が近いものを選んでください</div>
+    <div style="height:6px;border-radius:3px;background:var(--line);overflow:hidden;margin-bottom:16px"><div style="height:100%;width:${pct}%;background:var(--green);border-radius:3px"></div></div>
+    <div style="font-family:Fraunces,serif;font-size:1.7rem;font-weight:600;text-align:center;margin:6px 0 16px">${esc(q.term)}</div>
+    <div style="display:grid;gap:9px">
+      ${q.opts.map((o,i)=>{
+        let st='';
+        if(diagS.picked!=null){
+          if(o===q.ans) st='border-color:var(--green);background:var(--green-soft);';
+          else if(i===diagS.picked) st='border-color:#c0564f;background:#f7e6e4;';
+          else st='opacity:.55;';
+        }
+        return `<button class="btn" style="justify-content:flex-start;text-align:left;padding:12px 14px;${st}" onclick="diagPick(${i})">${esc(o)}</button>`;
+      }).join('')}
+    </div>
+    <div style="font-size:.72rem;color:var(--ink-3);margin-top:14px;text-align:center">わからない場合は勘で選んでOK。約3分で終わります。</div>
+  `);
+}
+function diagPick(i){
+  if(!diagS || diagS.picked!=null) return;
+  const q=diagS.qs[diagS.idx];
+  diagS.picked=i;
+  if(q.opts[i]===q.ans) diagS.score[q.lv]++;
+  renderDiag();
+  setTimeout(()=>{
+    if(!diagS) return;
+    diagS.idx++; diagS.picked=null;
+    if(diagS.idx>=diagS.qs.length) diagFinish(); else renderDiag();
+  }, 620);
+}
+function diagCefr(){
+  const s=diagS.score; let lvl='A2';
+  if(s.a2>=2){ lvl='B1'; if(s.b1>=2){ lvl='B2'; if(s.b2>=2){ lvl='C1'; } } }
+  return lvl;
+}
+function diagLevelForGoal(goal, cefr){
+  const c=String(cefr).toLowerCase();
+  if(goal==='daily'||goal==='business') return cefr.toUpperCase();
+  const ids=levelIdsFor(goal);
+  const hit=ids.find(id=>EXAM_TO_CEFR[id]===c);
+  return hit || ids[0];
+}
+function diagFinish(){
+  const lvl=diagCefr(); const s=diagS.score;
+  state.diag={ done:true, level:lvl, at:now(), score:s };
+  const setLv=diagLevelForGoal(state.settings.goal, lvl);
+  state.settings.goalLevel=setLv; state.settings.goalLevelAnchor=setLv;
+  save();
+  track('diag_done',{ level:lvl, a2:s.a2, b1:s.b1, b2:s.b2, c1:s.c1 });
+  const NAME={A2:'A2 初級',B1:'B1 中級',B2:'B2 中上級',C1:'C1 上級'};
+  openModal(`
+    <h2>診断結果</h2>
+    <div style="text-align:center;margin:14px 0 6px">
+      <div style="font-family:Fraunces,serif;font-size:2.1rem;font-weight:700;color:var(--green)">${NAME[lvl]||lvl}</div>
+      <div style="font-size:.8rem;color:var(--ink-2);margin-top:4px">あなたにおすすめの学習レベルです</div>
+    </div>
+    <div style="display:flex;justify-content:center;gap:14px;margin:14px 0;font-size:.76rem;color:var(--ink-2)">
+      <span>A2 ${s.a2}/3</span><span>B1 ${s.b1}/3</span><span>B2 ${s.b2}/3</span><span>C1 ${s.c1}/3</span>
+    </div>
+    <div style="background:var(--green-soft);border-radius:12px;padding:11px 13px;font-size:.78rem;color:var(--ink-2);line-height:1.6;margin-bottom:10px">
+      「${goalLabel()}」の学習レベルを <b>${goalLevelLabel()||setLv}</b> に設定しました。ホームの「本日の単語・熟語」からすぐ始められます。設定はいつでも変更できます。
+    </div>
+    ${EN_LAB.url?`<a class="btn full" style="margin-bottom:9px" href="${EN_LAB.url}" target="_blank" rel="noopener">より精密な診断（English Lab）を受ける</a>`:`<div style="font-size:.72rem;color:var(--ink-3);margin-bottom:10px;text-align:center">有料プランでは毎月、精密レベル診断（English Lab）を受けられるようになる予定です。</div>`}
+    <button class="btn btn-primary full" style="padding:13px" onclick="closeModal();renderHome();if(currentTab==='settings')renderSettings()">この設定で始める</button>
+    <button class="btn full" style="margin-top:8px" onclick="startDiag()">もう一度診断する</button>
+  `);
+  diagS=null;
+}
 
 function renderHome(){
   syncGoalLevel();
@@ -1724,6 +1836,15 @@ function renderHome(){
         <div style="font-size:.72rem;color:var(--ink-3);line-height:1.45">データはこの端末のみに保存され、他端末と同期されません。AI機能・継続割引・紹介割引は使用できません。</div>
       </div>
       <span class="btn btn-primary" style="padding:7px 15px;font-size:.82rem;white-space:nowrap">ログイン</span>
+    </div>`:''}
+
+    ${!(state.diag&&state.diag.done)?`<div class="guest-banner" onclick="startDiag()" style="display:flex;align-items:center;gap:11px;background:var(--green-soft);border:1px solid var(--green);border-radius:13px;padding:11px 13px;margin:2px 0 16px;cursor:pointer">
+      <span style="font-size:1.15rem;line-height:1">🧭</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:.9rem;color:var(--ink)">３分でレベル診断</div>
+        <div style="font-size:.72rem;color:var(--ink-3);line-height:1.45">12問のミニテストで、あなたに合う単語レベルを自動設定します。</div>
+      </div>
+      <span class="btn btn-primary" style="padding:7px 15px;font-size:.82rem;white-space:nowrap">診断する</span>
     </div>`:''}
 
     <div class="section-title">本日の学習</div>
@@ -3226,9 +3347,10 @@ function updateStreak(){
   else state.stats.streak=1;
   state.stats.lastStudy=t;
   _streakJustUp=true;
+  trackStudyDayOnce();
 }
 // その日を「学習した日」として記録し連続記録を更新（フラッシュカード以外の学習からも呼ぶ）
-function markStudyDay(){ const d=todayStr(); if(!state.stats.reviews) state.stats.reviews={}; state.stats.reviews[d]=(state.stats.reviews[d]||0)+1; updateStreak(); save(); }
+function markStudyDay(kind){ const d=todayStr(); if(!state.stats.reviews) state.stats.reviews={}; state.stats.reviews[d]=(state.stats.reviews[d]||0)+1; updateStreak(); if(kind) featOnce(kind); save(); }
 function endSessionEarly(){ recordTime(); const home=session&&session.fromHome; session=null; if(home){ setTab('home'); renderHome(); } else renderStudy(); }
 
 /* ---------- Quiz ---------- */
@@ -3336,7 +3458,7 @@ async function startReading(){
     reading.title=o.title||''; reading.en=String(o.en); reading.ja=o.ja||'';
     reading.words=Array.isArray(o.words)?o.words.filter(w=>w&&w.term):[];
     reading.stage='read';
-    markStudyDay();
+    markStudyDay('reading');
   }catch(err){
     const m=(err&&err.message)||'';
     toast('生成に失敗: '+(/NO_SESSION|auth/i.test(m)?'ログインが必要':/429/.test(m)?'AI提供側が混雑中（少し待って再試行）':/50[0234]/.test(m)?'サーバー混雑（再試行を）':/empty|JSON/i.test(m)?'もう一度お試しを':'通信エラー'));
@@ -3704,7 +3826,7 @@ function nextCompo(){
     recordCompoSrs(it, verdict);
     compoProgSet(compoSig(it.jp,it.en), verdict==='○');
     incDaily('compo');
-    markStudyDay();
+    markStudyDay('compo');
   }
   stopDictation();
   compo.idx++; compo.revealed=false; compo.verdict=null; compo.fb=null; compo.checking=false; compo.userAns='';
@@ -3982,7 +4104,7 @@ async function gradeSpeech(){
     speech.fb={corrected:'',points:['添削に失敗：'+(/429/.test(m)?'AI提供側が混雑中（少し待って再試行）':/50[0234]/.test(m)?'サーバー混雑':/40[013]/.test(m)?'キーを確認':'通信エラー')],richer:[]};
   }
   speech.phase='result';
-  markStudyDay();
+  markStudyDay('speech');
   pushSpeechHistory();
   renderSpeech();
 }
@@ -4742,6 +4864,7 @@ async function authVerifyRegister(){
     state.guest=false; _authReady=true;
     try{ renderAuthGate(); }catch(_){} try{ rerenderActive(); }catch(_){}
     cloudPull(); if(STRIPE.enabled) syncPlanFromServer();
+    track('auth_signup');
     toast('登録が完了しました');
   }catch(e){ const m=(e.message||'')+'';
     if(/expired|invalid|token|otp|not found/i.test(m)) toast('認証コードが正しくないか期限切れです。再送してお試しください');
@@ -4986,13 +5109,56 @@ async function startStripeCheckout(){
   }catch(e){ toast('通信に失敗しました。接続を確認してください'); }
 }
 /* ---- 決済からの戻り（?checkout=success|cancel）---- */
+// ===== Web Push（学習リマインダー）=====
+function pushSupported(){ return ('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window); }
+function _b64ToU8(s){ const pad='='.repeat((4-s.length%4)%4); const b=(s+pad).replace(/-/g,'+').replace(/_/g,'/'); const raw=atob(b); return Uint8Array.from([...raw].map(c=>c.charCodeAt(0))); }
+async function _pushReg(){ let r=await navigator.serviceWorker.getRegistration(); if(!r) r=await navigator.serviceWorker.register('/sw.js'); await navigator.serviceWorker.ready; return r; }
+async function togglePush(){ if(state.settings.pushOn){ await disablePush(); } else { await enablePush(); } renderSettings(); }
+async function enablePush(){
+  try{
+    if(!PUSH.vapidPublicKey){ toast('通知は現在準備中です（サーバー設定待ち）'); return; }
+    if(!pushSupported()){ toast('この環境では通知を利用できません。ホーム画面に追加したアプリでお試しください'); return; }
+    if(!_sb){ toast('通信の準備中です。少し待って再度お試しください'); return; }
+    const perm=await Notification.requestPermission();
+    if(perm!=='granted'){ toast('通知が許可されませんでした。端末の設定から許可できます'); return; }
+    const reg=await _pushReg();
+    const sub=await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:_b64ToU8(PUSH.vapidPublicKey) });
+    const row={ endpoint:sub.endpoint, sub:sub.toJSON(), user_id:(account.user&&account.user.id)||null, hour:(state.settings.pushHour??20), tzoff:-new Date().getTimezoneOffset(), enabled:true };
+    const { error }=await _sb.from('push_subs').upsert(row,{ onConflict:'endpoint' });
+    if(error) throw error;
+    state.settings.pushOn=true; save();
+    track('push_on',{hour:row.hour});
+    toast('学習リマインダーをオンにしました 🔔');
+  }catch(e){ toast('通知の設定に失敗：'+((e&&e.message)||'不明なエラー')); }
+}
+async function disablePush(){
+  try{
+    const reg=await navigator.serviceWorker.getRegistration();
+    const sub=reg && await reg.pushManager.getSubscription();
+    if(sub){ try{ if(_sb) await _sb.from('push_subs').delete().eq('endpoint',sub.endpoint); }catch(_){ } try{ await sub.unsubscribe(); }catch(_){ } }
+    state.settings.pushOn=false; save();
+    track('push_off');
+    toast('学習リマインダーをオフにしました');
+  }catch(e){ state.settings.pushOn=false; save(); toast('通知をオフにしました'); }
+}
+async function setPushHour(h){
+  state.settings.pushHour=h; save();
+  try{
+    if(state.settings.pushOn && _sb){
+      const reg=await navigator.serviceWorker.getRegistration();
+      const sub=reg && await reg.pushManager.getSubscription();
+      if(sub) await _sb.from('push_subs').update({ hour:h, tzoff:-new Date().getTimezoneOffset() }).eq('endpoint',sub.endpoint);
+    }
+    toast(`通知時刻を ${h}:00 に設定しました`);
+  }catch(_){ }
+}
 function handleCheckoutReturn(search){
   try{
     const q=new URLSearchParams(typeof search==='string'?search:(location.search||''));
     const c=q.get('checkout');
     const pr=q.get('portal');
     if(!c && !pr) return false;
-    if(c==='success'){ toast('決済が完了しました。プランを反映しています…'); if(STRIPE.enabled){ showCheckoutPending(); pollPlanAfterCheckout(); } }
+    if(c==='success'){ toast('決済が完了しました。プランを反映しています…'); track('checkout_success'); if(STRIPE.enabled){ showCheckoutPending(); pollPlanAfterCheckout(); } }
     else if(c==='cancel'){ toast('決済をキャンセルしました'); }
     else if(pr==='return'){ if(STRIPE.enabled) refreshPlanAfterPortal(); }
     q.delete('checkout'); q.delete('portal');
@@ -5395,6 +5561,7 @@ function renderSettings(){
         <select id="setGoalLevel" onchange="state.settings.goalLevel=this.value;state.settings.goalLevelAnchor=this.value;save()">
           ${(GOAL_LEVELS[s.goal]||[]).map(l=>`<option value="${l[0]}" ${s.goalLevel===l[0]?'selected':''}>${l[1]}</option>`).join('')}
         </select></div>
+      <div class="set-row" style="cursor:pointer" onclick="startDiag()"><div><div class="l">レベル診断</div><div class="d">${state.diag&&state.diag.done?`前回の結果：${state.diag.level}（タップで再診断）`:'12問のミニテストで最適なレベルを自動設定'}</div></div><span class="chev" style="color:var(--ink-3)">${I.chev}</span></div>
     </div>
 
     <div class="section-title">1日の目標</div>
@@ -5412,6 +5579,17 @@ function renderSettings(){
           ${[20,30,40,50,60,80].map(n=>`<option value="${n}" ${s.reviewCap===n?'selected':''}>${n}問</option>`).join('')}
           <option value="0" ${(!s.reviewCap||s.reviewCap===0)?'selected':''}>上限なし</option>
         </select></div>
+    </div>
+
+    <div class="section-title">通知</div>
+    <div class="set-group">
+      <div class="set-row"><div><div class="l">学習リマインダー</div><div class="d">${s.pushOn?'オン：毎日決まった時刻に通知します':'オフ：通知は届きません'}</div></div>
+        <button class="btn ${s.pushOn?'':'btn-primary'}" style="padding:8px 14px;font-size:.82rem" onclick="btnBusy(this,togglePush,'設定中…')">${s.pushOn?'オフにする':'オンにする'}</button></div>
+      <div class="set-row"><div><div class="l">通知時刻</div></div>
+        <select onchange="setPushHour(parseInt(this.value))">
+          ${Array.from({length:24},(_,h)=>`<option value="${h}" ${(s.pushHour??20)===h?'selected':''}>${h}:00</option>`).join('')}
+        </select></div>
+      <div style="color:var(--ink-3);font-size:.72rem;margin:8px 4px 2px">iPhoneでは「ホーム画面に追加」したアプリでのみ通知が使えます（iOS 16.4以降）。</div>
     </div>
 
     <div class="section-title">忘却曲線の学習設定</div>
@@ -5778,14 +5956,12 @@ function init(){
   handleCheckoutReturn();
   cloudInit();
   setupAutoUpdate();
-  // register a tiny service worker for offline (best-effort, ignored on file://)
+  // service worker（/sw.js：オフライン用no-op＋プッシュ通知受信）
   if('serviceWorker' in navigator && location.protocol==='https:'){
-    const swCode=`self.addEventListener('install',e=>self.skipWaiting());self.addEventListener('activate',e=>self.clients.claim());self.addEventListener('fetch',()=>{});`;
-    try{
-      const url=URL.createObjectURL(new Blob([swCode],{type:'text/javascript'}));
-      navigator.serviceWorker.register(url).catch(()=>{});
-    }catch(e){}
+    try{ navigator.serviceWorker.register('/sw.js').catch(()=>{}); }catch(e){}
   }
+  cleanupDailyFlags();
+  track('app_open');
 }
 init();
 </script>
