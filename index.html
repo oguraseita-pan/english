@@ -703,6 +703,9 @@ html[data-theme="dark"] .tabbar{background:rgba(28,33,35,.86);}
 .key-set svg{width:16px;height:16px;color:var(--green);}
 .ai-gen-btn{display:inline-flex;align-items:center;gap:6px;font-size:.8rem;font-weight:600;color:var(--green);background:var(--green-soft);padding:6px 11px;border-radius:9px;margin-top:6px;white-space:nowrap;width:max-content;max-width:100%;}
 .ai-gen-btn svg{width:15px;height:15px;flex:none;}
+.ai-bulk-btn{display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-size:.84rem;font-weight:600;color:var(--green-d,var(--green));background:var(--green-soft);padding:11px 14px;border-radius:12px;margin:2px 0 12px;}
+.ai-bulk-btn svg{width:17px;height:17px;flex:none;}
+.ai-bulk-btn .n{margin-left:auto;background:var(--green);color:#fff;font-weight:700;font-size:.76rem;min-width:22px;height:22px;padding:0 7px;border-radius:11px;display:grid;place-items:center;flex:none;}
 .ai-gen-btn:disabled{opacity:.5;}
 
 /* ---------- Toast ---------- */
@@ -1058,7 +1061,7 @@ const PUSH = { vapidPublicKey:'BLzqM9-aezCcp-zELFMvrE3jKyuPc56qaCKf1C5GHQcht6C67
 // English Lab（精密レベル診断）連携。URLを設定すると診断結果画面にリンクを表示
 const EN_LAB = { url:'' };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-36';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-38';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -2298,6 +2301,7 @@ function renderNotes(){
 
   const atRoot = !currentFolder;
   const selCount=noteSelectedIds.size;
+  const needCards = cards.filter(c=>c.type!=='text' && !String(c.mean||'').trim());
   v.innerHTML=`
     <div class="topbar"><h1>ノート</h1></div>
     <div class="searchbar">${I.search}<input placeholder="単語・意味・品詞を検索" value="${esc(noteSearch)}" onfocus="noteSearchActive=true" oninput="noteSearch=this.value;renderNotes()" />${noteSearch?`<button onclick="noteSearch='';noteSearchActive=false;renderNotes()" style="color:var(--ink-3)">✕</button>`:''}</div>
@@ -2312,6 +2316,7 @@ function renderNotes(){
       ${(hasItems&&!noteEditMode&&!noteSelectMode)?`<button class="btn btn-ghost" onclick="noteEditMode=true;renderNotes()">編集</button>`:''}
       ${noteSelectMode?'':`<button class="btn btn-primary" onclick="openAddMenu()">${I.plus} 追加</button>`}
     </div>`}
+    ${(!noteSearch&&!noteEditMode&&!noteSelectMode&&needCards.length)?`<button class="ai-bulk-btn" onclick="openBulkAiFill()">${I.sparkle} 意味が未入力の単語をAIで一括生成<span class="n">${needCards.length}</span></button>`:''}
     ${(noteSearch||noteEditMode||noteSelectMode)?'':crumbs}
     ${noteSelectMode?`<div style="display:flex;align-items:center;gap:8px;margin:2px 0 12px;font-size:.82rem;color:var(--ink-2)">
       <span>${selCount}件選択中</span>
@@ -2427,6 +2432,77 @@ function bulkDeleteSelected(){
   noteSelectedIds.forEach(id=>{ delete state.cards[id]; });
   save(); cancelNoteSelect();
   toast(n+'件を削除しました');
+}
+// ===== フォルダ内の「意味が未入力」の単語カードをAIで一括生成 =====
+let bulkAiQueue=[], bulkAiAbort=false, bulkAiRunning=false;
+function openBulkAiFill(){
+  const all=folderCards(currentFolder);
+  const need=all.filter(c=>c.type!=='text' && !String(c.mean||'').trim());
+  if(!need.length){ toast('意味が未入力の単語はありません'); return; }
+  if(!aiReady()){ toast(aiNeedMsg()); return; }
+  const folderName = currentFolder ? (state.folders[currentFolder]||{}).name : 'ノート';
+  bulkAiQueue=need.map(c=>c.id);
+  openModal(`
+    <h2>AIで一括生成</h2>
+    <p class="d" style="margin:0 0 12px;font-size:.85rem">「${esc(folderName||'ノート')}」内の意味が未入力の単語 ${need.length}件を、AIで意味・例文などを生成します。</p>
+    <div class="modal-actions" style="margin-top:14px;display:flex;gap:8px">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" style="flex:1" onclick="runBulkAiFill()">生成する</button>
+    </div>`);
+}
+function renderBulkAiProgress(done,total){
+  const pct=total?Math.round(done/total*100):0;
+  openModal(`
+    <h2>AIで一括生成中…</h2>
+    <p class="d" style="margin:0 0 14px;font-size:.85rem">${done} / ${total} 件完了</p>
+    <div style="height:8px;background:var(--line);border-radius:5px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:var(--green);transition:width .2s"></div>
+    </div>
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn btn-ghost" style="width:100%" onclick="bulkAiAbort=true">中止</button>
+    </div>`);
+}
+async function runBulkAiFill(){
+  const queue=bulkAiQueue; bulkAiQueue=[];
+  if(!queue.length){ closeModal(); return; }
+  bulkAiRunning=true; bulkAiAbort=false;
+  const total=queue.length; let done=0, ok=0, fail=0, limited=false;
+  renderBulkAiProgress(done,total);
+  const sys='Output ONLY JSON for an English vocab flashcard for a Japanese learner. Schema: {"pron":IPA,"mean":concise Japanese meaning,"exEn":natural English example,"exJa":Japanese translation,"pos":array of ALL applicable Japanese parts of speech (e.g. ["形容詞","名詞"]),"other":string}. '+OTHER_SPEC+' Japanese for mean/exJa/pos/other. No markdown.';
+  const inbox=Object.values(state.folders).find(f=>f.name==='受信箱'&&f.parentId===null);
+  for(const id of queue){
+    if(bulkAiAbort) break;
+    const c=state.cards[id];
+    if(!c){ done++; renderBulkAiProgress(done,total); continue; }
+    try{
+      const content=await callAI([{role:'system',content:sys},{role:'user',content:c.term}],{json:true,temp:0.4});
+      const j=JSON.parse(content);
+      if(j.pron) c.pron=j.pron;
+      if(j.mean) c.mean=j.mean;
+      if(j.exEn) c.exEn=j.exEn;
+      if(j.exJa) c.exJa=j.exJa;
+      if(Array.isArray(j.pos)&&j.pos.length) c.pos=j.pos;
+      else if(typeof j.pos==='string'&&j.pos) c.pos=[j.pos];
+      if(j.other) c.other=j.other;
+      c.updatedAt=now();
+      if(inbox && c.folderId===inbox.id) c.folderId=ensureFolder(isIdiomTerm(c)?'熟語':'単語').id;
+      save();
+      ok++;
+    }catch(err){
+      if(isAiLimit(err)){ limited=true; break; }
+      fail++;
+    }
+    done++;
+    if(!bulkAiAbort) renderBulkAiProgress(done,total);
+  }
+  bulkAiRunning=false;
+  closeModal(); renderNotes();
+  if(limited) openAiLimit(planTier()==='free'?'free':'paid');
+  let msg=ok+'件を生成しました';
+  if(fail) msg+='（'+fail+'件失敗）';
+  if(!limited && bulkAiAbort && done<total) msg+='／中止しました';
+  if(limited) msg+='／AI利用上限のため中断しました';
+  toast(msg);
 }
 function folderDepth(fid){ let d=0,f=state.folders[fid]; while(f&&f.parentId){ d++; f=state.folders[f.parentId]; } return d; }
 function openMoveTo(id, kind){
