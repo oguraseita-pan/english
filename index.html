@@ -1062,7 +1062,7 @@ const PUSH = { vapidPublicKey:'BLzqM9-aezCcp-zELFMvrE3jKyuPc56qaCKf1C5GHQcht6C67
 // English Lab（精密レベル診断）連携。URLを設定すると診断結果画面にリンクを表示
 const EN_LAB = { url:'' };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-39';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-40';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -1643,7 +1643,7 @@ function setTab(name){
   // 学習中の経過時間を記録してから遷移し、各タブは「最初のページ」に戻す
   if(session||compo||diaryS){ try{ recordTime(); }catch(_){ } }
   session=null; reading=null; idiom=null; compo=null; speech=null; diaryS=null; wordList=null; histView=null;
-  if(typeof aiTalk!=='undefined' && aiTalk){ try{ aiTalkStopRec(); speechSynthesis.cancel(); }catch(_){ } aiTalk=null; }
+  if(typeof aiTalk!=='undefined' && aiTalk){ try{ aiTalkStopRec(); aiTalkStopAudio(); }catch(_){ } aiTalk=null; }
   invitePage=false; accountPage=null; emailCodeSent=false; pendingNewEmail='';
   currentTab=name;
   noteSearchActive=false;
@@ -4507,9 +4507,46 @@ const AITALK_SCENES=[
   {id:'business', icon:'💼', title:'ビジネス', desc:'会議・電話のやり取り', ctx:'a workplace meeting / business call between colleagues', opener:"Hi, thanks for joining the call. Shall we get started with today's agenda?", openerJa:'お疲れさまです。今日の議題から始めましょうか？'}
 ];
 let _atRec=null;
+/* --- Groq経由のLLM＆自然音声TTS（/api/* が無い環境ではGemini・端末TTSに自動フォールバック） --- */
+const AITALK_VOICES=[['autumn','Autumn'],['diana','Diana'],['hannah','Hannah'],['austin','Austin'],['daniel','Daniel'],['troy','Troy']];
+function aiTalkVoice(){ return (state.settings&&state.settings.aiTalkVoice)||'daniel'; }
+async function aiTalkLLM(messages,opts){
+  opts=opts||{};
+  try{
+    const ctrl=new AbortController(); const tm=setTimeout(()=>ctrl.abort(),20000);
+    const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages, json:!!opts.json, temp:opts.temp}),signal:ctrl.signal});
+    clearTimeout(tm);
+    if(r.ok){ const j=await r.json(); if(j&&j.text) return j.text; }
+  }catch(_){ }
+  // Groq側が使えない場合は既存のGemini(callAI)へフォールバック（通常のAI利用回数を消費）
+  return callAI(messages,opts);
+}
+let _atAudio=null;
+function aiTalkStopAudio(){ if(_atAudio){ try{ _atAudio.pause(); }catch(_){ } _atAudio=null; } try{ speechSynthesis.cancel(); }catch(_){ } }
+async function aiTalkSpeak(text){
+  text=String(text||'').trim(); if(!text) return;
+  aiTalkStopAudio();
+  try{
+    const ctrl=new AbortController(); const tm=setTimeout(()=>ctrl.abort(),15000);
+    const r=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({input:text, voice:aiTalkVoice(), speed:1}),signal:ctrl.signal});
+    clearTimeout(tm);
+    if(r.ok){
+      const j=await r.json();
+      if(j&&j.audio){
+        const a=new Audio('data:audio/wav;base64,'+j.audio); _atAudio=a;
+        const pr=a.play();
+        if(pr&&pr.catch) pr.catch(()=>{ speak(text); });
+        return;
+      }
+    }
+  }catch(_){ }
+  speak(text); // 端末TTSにフォールバック
+}
+function aiTalkSetVoice(v){ state.settings.aiTalkVoice=v; save({noCloud:true}); renderStudy(); }
+function aiTalkPreviewVoice(v){ state.settings.aiTalkVoice=v; save({noCloud:true}); renderStudy(); aiTalkSpeak("Hi! Let's practice English together."); }
 function aiTalkStopRec(){ if(_atRec){ try{ _atRec.stop(); }catch(_){ } _atRec=null; } const b=document.getElementById('atMicBtn'); if(b) b.classList.remove('listening'); }
 function startAiTalkMenu(){ aiTalk={stage:'menu'}; renderStudy(); }
-function exitAiTalk(){ aiTalkStopRec(); try{ speechSynthesis.cancel(); }catch(_){ } aiTalk=null; renderStudy(); }
+function exitAiTalk(){ aiTalkStopRec(); aiTalkStopAudio(); aiTalk=null; renderStudy(); }
 function startAiTalkQA(){
   if(!aiReady()){ toast(aiNeedMsg()); return; }
   aiTalk={stage:'chat', qa:true, scene:null, msgs:[{role:'ai', text:'', ja:'英語について、気軽になんでも聞いてください！\n「この単語の意味は？」「この表現って合ってる？」など、日本語でも英語でもOK。マイクを押して話しかけてね 🎤', card:null}], busy:false, micLang:'ja-JP'};
@@ -4520,7 +4557,7 @@ function startAiTalkScene(id){
   const sc=AITALK_SCENES.find(s=>s.id===id); if(!sc) return;
   aiTalk={stage:'chat', qa:false, scene:sc, msgs:[{role:'ai', text:sc.opener, ja:sc.openerJa, card:null}], busy:false, micLang:'en-US'};
   renderStudy();
-  setTimeout(()=>{ try{ speak(sc.opener); }catch(_){ } }, 250);
+  setTimeout(()=>{ try{ aiTalkSpeak(sc.opener); }catch(_){ } }, 250);
 }
 function aiTalkSystem(){
   if(aiTalk.qa){
@@ -4536,12 +4573,12 @@ async function sendAiTalk(text){
   aiTalk.busy=true; renderStudy();
   const hist=aiTalk.msgs.filter(m=>m.text).map(m=>({role:m.role==='user'?'user':'assistant', content:m.text+(m.ja&&m.role!=='user'?'':'')}));
   try{
-    const content=await callAI([{role:'system',content:aiTalkSystem()}, ...hist], {json:true, temp:0.7});
+    const content=await aiTalkLLM([{role:'system',content:aiTalkSystem()}, ...hist], {json:true, temp:0.7});
     const j=JSON.parse(content);
     const msg={role:'ai', text:String(j.reply||''), ja:aiTalk.qa?null:String(j.reply_ja||''), correction:j.correction||null, note:j.correction_note_ja||null, card:(j.card&&j.card.term)?j.card:null, speakEn:aiTalk.qa?(j.speak_en||null):null};
     aiTalk.msgs.push(msg);
     const sp=aiTalk.qa?msg.speakEn:msg.text;
-    if(sp){ try{ speak(sp); }catch(_){ } }
+    if(sp){ try{ aiTalkSpeak(sp); }catch(_){ } }
   }catch(err){
     if(isAiLimit(err)){ aiTalk.busy=false; renderStudy(); openAiLimit(planTier()==='free'?'free':'paid'); return; }
     aiTalk.msgs.push({role:'ai', text:'', ja:'うまく返答できませんでした。もう一度送ってみてください。', card:null});
@@ -4557,7 +4594,7 @@ function aiTalkMic(){
   if(_atRec){ aiTalkStopRec(); return; }
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ toast('この端末は音声入力に非対応です。入力欄からどうぞ'); return; }
-  try{ speechSynthesis.cancel(); }catch(_){ }
+  aiTalkStopAudio();
   const r=new SR(); _atRec=r;
   r.lang=aiTalk.micLang||'en-US'; r.interimResults=true; r.maxAlternatives=1;
   let finalText='';
@@ -4573,7 +4610,7 @@ function aiTalkSaveCard(i){
   const o={term:String(c.term||''), mean:String(c.mean||''), pron:'', exEn:String(c.exEn||''), exJa:String(c.exJa||''), pos:[], other:''};
   saveItemAsCard(o, isIdiomTerm(o)?'idiom':'word');
 }
-function aiTalkSpeak(i){ const m=aiTalk&&aiTalk.msgs[i]; if(!m) return; const t=aiTalk.qa?(m.speakEn||''):(m.text||''); if(t) speak(t); }
+function aiTalkSpeakMsg(i){ const m=aiTalk&&aiTalk.msgs[i]; if(!m) return; const t=aiTalk.qa?(m.speakEn||''):(m.text||''); if(t) aiTalkSpeak(t); }
 function renderAiTalk(){
   const v=document.getElementById('view-study');
   if(aiTalk.stage==='menu'){
@@ -4591,6 +4628,11 @@ function renderAiTalk(){
         <div class="mc-body"><div class="mc-t">${s.title}</div><div class="mc-d">${s.desc}</div></div>
         <span class="chev">${I.chev}</span>
       </div>`).join('')}
+      <div class="section-title" style="margin-top:20px">AIの声</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding:2px">
+        ${AITALK_VOICES.map(([v,label])=>`<button class="btn ${aiTalkVoice()===v?'btn-primary':'btn-ghost'}" style="padding:8px 14px;font-size:.82rem" onclick="aiTalkPreviewVoice('${v}')">${label}</button>`).join('')}
+      </div>
+      <div style="font-size:.74rem;color:var(--ink-3);margin:7px 4px 0">タップで試聴＆選択（Groqの自然な音声・つながらない場合は端末の音声になります）</div>
       ${aiReady()?'':`<div style="text-align:center;color:var(--ink-3);font-size:.8rem;margin-top:14px">${esc(aiNeedMsg())}</div>`}`;
     scrollAppTop();
     return;
@@ -4602,7 +4644,7 @@ function renderAiTalk(){
     const ja=m.ja?`<div style="font-size:.82rem;color:var(--ink-2);margin-top:${m.text?'7px':'0'}">${esc(m.ja)}</div>`:'';
     const corr=m.correction?`<div style="margin-top:9px;padding:9px 11px;background:var(--amber-soft);border-radius:10px;font-size:.85rem"><b>💡 より自然な言い方：</b><div style="font-family:var(--font-en);margin-top:3px">${esc(m.correction)}</div>${m.note?`<div style="font-size:.78rem;color:var(--ink-2);margin-top:3px">${esc(m.note)}</div>`:''}</div>`:'';
     const btns=[];
-    if(aiTalk.qa?m.speakEn:m.text) btns.push(`<button class="retry-btn" onclick="aiTalkSpeak(${i})">${I.speaker||'🔊'} 読み上げ</button>`);
+    if(aiTalk.qa?m.speakEn:m.text) btns.push(`<button class="retry-btn" onclick="aiTalkSpeakMsg(${i})">${I.speaker||'🔊'} 読み上げ</button>`);
     if(m.card) btns.push(`<button class="save-card" onclick="aiTalkSaveCard(${i})">${I.plus} 「${esc(m.card.term)}」を保存</button>`);
     return `<div class="msg ai">${en}${ja}${corr}${btns.length?`<div style="display:flex;gap:8px;flex-wrap:wrap">${btns.join('')}</div>`:''}</div>`;
   }).join('');
