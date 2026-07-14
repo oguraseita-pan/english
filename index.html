@@ -1066,7 +1066,7 @@ const PUSH = { vapidPublicKey:'BLzqM9-aezCcp-zELFMvrE3jKyuPc56qaCKf1C5GHQcht6C67
 // English Lab（精密レベル診断）連携。URLを設定すると診断結果画面にリンクを表示
 const EN_LAB = { url:'' };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-42';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-43';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -4550,6 +4550,20 @@ async function aiTalkLLM(messages,opts){
 }
 let _atAudio=null;
 function aiTalkStopAudio(){ if(_atAudio){ try{ _atAudio.pause(); }catch(_){ } _atAudio=null; } try{ speechSynthesis.cancel(); }catch(_){ } }
+let _audioUnlocked=false;
+function unlockAudioPlayback(){
+  // iOSはページ読み込み後、ユーザー操作に直結したplay()でないと自動再生をブロックすることがある。
+  // 会話開始・送信などのタップの中で無音を一度再生しておくと、以降の非同期play()も許可されるようになる。
+  if(_audioUnlocked) return;
+  try{
+    const a=new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=');
+    a.volume=0;
+    const pr=a.play();
+    if(pr&&pr.then) pr.then(()=>{ _audioUnlocked=true; }).catch(()=>{});
+    else _audioUnlocked=true;
+  }catch(_){ }
+}
+let _atObjUrl=null;
 async function aiTalkSpeak(text){
   text=String(text||'').trim(); if(!text) return;
   aiTalkStopAudio();
@@ -4560,13 +4574,22 @@ async function aiTalkSpeak(text){
     if(r.ok){
       const j=await r.json();
       if(j&&j.audio){
-        const a=new Audio('data:audio/wav;base64,'+j.audio); _atAudio=a;
+        // iOS Safariはdata: URIでの音声再生が不安定なことがあるため、Blob URLに変換して再生する
+        const bin=atob(j.audio); const bytes=new Uint8Array(bin.length);
+        for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+        const blob=new Blob([bytes],{type:'audio/wav'});
+        if(_atObjUrl){ try{ URL.revokeObjectURL(_atObjUrl); }catch(_){ } }
+        _atObjUrl=URL.createObjectURL(blob);
+        const a=new Audio(_atObjUrl); _atAudio=a;
         const pr=a.play();
-        if(pr&&pr.catch) pr.catch(()=>{ speak(text); });
+        if(pr&&pr.catch) pr.catch(e=>{ console.warn('[aiTalkSpeak] Groq音声の再生に失敗、端末音声にフォールバック:',e&&e.message); speak(text); });
         return;
       }
+      console.warn('[aiTalkSpeak] /api/ttsのレスポンスにaudioがありません:', j);
+    }else{
+      console.warn('[aiTalkSpeak] /api/tts失敗 status:', r.status);
     }
-  }catch(_){ }
+  }catch(e){ console.warn('[aiTalkSpeak] /api/tts呼び出しエラー:', e&&e.message); }
   speak(text); // 端末TTSにフォールバック
 }
 function aiTalkSetVoice(v){ state.settings.aiTalkVoice=v; save({noCloud:true}); renderStudy(); }
@@ -4575,11 +4598,13 @@ function aiTalkStopRec(){ if(_atRec){ try{ _atRec.stop(); }catch(_){ } _atRec=nu
 function startAiTalkMenu(){ aiTalk={stage:'menu'}; renderStudy(); }
 function exitAiTalk(){ aiTalkStopRec(); aiTalkStopAudio(); aiTalk=null; renderStudy(); }
 function startAiTalkQA(){
+  unlockAudioPlayback();
   if(!aiReady()){ toast(aiNeedMsg()); return; }
   aiTalk={stage:'chat', qa:true, scene:null, msgs:[{role:'ai', text:'', ja:'英語について、気軽になんでも聞いてください！\n「この単語の意味は？」「この表現って合ってる？」など、日本語でも英語でもOK。マイクを押して話しかけてね 🎤', card:null}], busy:false, micLang:'ja-JP'};
   renderStudy();
 }
 function startAiTalkScene(id){
+  unlockAudioPlayback();
   if(!aiReady()){ toast(aiNeedMsg()); return; }
   const sc=AITALK_SCENES.find(s=>s.id===id); if(!sc) return;
   aiTalk={stage:'chat', qa:false, scene:sc, msgs:[{role:'ai', text:sc.opener, ja:sc.openerJa, card:null}], busy:false, micLang:'en-US'};
@@ -4613,11 +4638,13 @@ async function sendAiTalk(text){
   aiTalk.busy=false; renderStudy();
 }
 function aiTalkSend(){
+  unlockAudioPlayback();
   const inp=document.getElementById('atInput'); if(!inp) return;
   const t=inp.value.trim(); if(!t) return; inp.value='';
   sendAiTalk(t);
 }
 function aiTalkMic(){
+  unlockAudioPlayback();
   if(_atRec){ aiTalkStopRec(); return; }
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){ toast('この端末は音声入力に非対応です。入力欄からどうぞ'); return; }
