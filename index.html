@@ -536,8 +536,9 @@ html[data-theme="dark"] .quiz-opt.wrong{background:#2E1F1C;}
 .msg.ai .ex-item .save-card{margin-top:8px;}
 .chat-input{position:sticky;bottom:calc(var(--tabbar-h) + var(--safe-b) + 8px);display:flex;gap:8px;align-items:flex-end;background:var(--surface);border-radius:18px;box-shadow:var(--shadow-lg);padding:8px 8px 8px 14px;}
 .chat-input textarea{flex:1;border:none;outline:none;background:none;resize:none;max-height:180px;min-height:64px;padding:8px 0;line-height:1.45;overflow-y:auto;}
-.big-speak-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:9px;padding:15px;border-radius:16px;background:var(--green);color:#fff;font-weight:700;font-size:.95rem;box-shadow:var(--shadow-lg);margin-bottom:10px;border:none;position:sticky;bottom:calc(var(--tabbar-h) + var(--safe-b) + 78px);z-index:5;}
-.big-speak-btn:active{transform:scale(.98);}
+.big-speak-btn{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 auto 10px;padding:11px 22px;border-radius:999px;background:var(--green);color:#fff;font-weight:700;font-size:.88rem;box-shadow:var(--shadow-lg);border:none;position:sticky;bottom:calc(var(--tabbar-h) + var(--safe-b) + 118px);z-index:5;width:auto;}
+.big-speak-btn svg{width:19px;height:19px;flex:none;}
+.big-speak-btn:active{transform:scale(.96);}
 #atMicBtn.auto-mode{box-shadow:0 0 0 3px var(--amber-soft);}
 .send-btn{background:var(--green);color:#fff;width:42px;height:42px;border-radius:12px;display:grid;place-items:center;flex:none;transition:transform .12s;}
 .send-btn svg{width:19px;height:19px;}
@@ -1069,7 +1070,7 @@ const PUSH = { vapidPublicKey:'BLzqM9-aezCcp-zELFMvrE3jKyuPc56qaCKf1C5GHQcht6C67
 // English Lab（精密レベル診断）連携。URLを設定すると診断結果画面にリンクを表示
 const EN_LAB = { url:'' };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-44';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-45';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -3676,9 +3677,8 @@ function renderStudySession(){
           </div>
           <div class="face back">
             <div class="face-tag">答え</div>
-            <div class="b-term">${esc(c.term)}</div>
+            <div class="b-term">${esc(c.term)} ${spkBtn(c.term,30)}</div>
             ${c.pron?`<div class="b-pron">${esc(c.pron)}</div>`:''}
-            <button class="spk-big" onclick="event.stopPropagation();speak(${esc(JSON.stringify(c.term))})">${I.speaker}</button>
             <div class="b-mean">${esc(c.mean)||'<span style=color:var(--ink-3);font-weight:400>意味が未入力です</span>'}</div>
             ${c.exEn?`<div class="b-ex"><div class="en">${esc(c.exEn)} ${spkBtn(c.exEn,26)}</div>${c.exJa?`<div class="ja">${esc(c.exJa)}</div>`:''}</div>`:''}
             ${(c.pos&&c.pos.length)?`<div class="b-note">${c.pos.map(p=>`<span class="pos-chip">${esc(p)}</span>`).join('')}</div>`:''}
