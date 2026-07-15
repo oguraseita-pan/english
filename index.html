@@ -1080,7 +1080,7 @@ const PUSH = { vapidPublicKey:'BLzqM9-aezCcp-zELFMvrE3jKyuPc56qaCKf1C5GHQcht6C67
 // English Lab（精密レベル診断）連携。URLを設定すると診断結果画面にリンクを表示
 const EN_LAB = { url:'' };
 const APP_VERSION = '1.0.0';
-const APP_BUILD = '2026.06.27-46';  // デプロイのたびに更新（version.json と一致させる）
+const APP_BUILD = '2026.06.27-47';  // デプロイのたびに更新（version.json と一致させる）
 const SUPPORT_EMAIL = 'support@sproutenglish.jp'; // ← このアドレスが実際に「受信」できることを必ず確認（Resendは送信専用。受信は転送/メールボックス設定が別途必要）
 // 特定商取引法に基づく表記用（有料プラン公開前に必ず実際の情報へ変更してください）
 const BIZ = {
@@ -1887,18 +1887,20 @@ function compoSrcLevel(catId){
   return EXAM_TO_CEFR[lv] || 'b1'; // 試験系→対応CEFR
 }
 async function quickCompo3(){
+  const remaining=Math.max(0, dailyGoal('compo')-dailyCount('compo'));
+  const n=Math.min(10, remaining>0?remaining:dailyGoal('compo')); // 達成済みなら目標数を再提示
   const catId=compoSrcCat(), lvId=compoSrcLevel(catId);
   const cat=PRESET_LIB.find(c=>c.id===catId); const lv=cat&&cat.levels.find(l=>l.id===lvId);
   let items=[];
   if(lv){
     const withEx=lv.words.filter(w=>w[3]&&w[4]);
     const unlearned=withEx.filter(w=>{ const s=state.progress&&state.progress[presetKey(catId,lvId,w[0])]; return !s||s.state==='new'; });
-    items=shuffle(unlearned.length>=3?unlearned:withEx).slice(0,3).map(w=>({jp:w[4],en:w[3]}));
+    items=shuffle(unlearned.length>=n?unlearned:withEx).slice(0,n).map(w=>({jp:w[4],en:w[3]}));
   }
-  if(items.length<3 && aiReady()){ toast('AIが問題を生成中…'); const gen=await aiGenCompo(3-items.length); items=items.concat(gen); }
-  if(items.length<3){ const extra=shuffle(compoItemsFrom(Object.values(state.cards))).slice(0,3-items.length); items=items.concat(extra); }
+  if(items.length<n && aiReady()){ toast('AIが問題を生成中…'); const gen=await aiGenCompo(n-items.length); items=items.concat(gen); }
+  if(items.length<n){ const extra=shuffle(compoItemsFrom(Object.values(state.cards))).slice(0,n-items.length); items=items.concat(extra); }
   if(items.length===0){ toast('日本語と英語が両方ある教材がありません'); return; }
-  items=items.slice(0,3);
+  items=items.slice(0,n);
   setTab('study'); startTimer();
   compo={ items, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:'card', fromHome:true };
   renderCompo();
@@ -3529,8 +3531,11 @@ function startIdiom(catId, levelId, style){
 }
 function blankHtml(q){ return esc(q).replace('____','<span style="display:inline-block;min-width:64px;border-bottom:2px solid var(--green);text-align:center;font-weight:700;color:var(--green)">　？　</span>'); }
 function restartIdiom(){
-  if(idiom&&idiom.isU){ const cf=idiom.cefr,s=idiom.style; idiom=null; startIdiomU(cf,s,'choice'); return; }
-  if(!idiom||!idiom.catId) return; const c=idiom.catId,l=idiom.levelId,s=idiom.style||'srs'; idiom=null; startIdiom(c,l,s);
+  if(!idiom||!idiom.items||!idiom.items.length) return;
+  // 「もう一度」は直前と同じ問題セットをそのまま再出題する（新規選定すると直前の採点で変わってしまうため）
+  idiom={ ...idiom, idx:0, answered:false, userAns:null, userAnsText:'', correct:null, score:0, log:[], openIdx:null };
+  try{ scrollAppTop(); }catch(_){}
+  renderIdiom();
 }
 function idiomContinue(){
   if(idiom&&idiom.isU){ const cf=idiom.cefr,s=idiom.style;
@@ -3821,8 +3826,14 @@ function renderStudyResult(){
     ${moreBtns}`;
 }
 function restartStudy(){
-  if(!session||!session.pool) return endSessionEarly();
-  startStudy(session.pool, session.sourceStyle||session.style||'srs', session.catName);
+  if(!session||!session.items||!session.items.length) return endSessionEarly();
+  // 「もう一度」は直前に出題した同じ問題セットをそのまま再出題する。
+  // selectItems()で新規選定すると、直前の採点でSRS状態が変わり別の問題になってしまうため、items自体は使い回す。
+  const items=session.items;
+  const style=session.sourceStyle||session.style||'srs';
+  session={ items, qi:0, total:items.length, flipped:false, exShown:false, results:[], openIdx:null, catName:session.catName, style, pool:session.pool, sourceStyle:style, fromHome:session.fromHome, isReview:session.isReview, daily:session.daily };
+  try{ scrollAppTop(); }catch(_){}
+  renderStudySession();
 }
 function nextStudy(){
   if(!session||!session.pool) return endSessionEarly();
@@ -4147,7 +4158,7 @@ function startCompo(fid){
   const items=shuffle(compoItemsFrom(list)).slice(0,10);
   if(items.length===0){ toast('日本語と英語が両方入ったカードが必要です'); return; }
   closeModal();
-  compo={ items, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:'card' };
+  compo={ items, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:'card', folderId:fid };
   renderCompo();
 }
 
@@ -4258,7 +4269,7 @@ function startCompoPresetStudy(type, ci, li, style){
   const key = isAll ? ((type==='grammar'?'文法':'場面')+' すべて') : set.key;
   const items=picked.map(p=>({jp:p.jp,en:p.en,kind:p.kind}));
   closeModal();
-  compo={ items, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:type, theme:key+(li!=='__all__'?(' '+lvName):'') };
+  compo={ items, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, source:type, theme:key+(li!=='__all__'?(' '+lvName):''), presetType:type, presetCi:ci, presetLi:li, presetStyle:style };
   renderCompo();
 }
 function showCompoList(type, ci, li){
@@ -4345,6 +4356,29 @@ function nextCompo(){
 }
 function setCompoVerdict(v){ if(!compo||!compo.revealed) return; compo.verdict=v; renderCompo(); }
 
+function restartCompo(){
+  if(!compo||!compo.items||!compo.items.length) return;
+  // 「もう一度」は直前と同じ問題セットをそのまま再出題する（新規選定はしない）
+  compo={ ...compo, idx:0, revealed:false, verdict:null, checking:false, fb:null, userAns:'', results:[], log:[], openIdx:null, saved:false, recorded:false };
+  try{ scrollAppTop(); }catch(_){}
+  renderCompo();
+}
+function nextCompo(){
+  if(!compo) return;
+  const src=compo.source;
+  if(src==='srs'){ compo=null; startCompoSrs(); return; }
+  if(src==='card'){
+    const fid=(compo.folderId!==undefined)?compo.folderId:null;
+    const fromHome=!!compo.fromHome;
+    compo=null;
+    if(fromHome) quickCompo3(); else startCompo(fid);
+    return;
+  }
+  if(src==='theme'){ const theme=compo.theme; compo=null; genTheme(theme); return; }
+  if(compo.presetType){ const {presetType,presetCi,presetLi,presetStyle}=compo; compo=null; startCompoPresetStudy(presetType,presetCi,presetLi,presetStyle||'random'); return; }
+  // フォールバック：不明な出題元は同じセットで再出題
+  restartCompo();
+}
 function renderCompo(){
   const v=document.getElementById('view-study');
   if(compo.loading){
@@ -4364,7 +4398,11 @@ function renderCompo(){
       <div class="compo-result-head">${I.trophy}<div class="big">${good} / ${logs.length}</div><div class="sub2">正解の数</div></div>
       <div class="section-title">解答一覧（タップで解説）</div>
       <div class="list">${logs.map((r,i)=>compoResultRow(r,i,compo.openIdx===i,null,true)).join('')}</div>
-      <button class="btn btn-primary full" style="padding:15px;margin-top:16px" onclick="exitCompoDone()">${backLabel}</button>`;
+      <div class="result-actions">
+        <button class="btn btn-ghost" style="padding:14px;flex:1" onclick="restartCompo()">${I.refresh} もう一度</button>
+        <button class="btn btn-primary" style="padding:14px;flex:1" onclick="nextCompo()">次へ ${I.chev}</button>
+      </div>
+      <button class="btn btn-ghost full" style="padding:12px;margin-top:10px" onclick="exitCompoDone()">${backLabel}</button>`;
     return; // keep compo alive so rows can expand
   }
   const it=compo.items[compo.idx];
